@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Timeless Ties Events &amp; Decor | Coming Soon</title>
+  <meta name="description" content="Timeless Ties Events & Decor — elegant wedding and event décor in Kathmandu, Nepal. Our new website is coming soon." />
+  <meta name="theme-color" content="#f8f3ea" />
+  <link rel="canonical" href="https://timelesstieevents.com.np/" />
+  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="apple-touch-icon" href="logo.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://timelesstieevents.com.np/" />
+  <meta property="og:title" content="Timeless Ties Events & Decor — Coming Soon" />
+  <meta property="og:description" content="Elegant wedding and event décor in Kathmandu. Our new website is on its way." />
+  <meta property="og:image" content="https://timelesstieevents.com.np/logo.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&family=Manrope:wght@400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --ivory: #f8f3ea;
+      --ink: #2c2224;
+      --muted: #6f6264;
+      --burgundy: #641a35;
+      --wine: #481126;
+      --gold: #b59a6a;
+      --gold-deep: #7a5f36;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem 1rem;
+      background:
+        radial-gradient(ellipse at top, #ffffff 0%, transparent 60%),
+        var(--ivory);
+      color: var(--ink);
+      font-family: "Manrope", system-ui, sans-serif;
+      font-variant-numeric: lining-nums;
+      text-align: center;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::selection { background: var(--burgundy); color: var(--ivory); }
+
+    main {
+      width: 100%;
+      max-width: 34rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .logo {
+      width: min(280px, 70vw);
+      height: auto;
+      /* The logo has a white background; multiply lets the ivory page show through */
+      mix-blend-mode: multiply;
+    }
+
+    .eyebrow {
+      margin: 1.75rem 0 0;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--gold-deep);
+    }
+
+    h1 {
+      margin: 0.75rem 0 0;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-weight: 500;
+      font-size: clamp(2.6rem, 9vw, 4rem);
+      line-height: 1.05;
+      color: var(--burgundy);
+    }
+
+    h1 em { font-style: italic; }
+
+    .rule {
+      width: 4rem;
+      height: 1px;
+      margin: 1.5rem auto;
+      border: 0;
+      background: var(--gold);
+    }
+
+    p.lead {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .actions {
+      margin-top: 2rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.8rem 1.4rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+    }
+
+    .btn svg { width: 1rem; height: 1rem; flex: none; }
+
+    .btn-primary { background: var(--burgundy); color: var(--ivory); }
+    .btn-primary:hover { background: var(--wine); }
+
+    .btn-outline { border: 1px solid var(--burgundy); color: var(--burgundy); }
+    .btn-outline:hover { background: var(--burgundy); color: var(--ivory); }
+
+    .contact {
+      margin-top: 2.25rem;
+      display: grid;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+      overflow-wrap: anywhere;
+      color: var(--muted);
+    }
+
+    .contact a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+    .contact a:hover { color: var(--burgundy); border-color: var(--gold); }
+
+    footer {
+      margin-top: 3rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    a:focus-visible { outline: 2px solid var(--burgundy); outline-offset: 3px; }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .fade-up { animation: fade-up 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; animation-delay: var(--delay, 0ms); }
+      @keyframes fade-up {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: none; }
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo fade-up" src="logo.png" alt="Timeless Ties Events & Decor" width="343" height="319" />
+
+    <p class="eyebrow fade-up" style="--delay: 150ms">Weddings · Events · Celebrations</p>
+    <h1 class="fade-up" style="--delay: 250ms">Something beautiful is <em>coming soon</em></h1>
+
+    <hr class="rule fade-up" style="--delay: 350ms" />
+
+    <p class="lead fade-up" style="--delay: 400ms">
+      Our new website is being styled with the same care we bring to every celebration.
+      Stay tuned — in the meantime, we'd love to hear about your event.
+    </p>
+
+    <div class="actions fade-up" style="--delay: 500ms">
+      <a class="btn btn-primary" href="https://wa.me/9779845411029?text=Hi%20Timeless%20Ties!%20I'd%20like%20to%20ask%20about%20d%C3%A9cor%20for%20my%20event." target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.8.9-.9 1.1-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.3.7.3 1.2.5 1.7.6.7.2 1.3.2 1.8.1.6-.1 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.6-.3zM12 21.8c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4c-1-1.6-1.5-3.4-1.5-5.2C2.2 6.6 6.6 2.2 12 2.2c2.6 0 5.1 1 6.9 2.9 1.9 1.9 2.9 4.3 2.9 6.9 0 5.4-4.4 9.8-9.8 9.8zm8.4-18.2C18.1 1.3 15.2.1 12 .1 5.5.1.1 5.4.1 12c0 2.1.5 4.1 1.6 5.9L0 24l6.3-1.7c1.7.9 3.7 1.4 5.7 1.4 6.6 0 11.9-5.3 11.9-11.9 0-3.2-1.2-6.2-3.5-8.2z"/></svg>
+        Chat on WhatsApp
+      </a>
+      <a class="btn btn-outline" href="https://www.instagram.com/timelesstieseventsdecor" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.8" fill="currentColor" stroke="none"/></svg>
+        Follow on Instagram
+      </a>
+    </div>
+
+    <div class="contact fade-up" style="--delay: 600ms">
+      <div>
+        <a href="tel:+9779845411029">984-5411029</a>
+        &nbsp;·&nbsp;
+        <a href="tel:+9779821896505">982-1896505</a>
+      </div>
+      <div><a href="mailto:timelesstieseventsdecor@gmail.com">timelesstieseventsdecor@gmail.com</a></div>
+      <div>Chabahil, Kathmandu, Nepal</div>
+    </div>
+  </main>
+
+  <footer>&copy; <span id="year">2026</span> Timeless Ties Events &amp; Decor</footer>
+  <script>document.getElementById("year").textContent = new Date().getFullYear();</script>
+</body>
+</html>
