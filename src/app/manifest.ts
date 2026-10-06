@@ -1,0 +1,18 @@
+import type { MetadataRoute } from "next";
+import { siteSettings } from "@/data/site";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: siteSettings.name,
+    short_name: siteSettings.shortName,
+    description: siteSettings.description,
+    start_url: "/",
+    display: "standalone",
+    background_color: "#faf7f2",
+    theme_color: "#1c1917",
+    icons: [
+      { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
+      { src: "/apple-icon", sizes: "180x180", type: "image/png" },
+    ],
+  };
+}

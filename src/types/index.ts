@@ -1,0 +1,9 @@
+export type * from "./common";
+export type * from "./site";
+export type * from "./service";
+export type * from "./gallery";
+export type * from "./testimonial";
+export type * from "./inquiry";
+export type * from "./booking";
+export type * from "./home";
+export type * from "./catalogue";
