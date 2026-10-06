@@ -5,7 +5,6 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { GalleryItem, ImageAsset } from "@/types";
 import { formatDate } from "@/lib/utils";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 
 export type Slide = { item: GalleryItem; image: ImageAsset; category: string };
 
@@ -123,7 +122,6 @@ export default function Lightbox({ slides, index, onIndexChange }: Props) {
             <div>
               <p className="flex items-center gap-3 text-[0.7rem] tracking-[0.2em] text-gold-light uppercase">
                 {slide.category}
-                {slide.item.placeholder && <PlaceholderBadge label="Sample photo" className="text-ivory/60" />}
               </p>
               <h2 className="mt-1 font-serif text-2xl leading-tight">{slide.item.title}</h2>
               {(slide.item.location || slide.item.date) && (

@@ -1,6 +1,5 @@
 import { Star } from "lucide-react";
 import type { Testimonial } from "@/types";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import Reveal from "@/components/ui/Reveal";
 import SectionTitle from "@/components/ui/SectionTitle";
 
@@ -38,7 +37,6 @@ export default function Testimonials({ eyebrow, heading, intro, items }: Props) 
                       ))}
                     </span>
                   ) : null}
-                  {t.placeholder && <PlaceholderBadge label="Placeholder review" className="mt-3 text-gold-deep" />}
                 </figcaption>
               </figure>
             </Reveal>

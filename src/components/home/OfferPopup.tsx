@@ -9,7 +9,6 @@ import { INQUIRY_PATH } from "@/data/site";
 import Botanical from "@/components/brand/Botanical";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import { buttonClass } from "@/components/ui/ButtonLink";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import Rich from "@/components/ui/Rich";
 import { cn, showPlaceholders, whatsappHref } from "@/lib/utils";
 
@@ -166,7 +165,6 @@ export default function OfferPopup({ offer }: { offer: HomeOffer }) {
               No thanks
             </button>
           </div>
-          {offer.placeholder && <PlaceholderBadge label="Placeholder offer" className="mt-5 text-gold-deep" />}
         </div>
       </div>
     </dialog>

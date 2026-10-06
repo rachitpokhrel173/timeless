@@ -3,7 +3,6 @@ import PageHeader from "@/components/layout/PageHeader";
 import Gallery from "@/components/gallery/Gallery";
 import InquiryCTA from "@/components/cta/InquiryCTA";
 import SocialLinks from "@/components/navigation/SocialLinks";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import { galleryCategories } from "@/data/gallery";
 import { images } from "@/data/images";
 import { getGalleryItems } from "@/lib/content";
@@ -26,9 +25,6 @@ export default async function GalleryPage() {
         subtitle="Mandaps, stages, entrances and the small details in between."
       />
       <section className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-24">
-        {items.some((i) => i.placeholder) && (
-          <PlaceholderBadge label="Sample photos — replace with the client's portfolio" className="mb-6 text-gold-deep" />
-        )}
         <Gallery items={items} categories={galleryCategories} />
         <div className="mt-16 flex flex-col items-center gap-4 text-center">
           <p className="text-muted">See more of our latest work on social media</p>

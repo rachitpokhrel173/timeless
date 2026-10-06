@@ -1,7 +1,6 @@
 import Image from "next/image";
 import type { Testimonial } from "@/types";
 import { formatDate } from "@/lib/utils";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import SectionHeading from "@/components/ui/SectionHeading";
 import Reveal from "@/components/ui/Reveal";
 
@@ -35,7 +34,6 @@ export default function Testimonials({ testimonials }: { testimonials: Testimoni
                       {t.date && ` · ${formatDate(t.date)}`}
                     </p>
                   </div>
-                  {t.placeholder && <PlaceholderBadge className="text-gold-deep" />}
                 </figcaption>
               </figure>
             </Reveal>

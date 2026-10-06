@@ -2,7 +2,6 @@ import { ArrowRight } from "lucide-react";
 import type { GalleryItem } from "@/types";
 import { galleryCategories } from "@/data/gallery";
 import ButtonLink from "@/components/ui/ButtonLink";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import SectionHeading from "@/components/ui/SectionHeading";
 import Reveal from "@/components/ui/Reveal";
 import Gallery from "./Gallery";
@@ -18,9 +17,6 @@ export default function FeaturedWork({ items }: { items: GalleryItem[] }) {
             title="Moments We've Helped Create"
             description="Explore a glimpse of our recent event décor and celebrations."
           />
-          {items.some((i) => i.placeholder) && (
-            <PlaceholderBadge label="Sample photos — replace with the client's portfolio" className="mt-4 text-gold-deep" />
-          )}
         </Reveal>
 
         <Gallery items={items} categories={galleryCategories} />

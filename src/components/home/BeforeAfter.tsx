@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { HomeContent } from "@/types";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import Reveal from "@/components/ui/Reveal";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { cn, showPlaceholders } from "@/lib/utils";
@@ -93,7 +92,6 @@ export default function BeforeAfter({ transform }: { transform: HomeContent["tra
               ))}
             </div>
           )}
-          {transform.placeholder && <PlaceholderBadge label="Sample — real before photos needed" className="mt-6 text-gold-deep" />}
         </Reveal>
 
         <Reveal variant="curtain" delay={100}>

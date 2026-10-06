@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { HomeContent, Stat } from "@/types";
 import Botanical from "@/components/brand/Botanical";
-import PlaceholderBadge from "@/components/ui/PlaceholderBadge";
 import { showPlaceholders } from "@/lib/utils";
 
 const DURATION = 1800;
@@ -72,11 +71,6 @@ export default function Stats({ stats }: { stats: HomeContent["stats"] }) {
           </li>
         ))}
       </ul>
-      {stats.placeholder && (
-        <p className="mt-8 text-center">
-          <PlaceholderBadge label="Sample figures — replace with real numbers" className="text-gold-light" />
-        </p>
-      )}
     </section>
   );
 }
