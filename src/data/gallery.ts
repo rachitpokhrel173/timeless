@@ -3,11 +3,11 @@ import { images } from "./images";
 
 export const galleryCategories: { value: GalleryCategory | "all"; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "weddings", label: "Weddings" },
-  { value: "engagements", label: "Engagements" },
-  { value: "birthdays", label: "Birthdays" },
-  { value: "corporate", label: "Corporate" },
-  { value: "other", label: "Other Events" },
+  { value: "weddings", label: "Wedding & Reception" },
+  { value: "engagements", label: "Engagement" },
+  { value: "pasni", label: "Rice Weaning & Gunyo Cholo" },
+  { value: "birthdays", label: "Birthday" },
+  { value: "corporate", label: "Corporate & others" },
 ];
 
 /**

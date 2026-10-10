@@ -1,38 +1,81 @@
 import type { Metadata } from "next";
-import { siteSettings as site } from "@/data/site";
-import type { Service } from "@/types";
+import { siteSettings as defaults } from "@/data/site";
+import type { ImageAsset, Service, SiteSettings } from "@/types";
+import { getPageSeo, getSiteSettings } from "./content";
 import { activeSocials } from "./utils";
 
-/** Per-page metadata with canonical URL and matching Open Graph / X tags. */
-export function pageMetadata({
-  title,
-  description,
+/**
+ * The branded card from app/opengraph-image.tsx. Pages that set their own `openGraph`
+ * replace the inherited one entirely, so the image has to be passed again explicitly.
+ */
+const defaultShareImage = (site: SiteSettings) => ({
+  url: "/opengraph-image",
+  width: 1200,
+  height: 630,
+  alt: `${site.name} — Wedding & Event Decoration in Kathmandu`,
+});
+
+/**
+ * Per-page metadata with canonical URL and matching Open Graph / X tags. The page supplies
+ * defaults; anything set under Marketing → SEO in the admin overrides them.
+ */
+export async function pageMetadata({
+  title: defaultTitle,
+  description: defaultDescription,
   path,
+  image: defaultImage,
+  absoluteTitle,
 }: {
   title: string;
   description: string;
   path: string;
-}): Metadata {
+  /** Share preview for this page. Defaults to the branded site card. */
+  image?: ImageAsset;
+  /** Skip the "%s | Site" template (the home page title already contains the brand). */
+  absoluteTitle?: boolean;
+}): Promise<Metadata> {
+  const [site, override] = await Promise.all([getSiteSettings(), getPageSeo(path)]);
+  const title = override?.title || defaultTitle;
+  const description = override?.description || defaultDescription;
+  const image = override?.image ?? defaultImage;
+  // <title> gets the brand from the layout template; share cards need it spelled out
+  const shareTitle = title.includes(site.shortName) ? title : `${title} | ${site.shortName}`;
+  const shareImage = image ? { url: image.src, width: image.width, height: image.height, alt: image.alt } : defaultShareImage(site);
   return {
-    title,
+    title: absoluteTitle ? { absolute: title } : title,
     description,
+    ...(override?.noindex && { robots: { index: false, follow: true } }),
     alternates: { canonical: path },
-    openGraph: { title, description, url: path, siteName: site.name, locale: site.locale, type: "website" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: {
+      title: shareTitle,
+      description,
+      url: path,
+      siteName: site.name,
+      locale: site.locale,
+      type: "website",
+      images: [shareImage],
+    },
+    twitter: { card: "summary_large_image", title: shareTitle, description, images: [shareImage] },
   };
 }
 
 // schema.org structured data — helps Google show the business in local results and Maps.
 
-export const localBusinessJsonLd = (services: Service[]) => ({
+const absolute = (path: string) => new URL(path, defaults.url).toString();
+
+export const localBusinessJsonLd = (services: Service[], site: SiteSettings) => ({
   "@context": "https://schema.org",
   "@type": "LocalBusiness",
   "@id": `${site.url}/#business`,
   name: site.name,
   description: site.description,
   url: site.url,
-  image: `${site.url}/opengraph-image`,
-  logo: `${site.url}/icon.svg`,
+  // Google wants real photos of the business here, and a raster (not SVG) logo
+  image: [absolute("/opengraph-image"), ...services.slice(0, 4).map((s) => absolute(s.image.src))],
+  logo: absolute(site.logo?.src ?? "/apple-icon"),
+  hasMap: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${site.name}, ${site.address.street}, ${site.address.city}`,
+  )}`,
   email: site.email,
   telephone: site.phones[0].e164,
   address: {
@@ -60,10 +103,10 @@ export const localBusinessJsonLd = (services: Service[]) => ({
       itemOffered: { "@type": "Service", name: s.name, description: s.description },
     })),
   },
-  sameAs: activeSocials().map((s) => s.url),
+  sameAs: activeSocials(site).map((s) => s.url),
 });
 
-export const websiteJsonLd = {
+export const websiteJsonLd = (site: SiteSettings) => ({
   "@context": "https://schema.org",
   "@type": "WebSite",
   "@id": `${site.url}/#website`,
@@ -71,7 +114,7 @@ export const websiteJsonLd = {
   name: site.name,
   inLanguage: "en",
   publisher: { "@id": `${site.url}/#business` },
-};
+});
 
 export const faqJsonLd = (items: { q: string; a: string }[]) => ({
   "@context": "https://schema.org",

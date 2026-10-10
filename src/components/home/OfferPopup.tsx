@@ -10,6 +10,7 @@ import Botanical from "@/components/brand/Botanical";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import { buttonClass } from "@/components/ui/ButtonLink";
 import Rich from "@/components/ui/Rich";
+import { useSite } from "@/components/site/SiteContext";
 import { cn, showPlaceholders, whatsappHref } from "@/lib/utils";
 
 /** Wait this long after the page loads before showing the offer. */
@@ -41,6 +42,7 @@ function rememberDismissed(id: string) {
  * focus trapping, Escape and inerting the page. Placeholder offers never reach the live site.
  */
 export default function OfferPopup({ offer }: { offer: HomeOffer }) {
+  const site = useSite();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const active = offer.enabled && (showPlaceholders || !offer.placeholder);
@@ -148,7 +150,7 @@ export default function OfferPopup({ offer }: { offer: HomeOffer }) {
               <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
             </Link>
             <a
-              href={whatsappHref(`Hi Timeless Ties! I'd like to know more about your offer: ${offer.heading.replace(/\n/g, " ")}`)}
+              href={whatsappHref(site, `Hi Timeless Ties! I'd like to know more about your offer: ${offer.heading.replace(/\n/g, " ")}`)}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Ask about this offer on WhatsApp (opens in a new tab)"

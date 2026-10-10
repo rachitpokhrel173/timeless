@@ -101,6 +101,17 @@ export const services: Service[] = [
     order: 9,
   },
   {
+    id: "svc-baja-sound",
+    slug: "baja-sound-system",
+    name: "Baja & Sound System",
+    summary: "Panche baja, band baja, DJ and sound",
+    description:
+      "Panche baja and band baja for the procession, plus DJ, live music and a full sound setup for the ceremony and reception.",
+    image: images.celebrationGuests,
+    featured: false,
+    order: 10,
+  },
+  {
     id: "svc-management",
     slug: "event-management",
     name: "Full Event Management",
@@ -109,7 +120,7 @@ export const services: Service[] = [
       "Venue, vendors, timeline and on-the-day coordination. One team and one point of contact from the first call to the last guest.",
     image: images.receptionTable,
     featured: false,
-    order: 10,
+    order: 11,
   },
 ];
 

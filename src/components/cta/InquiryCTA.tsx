@@ -2,11 +2,13 @@ import Image from "next/image";
 import { ArrowRight, Phone } from "lucide-react";
 import { INQUIRY_PATH } from "@/data/site";
 import type { ImageAsset } from "@/types";
+import { getSiteSettings } from "@/lib/content";
 import { telHref, whatsappHref } from "@/lib/utils";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import ButtonLink from "@/components/ui/ButtonLink";
 
-export default function InquiryCTA({ image }: { image: ImageAsset }) {
+export default async function InquiryCTA({ image }: { image: ImageAsset }) {
+  const site = await getSiteSettings();
   return (
     <section aria-labelledby="cta-title" className="px-3 pb-3 md:px-5 md:pb-5">
       <div className="relative isolate overflow-hidden rounded-[1.75rem] px-5 py-20 text-center text-ivory md:py-32">
@@ -26,11 +28,11 @@ export default function InquiryCTA({ image }: { image: ImageAsset }) {
             Send an Inquiry
             <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
           </ButtonLink>
-          <ButtonLink href={telHref()} variant="outline-light" size="lg">
+          <ButtonLink href={telHref(site)} variant="outline-light" size="lg">
             <Phone className="size-4" strokeWidth={1.5} aria-hidden />
             Call Us
           </ButtonLink>
-          <ButtonLink href={whatsappHref()} variant="outline-light" size="lg" external>
+          <ButtonLink href={whatsappHref(site)} variant="outline-light" size="lg" external>
             <WhatsAppIcon className="size-4" />
             WhatsApp Us
           </ButtonLink>

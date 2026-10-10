@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Phone } from "lucide-react";
 import { INQUIRY_PATH } from "@/data/site";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
+import { useSite } from "@/components/site/SiteContext";
 import { cn, telHref, whatsappHref } from "@/lib/utils";
 
 /**
@@ -14,6 +15,7 @@ import { cn, telHref, whatsappHref } from "@/lib/utils";
  * Desktop: a small floating WhatsApp button.
  */
 export default function QuickContact() {
+  const site = useSite();
   const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
@@ -41,11 +43,11 @@ export default function QuickContact() {
           <Link href={INQUIRY_PATH} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-forest text-[0.86rem] font-medium text-ivory">
             Plan Your Event
           </Link>
-          <a href={telHref()} aria-label="Call us" className="flex size-12 items-center justify-center rounded-full border border-forest/25 text-forest">
+          <a href={telHref(site)} aria-label="Call us" className="flex size-12 items-center justify-center rounded-full border border-forest/25 text-forest">
             <Phone className="size-[1.1rem]" strokeWidth={1.4} aria-hidden />
           </a>
           <a
-            href={whatsappHref()}
+            href={whatsappHref(site)}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Chat on WhatsApp (opens in a new tab)"
@@ -57,7 +59,7 @@ export default function QuickContact() {
       </div>
 
       <a
-        href={whatsappHref()}
+        href={whatsappHref(site)}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Chat on WhatsApp (opens in a new tab)"

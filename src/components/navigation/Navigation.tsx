@@ -4,13 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Menu, Phone, X } from "lucide-react";
-import { INQUIRY_PATH, navLinks, siteSettings as site } from "@/data/site";
+import { INQUIRY_PATH, navLinks } from "@/data/site";
+import { useSite } from "@/components/site/SiteContext";
 import Logo from "@/components/brand/Logo";
 import { buttonClass } from "@/components/ui/ButtonLink";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import { cn, telHref, whatsappHref } from "@/lib/utils";
 
 export default function Navigation() {
+  const site = useSite();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -160,11 +162,11 @@ export default function Navigation() {
           <ArrowRight className="size-4" aria-hidden />
         </Link>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <a href={telHref()} className={buttonClass("outline")}>
+          <a href={telHref(site)} className={buttonClass("outline")}>
             <Phone className="size-4" strokeWidth={1.5} aria-hidden />
             Call
           </a>
-          <a href={whatsappHref()} target="_blank" rel="noopener noreferrer" className={buttonClass("outline")}>
+          <a href={whatsappHref(site)} target="_blank" rel="noopener noreferrer" className={buttonClass("outline")}>
             <WhatsAppIcon className="size-4" />
             WhatsApp
           </a>

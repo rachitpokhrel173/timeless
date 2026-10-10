@@ -1,9 +1,12 @@
+"use client";
+
 import { socialIcons } from "@/components/ui/BrandIcons";
+import { useSite } from "@/components/site/SiteContext";
 import { activeSocials, cn } from "@/lib/utils";
 
 /** Round icon links for every social profile that has a URL configured. */
 export default function SocialLinks({ className }: { className?: string }) {
-  const socials = activeSocials();
+  const socials = activeSocials(useSite());
   if (socials.length === 0) return null;
 
   return (

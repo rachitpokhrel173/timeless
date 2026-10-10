@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
-import { siteSettings } from "@/data/site";
+import { getSiteSettings } from "@/lib/content";
 
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const siteSettings = await getSiteSettings();
   return {
     name: siteSettings.name,
     short_name: siteSettings.shortName,

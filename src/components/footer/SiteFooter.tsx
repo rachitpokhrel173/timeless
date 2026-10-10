@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Mail, MapPin, Phone } from "lucide-react";
-import { legalLinks, navLinks, siteSettings as site } from "@/data/site";
+import { legalLinks, navLinks } from "@/data/site";
+import { getSiteSettings } from "@/lib/content";
 import { mailHref, telHref } from "@/lib/utils";
 import Logo from "@/components/brand/Logo";
 import SocialLinks from "@/components/navigation/SocialLinks";
 import BuiltBy from "./BuiltBy";
 
-export default function SiteFooter() {
+export default async function SiteFooter() {
+  const site = await getSiteSettings();
   const link = "text-ivory/75 transition-colors hover:text-ivory";
 
   return (
@@ -41,12 +43,12 @@ export default function SiteFooter() {
               {site.address.street}, {site.address.city}, {site.address.country}
             </p>
             {site.phones.map((p) => (
-              <a key={p.e164} href={telHref(p.e164)} className={`${link} flex w-fit items-center gap-2.5`}>
+              <a key={p.e164} href={telHref(site, p.e164)} className={`${link} flex w-fit items-center gap-2.5`}>
                 <Phone className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
                 {p.label}
               </a>
             ))}
-            <a href={mailHref()} className={`${link} flex w-fit items-center gap-2.5 break-all`}>
+            <a href={mailHref(site)} className={`${link} flex w-fit items-center gap-2.5 break-all`}>
               <Mail className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
               {site.email}
             </a>

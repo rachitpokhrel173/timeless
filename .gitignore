@@ -30,9 +30,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — never commit real credentials
+.env
+.env.*
 !.env.example
+*.secret
+*.key
+*.pem
 
 # vercel
 .vercel
@@ -40,3 +44,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local data (dev database, uploads) and scratch output
+/.data
+/.drizzle-scratch
+
+# Supabase folder (migrations, seed, config) is kept local only — never committed
+/supabase
+supabase/.branches/
+supabase/.env
+supabase/*.local.*
+
+# logs
+logs
+*.log

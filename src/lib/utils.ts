@@ -1,23 +1,21 @@
-import { siteSettings } from "@/data/site";
-import type { Price, SocialLink } from "@/types";
+import type { Price, SiteSettings, SocialLink } from "@/types";
 
 /** Join class names, skipping falsy values. */
 export function cn(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-export const whatsappHref = (text = siteSettings.whatsappMessage) =>
-  `https://wa.me/${siteSettings.whatsapp}?text=${encodeURIComponent(text)}`;
+/* Contact links take the business settings from the CMS (getSiteSettings / useSite). */
 
-export const telHref = (e164 = siteSettings.phones[0].e164) => `tel:${e164}`;
+export const whatsappHref = (site: Pick<SiteSettings, "whatsapp" | "whatsappMessage">, text = site.whatsappMessage) =>
+  `https://wa.me/${site.whatsapp}?text=${encodeURIComponent(text)}`;
 
-export const mailHref = (email = siteSettings.email) => `mailto:${email}`;
+export const telHref = (site: Pick<SiteSettings, "phones">, e164 = site.phones[0]?.e164 ?? "") => `tel:${e164}`;
+
+export const mailHref = (site: Pick<SiteSettings, "email">) => `mailto:${site.email}`;
 
 /** Social profiles that have a URL configured. */
-export const activeSocials = (): SocialLink[] => siteSettings.socials.filter((s) => s.url);
-
-export const socialUrl = (platform: SocialLink["platform"]) =>
-  siteSettings.socials.find((s) => s.platform === platform && s.url)?.url;
+export const activeSocials = (site: Pick<SiteSettings, "socials">): SocialLink[] => site.socials.filter((s) => s.url);
 
 /** Build the inquiry URL, optionally pre-selecting an event type. */
 export const inquiryHref = (eventType?: string) => (eventType ? `/inquiry?event=${eventType}` : "/inquiry");

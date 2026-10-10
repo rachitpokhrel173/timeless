@@ -21,17 +21,19 @@ export default function Gallery({ items, categories, label = "Filter photos by e
   const [filter, setFilter] = useState<Filter>("all");
   const [openAt, setOpenAt] = useState<number | null>(null);
 
+  // Older "other" albums are grouped with corporate
+  const groupOf = (c: GalleryItem["category"]): GalleryItem["category"] => (c === "other" ? "corporate" : c);
   const categoryLabel = useMemo(() => new Map(categories.map((c) => [c.value, c.label])), [categories]);
-  const visible = filter === "all" ? items : items.filter((i) => i.category === filter);
+  const visible = filter === "all" ? items : items.filter((i) => groupOf(i.category) === filter);
 
   // Albums: an item's extra images follow its cover in the lightbox
   const slides: Slide[] = visible.flatMap((item) =>
-    [item.image, ...(item.images ?? [])].map((image) => ({ item, image, category: categoryLabel.get(item.category) ?? "" })),
+    [item.image, ...(item.images ?? [])].map((image) => ({ item, image, category: categoryLabel.get(groupOf(item.category)) ?? "" })),
   );
   const firstSlideOf = (id: string) => slides.findIndex((s) => s.item.id === id);
 
-  // Only offer filters that have photos
-  const available = categories.filter((c) => c.value === "all" || items.some((i) => i.category === c.value));
+  // Every heading is always offered; an empty one shows "No photos in this category yet."
+  const available = categories;
 
   return (
     <div>
@@ -76,7 +78,7 @@ export default function Gallery({ items, categories, label = "Filter photos by e
               <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 text-ivory opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-focus-visible:opacity-100">
                 <span>
                   <span className="block text-[0.65rem] tracking-[0.2em] text-gold-light uppercase">
-                    {categoryLabel.get(item.category)}
+                    {categoryLabel.get(groupOf(item.category))}
                   </span>
                   <span className="mt-1 block font-serif text-lg leading-tight">{item.title}</span>
                 </span>

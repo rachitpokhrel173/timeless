@@ -1,12 +1,13 @@
 import Image from "next/image";
-import { siteSettings } from "@/data/site";
+import { getSiteSettings } from "@/lib/content";
 
 /**
  * First-visit intro: a gold ring draws around the logo, then the screen parts like a curtain.
  * Pure CSS (see .intro in globals.css), so it always finishes — even without JavaScript.
  * The inline script marks repeat views in this tab session before first paint, which hides it.
  */
-export default function IntroCurtain() {
+export default async function IntroCurtain() {
+  const siteSettings = await getSiteSettings();
   const logo = siteSettings.logoOnDark ?? siteSettings.logo;
 
   return (

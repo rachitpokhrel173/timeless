@@ -1,6 +1,7 @@
 import type { ImageAsset, ISODate, Managed } from "./common";
 
-export type GalleryCategory = "weddings" | "engagements" | "birthdays" | "corporate" | "other";
+/** "other" is kept for older albums; it shows under "Corporate & others". */
+export type GalleryCategory = "weddings" | "engagements" | "pasni" | "birthdays" | "corporate" | "other";
 
 export type GalleryItem = Managed & {
   title: string;

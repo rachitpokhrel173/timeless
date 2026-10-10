@@ -29,6 +29,139 @@
   --font-serif: var(--font-cormorant);
 
   --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* Admin — semantic tokens that switch with the admin theme (see .admin-root below) */
+  --color-a-bg: var(--a-bg);
+  --color-a-surface: var(--a-surface);
+  --color-a-subtle: var(--a-subtle);
+  --color-a-hover: var(--a-hover);
+  --color-a-border: var(--a-border);
+  --color-a-strong: var(--a-strong);
+  --color-a-text: var(--a-text);
+  --color-a-muted: var(--a-muted);
+  --color-a-accent: var(--a-accent);
+  --color-a-accent-soft: var(--a-accent-soft);
+  --color-a-on-accent: var(--a-on-accent);
+  --color-a-gold: var(--a-gold);
+  --color-a-gold-soft: var(--a-gold-soft);
+  --color-a-blush: var(--a-blush);
+  --color-a-success: var(--a-success);
+  --color-a-success-soft: var(--a-success-soft);
+  --color-a-warning: var(--a-warning);
+  --color-a-warning-soft: var(--a-warning-soft);
+  --color-a-danger: var(--a-danger);
+  --color-a-danger-soft: var(--a-danger-soft);
+  --color-a-info: var(--a-info);
+  --color-a-info-soft: var(--a-info-soft);
+  /* Admin sidebar — always dark, independent of the content theme */
+  --color-side-bg: #121211;
+  --color-side-hover: #1d1c1a;
+  --color-side-border: #26241f;
+  --color-side-text: #cfc8bc;
+  --color-side-muted: #8b8478;
+  --color-side-active: #d4b26f;
+  --color-side-active-bg: rgba(212, 178, 111, 0.12);
+}
+
+/* ---------- Admin theme ---------- */
+
+.admin-root {
+  --a-bg: #f7f3ec;
+  --a-surface: #ffffff;
+  --a-subtle: #f1ece3;
+  --a-hover: #ebe4d8;
+  --a-border: #e3dbcf;
+  --a-strong: #cfc4b3;
+  --a-text: #24201d;
+  --a-muted: #6b625a;
+  --a-accent: #3d5245;
+  --a-accent-soft: #e3ebe4;
+  --a-on-accent: #ffffff;
+  --a-gold: #7a5f36;
+  --a-gold-soft: #f3ead9;
+  --a-blush: #f4e6e3;
+  --a-success: #2f6b43;
+  --a-success-soft: #e2f0e5;
+  --a-warning: #8a5a12;
+  --a-warning-soft: #f8ecd4;
+  --a-danger: #a23b3b;
+  --a-danger-soft: #f8e3e1;
+  --a-info: #2f5d7c;
+  --a-info-soft: #e1edf5;
+  /* Chart series — validated categorical order (CVD + contrast) for this surface */
+  --a-s1: #2f8a55;
+  --a-s2: #2f78c4;
+  --a-s3: #b8456a;
+  --a-s4: #b97f15;
+  --a-grid: #ece6dc;
+  color-scheme: light;
+  background: var(--a-bg);
+  color: var(--a-text);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.admin-root[data-theme="dark"] {
+  --a-bg: #151715;
+  --a-surface: #1d201e;
+  --a-subtle: #232724;
+  --a-hover: #2b302c;
+  --a-border: #323833;
+  --a-strong: #47504a;
+  --a-text: #ece7df;
+  --a-muted: #a59d93;
+  --a-accent: #9cc0a6;
+  --a-accent-soft: #263329;
+  --a-on-accent: #10140f;
+  --a-gold: #d8c08f;
+  --a-gold-soft: #2f2a1f;
+  --a-blush: #33282a;
+  --a-success: #8cc79c;
+  --a-success-soft: #1f3125;
+  --a-warning: #e2b768;
+  --a-warning-soft: #352b19;
+  --a-danger: #ec9a92;
+  --a-danger-soft: #3a2220;
+  --a-info: #93bfdc;
+  --a-info-soft: #1d2d38;
+  --a-s1: #3f9a64;
+  --a-s2: #4a8ad0;
+  --a-s3: #c95b80;
+  --a-s4: #c08a1f;
+  --a-grid: #2c312d;
+  color-scheme: dark;
+}
+
+/* Sidebar tooltips (collapsed state) */
+.side-tip {
+  pointer-events: none;
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  translate: 0 -50%;
+  white-space: nowrap;
+  border-radius: 6px;
+  background: #121211;
+  color: #f2ede4;
+  border: 1px solid #2c2a25;
+  padding: 4px 8px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 150ms;
+  z-index: 60;
+}
+.group\/side:hover .side-tip,
+.group\/side:focus-visible .side-tip {
+  opacity: 1;
+}
+
+.admin-root :focus-visible {
+  outline: 2px solid var(--a-accent);
+  outline-offset: 2px;
+}
+
+.admin-root ::selection {
+  background: var(--a-accent);
+  color: var(--a-on-accent);
 }
 
 html {
