@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { after } from "next/server";
-import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";
+import { AlertTriangle, Boxes, CalendarCheck, CalendarClock, CalendarDays, CheckCircle2, ChevronRight, FileClock, FileText, Inbox, PhoneCall, ReceiptText, TrendingUp, UserPlus, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
@@ -14,6 +14,9 @@ import RangeFilter from "@/components/admin/RangeFilter";
 import { INQUIRY_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, EmptyState, Kpi, LinkButton, PageHeader } from "@/components/admin/ui";
 import DashboardCustomizer from "./DashboardCustomizer";
+import { bsLabel } from "@/lib/nepali-date";
+import { cn } from "@/lib/utils";
+import { attentionItems, type AttentionKind } from "@/server/attention";
 import { DEFAULT_WIDGETS, WIDGETS, type WidgetKey } from "./widgets";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -32,6 +35,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   after(() => maybeRunSweep().catch((e) => console.error("[automations]", e)));
 
   const today = todayISO();
+  const attention = await attentionItems(has);
+  const urgent = attention.filter((a) => a.urgent).length;
   const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, lowStock, payments, outstanding, activity, types] = await Promise.all([
     on("kpis") ? dashboardKpis(range) : null,
     on("revenue") ? monthlyRevenue(12) : null,
@@ -92,9 +97,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   return (
     <>
       <PageHeader
-        eyebrow={new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kathmandu" }).format(new Date())}
+        eyebrow={[new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kathmandu" }).format(new Date()), bsLabel(today) && `${bsLabel(today)} BS`].filter(Boolean).join(" · ")}
         title={`Namaste, ${user.name.split(" ")[0]}`}
-        description="Here's how the business is doing."
+        description={urgent ? `${urgent} urgent item${urgent === 1 ? " needs" : "s need"} your attention today.` : "Here's how the business is doing."}
         actions={
           <>
             <RangeFilter />
@@ -129,6 +134,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
       </div>
 
       <div className="space-y-5">
+        <AttentionPanel items={attention} />
         {kpis && (
           <section aria-label="Key figures" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {has("leads.view") && <Kpi label="Total leads" value={totalLeads} hint={`${kpis.leadsNow} new · ${range.label.toLowerCase()}`} change={pctChange(kpis.leadsNow, kpis.leadsPrev)} icon={UserPlus} href="/admin/leads" />}
@@ -398,4 +404,50 @@ async function outstandingList() {
     .sort((a, c) => Number(c.overdue) - Number(a.overdue) || (a.eventDate ?? "").localeCompare(c.eventDate ?? ""));
   const totals = await outstandingTotal();
   return { rows: list.slice(0, 5), total: totals.amount, count: totals.bookings };
+}
+
+const ATTENTION_ICON: Record<AttentionKind, typeof Inbox> = {
+  inquiry: Inbox,
+  uncontacted: PhoneCall,
+  unconfirmed: CalendarClock,
+  unpaid: Wallet,
+  stale_quote: FileClock,
+  overdue_invoice: ReceiptText,
+  low_stock: Boxes,
+};
+
+/** What slips if nobody acts today, most urgent first. */
+function AttentionPanel({ items }: { items: Awaited<ReturnType<typeof attentionItems>> }) {
+  const shown = items.slice(0, 8);
+  return (
+    <Card title="Needs attention" actions={items.length > 0 && <Badge tone={items.some((i) => i.urgent) ? "danger" : "warning"}>{items.length}</Badge>}>
+      {items.length === 0 ? (
+        <EmptyState compact icon={CheckCircle2} title="You're on top of everything" />
+      ) : (
+        <ul className="-mx-2 space-y-0.5">
+          {shown.map((item) => {
+            const Icon = ATTENTION_ICON[item.kind];
+            return (
+              <li key={item.id}>
+                <Link href={item.href} className="group flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-a-subtle/60">
+                  <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full", item.urgent ? "bg-a-danger-soft text-a-danger" : "bg-a-warning-soft text-a-warning")}>
+                    <Icon className="size-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium">
+                      {item.title}
+                      {item.urgent && <span className="sr-only"> (urgent)</span>}
+                    </span>
+                    <span className="line-clamp-2 text-xs text-a-muted">{item.detail}</span>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-a-muted transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </Link>
+              </li>
+            );
+          })}
+          {items.length > shown.length && <li className="px-2 pt-1 text-xs text-a-muted">+{items.length - shown.length} more</li>}
+        </ul>
+      )}
+    </Card>
+  );
 }

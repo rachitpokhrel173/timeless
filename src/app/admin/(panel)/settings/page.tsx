@@ -205,7 +205,9 @@ async function System() {
     ["Privileged server key", serviceRoleConfigured(), serviceRoleConfigured() ? "SUPABASE_SERVICE_ROLE_KEY is set (server only)" : "SUPABASE_SERVICE_ROLE_KEY is missing"],
     ["File storage", storage.ok, storage.detail],
     ["Scheduled automations", !!process.env.CRON_SECRET, process.env.CRON_SECRET ? `Cron secret set${sweep ? ` · last sweep ${relativeTime(sweep.at)}` : ""}` : `No CRON_SECRET — runs hourly when the dashboard is opened${sweep ? ` (last ${relativeTime(sweep.at)})` : ""}`],
-    ["Email delivery", false, "No email provider is connected. Emails are recorded in the outbox but not sent — share quotation links by WhatsApp or connect a provider (see README)."],
+    process.env.RESEND_API_KEY && process.env.EMAIL_FROM
+      ? ["Email delivery", true, `Sending through Resend from ${process.env.EMAIL_FROM}`]
+      : ["Email delivery", false, "Not connected — emails are recorded in the outbox but not sent. Set RESEND_API_KEY and EMAIL_FROM (an address on your domain verified in Resend) to send them."],
   ];
   return (
     <div className="grid gap-4 lg:grid-cols-2">

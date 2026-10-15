@@ -7,11 +7,19 @@ import { fmtDateLong, fmtTime, todayISO } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { EVENT_STATUS, StatusBadge } from "@/components/admin/status";
 import { buttonClass, Card, EmptyState, Notice, PageHeader, Tabs } from "@/components/admin/ui";
+import { adToBs, bsToAd, BS_MONTHS, BS_MONTHS_EN, BS_WEEKDAYS, devanagari, shiftBsMonth } from "@/lib/nepali-date";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Calendar" };
 
-type View = "month" | "week" | "day" | "agenda";
+type View = "month" | "week" | "day" | "agenda" | "nepali";
+const VIEWS: { key: View; label: string }[] = [
+  { key: "month", label: "Month" },
+  { key: "nepali", label: "Nepali (BS)" },
+  { key: "week", label: "Week" },
+  { key: "day", label: "Day" },
+  { key: "agenda", label: "Agenda" },
+];
 type Item = { id: string; date: string; kind: "event" | "task" | "deadline"; title: string; href: string; time?: string; status?: string; note?: string; tone?: "danger" | "warning" };
 
 const DAY = 86_400_000;
@@ -19,11 +27,27 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 const parse = (s: string) => new Date(`${s}T00:00:00Z`);
 const add = (s: string, days: number) => iso(new Date(parse(s).getTime() + days * DAY));
 const weekday = (s: string) => (parse(s).getUTCDay() + 6) % 7; // Monday = 0
+const sundayIndex = (s: string) => parse(s).getUTCDay(); // Sunday = 0, as on Nepali calendars
 const monthName = (s: string) => new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(parse(s));
 const dayLabel = (s: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-GB", { ...opts, timeZone: "UTC" }).format(parse(s));
 
 function range(view: View, anchor: string) {
-  if (view === "month") {
+  // The Bikram Sambat month containing the anchor date, padded to whole Sunday-first weeks
+  const bs = view === "nepali" ? adToBs(anchor) : null;
+  if (bs) {
+    const first = bsToAd(bs.year, bs.month, 1);
+    const n = shiftBsMonth(bs.year, bs.month, 1);
+    const p = shiftBsMonth(bs.year, bs.month, -1);
+    const nextFirst = bsToAd(n.year, n.month, 1);
+    return {
+      start: add(first, -sundayIndex(first)),
+      end: add(nextFirst, (7 - sundayIndex(nextFirst)) % 7),
+      prev: bsToAd(p.year, p.month, 1),
+      next: nextFirst,
+      title: `${BS_MONTHS[bs.month]} ${devanagari(bs.year)} · ${BS_MONTHS_EN[bs.month]} ${bs.year}`,
+    };
+  }
+  if (view === "month" || view === "nepali") {
     const first = `${anchor.slice(0, 8)}01`;
     const start = add(first, -weekday(first));
     const nextMonth = iso(new Date(Date.UTC(parse(first).getUTCFullYear(), parse(first).getUTCMonth() + 1, 1)));
@@ -43,7 +67,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/admin/c
   const user = await requirePage("events.view");
   const sp = await searchParams;
   const { str } = listParams(sp);
-  const view: View = (["month", "week", "day", "agenda"] as const).find((v) => v === str("view")) ?? "month";
+  const view: View = VIEWS.find((v) => v.key === str("view"))?.key ?? "month";
   const today = todayISO();
   const anchor = /^\d{4}-\d{2}-\d{2}$/.test(str("date") ?? "") ? str("date")! : today;
   const r = range(view, anchor);
@@ -177,7 +201,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/admin/c
       <Tabs
         label="Calendar view"
         active={view}
-        items={(["month", "week", "day", "agenda"] as const).map((v) => ({ key: v, label: v[0]!.toUpperCase() + v.slice(1), href: `/admin/calendar?view=${v}&date=${anchor}` }))}
+        items={VIEWS.map((v) => ({ key: v.key, label: v.label, href: `/admin/calendar?view=${v.key}&date=${anchor}` }))}
       />
 
       {view === "month" && (
@@ -218,6 +242,62 @@ export default async function CalendarPage({ searchParams }: PageProps<"/admin/c
                 </div>
               );
             })}
+          </div>
+        </Card>
+      )}
+
+      {view === "nepali" && (
+        <Card bodyClassName="p-0">
+          <div className="grid grid-cols-7 border-b border-a-border text-center text-xs font-semibold">
+            {BS_WEEKDAYS.map((d, i) => (
+              <div key={d} className={cn("py-2", i === 6 ? "text-a-danger" : "text-a-muted")}>
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {(() => {
+              const shown = adToBs(anchor);
+              return days.map((d) => {
+                const list = on(d);
+                const bs = adToBs(d);
+                const outside = !bs || !shown || bs.month !== shown.month || bs.year !== shown.year;
+                // Saturday is the public holiday in Nepal
+                const holiday = sundayIndex(d) === 6;
+                return (
+                  <div key={d} className={cn("min-h-24 border-r border-b border-a-border p-1 sm:min-h-28 sm:p-1.5 [&:nth-child(7n)]:border-r-0", outside && "bg-a-subtle/50", (busyDays.get(d) ?? 0) > 1 && "bg-a-warning-soft/40")}>
+                    <Link href={`/admin/calendar?view=day&date=${d}`} className="mb-1 flex items-baseline justify-between gap-1" title={fmtDateLong(d)}>
+                      <span
+                        className={cn(
+                          "inline-flex size-6 items-center justify-center rounded-full text-[13px] font-semibold",
+                          d === today ? "bg-a-accent text-a-on-accent" : outside ? "text-a-muted" : holiday ? "text-a-danger" : "hover:bg-a-hover",
+                        )}
+                      >
+                        {bs ? devanagari(bs.date) : ""}
+                      </span>
+                      <span className="text-[10px] text-a-muted tabular-nums">{Number(d.slice(8))}</span>
+                    </Link>
+                    <ul className="space-y-0.5">
+                      {list.slice(0, 3).map((i) => (
+                        <li key={`${i.kind}-${i.id}`}>
+                          <Link href={i.href} title={i.title} className={cn("block truncate rounded px-1 py-0.5 text-[11px] leading-tight", chip(i))}>
+                            {i.time && <span className="mr-0.5 hidden font-semibold sm:inline">{i.time}</span>}
+                            {i.title}
+                          </Link>
+                        </li>
+                      ))}
+                      {list.length > 3 && (
+                        <li>
+                          <Link href={`/admin/calendar?view=day&date=${d}`} className="px-1 text-[11px] text-a-muted hover:underline">
+                            +{list.length - 3} more
+                          </Link>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                );
+              });
+            })()}
           </div>
         </Card>
       )}

@@ -5,9 +5,11 @@ import { fmtDateLong, npr } from "@/lib/format";
 import { resolveSiteUrl } from "@/lib/site-url";
 
 /*
- * Transactional email templates. No email provider is connected, so nothing is sent: each
- * message is recorded in the outbox as "not configured" so the admin can see exactly what would
- * have gone out. (Sign-in, invite and password-reset emails are sent by Supabase Auth itself.)
+ * Transactional email templates, sent through Resend when RESEND_API_KEY and EMAIL_FROM are set
+ * (EMAIL_FROM must be an address on a domain verified in Resend). Without them nothing is sent and
+ * each message is recorded as "not configured", so the admin can see exactly what would have gone
+ * out. Every attempt lands in the outbox. (Sign-in, invite and password-reset emails are sent by
+ * Supabase Auth itself.)
  */
 
 type Rendered = { subject: string; html: string; text: string };
@@ -107,7 +109,26 @@ export const templates = {
 
 export type TemplateName = keyof typeof templates;
 
-/** Render a template and record it in the outbox (no provider is connected, so it isn't sent). Never throws. */
+/** Send one message through Resend's HTTP API. */
+async function deliver(to: string, rendered: Rendered, replyTo: string | undefined): Promise<{ status: "SENT" | "FAILED" | "NOT_CONFIGURED"; error?: string }> {
+  const key = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM;
+  if (!key || !from) return { status: "NOT_CONFIGURED" };
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [to], subject: rendered.subject, html: rendered.html, text: rendered.text, ...(replyTo && { reply_to: replyTo }) }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.ok) return { status: "SENT" };
+    return { status: "FAILED", error: `Resend ${res.status}: ${(await res.text()).slice(0, 300)}` };
+  } catch (e) {
+    return { status: "FAILED", error: e instanceof Error ? e.message : "Network error" };
+  }
+}
+
+/** Render a template, send it (when a provider is configured) and record it in the outbox. Never throws. */
 export async function sendEmail<T extends TemplateName>(
   to: string | null | undefined,
   template: T,
@@ -117,12 +138,13 @@ export async function sendEmail<T extends TemplateName>(
   if (!to) return "NO_RECIPIENT";
   const brand = await getSiteSettings();
   const rendered = (templates[template] as (b: Brand, d: typeof data) => Rendered)(brand, data);
-  const status = "NOT_CONFIGURED";
+  const { status, error } = await deliver(to, rendered, process.env.EMAIL_REPLY_TO || brand.email || undefined);
+  if (error) console.error(`[email] ${template} to ${to} failed:`, error);
   await exec(
     adminDb
       .from(tbl(schema.emailOutbox))
-      .insert(vals(schema.emailOutbox, { to, template, subject: rendered.subject, status, entityType: ref?.entityType, entityId: ref?.entityId })),
-  );
+      .insert(vals(schema.emailOutbox, { to, template, subject: rendered.subject, status, error: error ?? null, entityType: ref?.entityType, entityId: ref?.entityId })),
+  ).catch((e) => console.error("[email] outbox write failed", e));
   return status;
 }
 
