@@ -396,7 +396,7 @@ function Shell({ user, initialCounts, children }: { user: ShellUser; initialCoun
         </div>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-a-border bg-a-surface/95 px-3 backdrop-blur md:px-5">
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-a-border bg-a-surface px-3 md:px-5">
             <button type="button" onClick={() => setDrawer(true)} className="rounded-md p-2 text-a-muted hover:bg-a-hover md:hidden" aria-label="Open navigation" aria-expanded={drawer}>
               <MenuIcon className="size-5" />
             </button>

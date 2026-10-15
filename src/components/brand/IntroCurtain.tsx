@@ -4,7 +4,7 @@ import { getSiteSettings } from "@/lib/content";
 /**
  * First-visit intro: a gold ring draws around the logo, then the screen parts like a curtain.
  * Pure CSS (see .intro in globals.css), so it always finishes — even without JavaScript.
- * The inline script marks repeat views in this tab session before first paint, which hides it.
+ * The inline script marks repeat visits (this browser has seen it) before first paint, which hides it.
  */
 export default async function IntroCurtain() {
   const siteSettings = await getSiteSettings();
@@ -15,7 +15,7 @@ export default async function IntroCurtain() {
       <script
         dangerouslySetInnerHTML={{
           __html:
-            "try{if(sessionStorage.getItem('intro-seen'))document.documentElement.dataset.introSeen='1';else sessionStorage.setItem('intro-seen','1')}catch(e){document.documentElement.dataset.introSeen='1'}",
+            "try{if(localStorage.getItem('intro-seen'))document.documentElement.dataset.introSeen='1';else localStorage.setItem('intro-seen','1')}catch(e){document.documentElement.dataset.introSeen='1'}",
         }}
       />
       <div className="intro" aria-hidden>

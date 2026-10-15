@@ -67,7 +67,7 @@ export default function Navigation() {
         open
           ? "border-ink/8 bg-ivory"
           : scrolled
-            ? "border-ink/8 bg-ivory/95 shadow-[0_6px_24px_-18px_rgb(44_34_36/0.35)] backdrop-blur-md"
+            ? "border-ink/8 bg-ivory/[0.97] shadow-[0_6px_24px_-18px_rgb(44_34_36/0.35)]"
             : overlay
               ? "border-transparent bg-transparent"
               : "border-transparent bg-ivory",

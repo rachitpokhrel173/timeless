@@ -35,7 +35,7 @@ export default function QuickContact() {
       <div
         inert={!visible}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-ivory/90 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-lg transition-transform duration-700 ease-[cubic-bezier(0.65,0.05,0.36,1)] md:hidden",
+          "fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-ivory/[0.97] px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-transform duration-700 ease-[cubic-bezier(0.65,0.05,0.36,1)] md:hidden",
           visible ? "translate-y-0" : "translate-y-full",
         )}
       >
