@@ -56,6 +56,15 @@ export function todayISO(offsetDays = 0) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE }).format(d);
 }
 
+/**
+ * Current time for server-rendered pages (each request renders once, so reading the clock is fine
+ * there; client components should not call this during render).
+ */
+export const serverNow = () => Date.now();
+
+/** ISO timestamp `days` from now (negative for the past) — for date-window queries. */
+export const isoDaysFromNow = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+
 export function relativeTime(d: Date | string) {
   const diff = (asDate(d).getTime() - Date.now()) / 1000;
   const abs = Math.abs(diff);

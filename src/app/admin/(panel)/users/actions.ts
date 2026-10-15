@@ -5,6 +5,7 @@ import { adminDb, db, exec, likeEscape, many, maybe, one, schema, tbl } from "@/
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/auth/permissions";
+import { invitationRedirectUrl } from "@/lib/auth/redirects";
 import { serviceRoleConfigured, supabaseAdmin } from "@/lib/supabase/admin";
 
 const roleById = (id: string) => maybe<{ id: string; key: string; name: string; isSystem: boolean }>(db.from(tbl(schema.roles)).select("id,key,name,isSystem:is_system").eq("id", id));
@@ -22,10 +23,9 @@ export const inviteUser = adminAction(
     const role = await roleById(roleId);
     if (!role) throw new UserError("Choose a role.", { roleId: "Required." });
     guardSuper(role, user);
-    const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
     let profile = await maybe<{ id: string }>(adminDb.from(tbl(schema.profiles)).select("id").ilike("email", likeEscape(email)));
     if (!profile) {
-      const { data, error } = await supabaseAdmin().auth.admin.inviteUserByEmail(email, { data: { full_name: fullName }, redirectTo: `${site}/auth/confirm?next=/admin/reset-password` });
+      const { data, error } = await supabaseAdmin().auth.admin.inviteUserByEmail(email, { data: { full_name: fullName }, redirectTo: invitationRedirectUrl() });
       if (error || !data.user) throw new UserError(`Couldn't send the invitation: ${error?.message ?? "unknown error"}`);
       profile = { id: data.user.id };
       // The on_auth_user_created trigger creates the profile; make sure it exists before granting

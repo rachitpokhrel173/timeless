@@ -75,9 +75,6 @@ export default function InquiryForm({
   const [dateHint, setDateHint] = useState<Awaited<ReturnType<typeof checkDateAvailability>>>(null);
   // Only the answer for the latest picked date is shown
   const latestDate = useRef("");
-  // First-touch marketing attribution (UTM, referrer, landing page) captured by <Attribution />
-  const [attribution, setAttribution] = useState<Record<string, string>>({});
-  useEffect(() => setAttribution(readAttribution()), []);
   const { services: inquiryServiceOptions, decorationOptions, guestCounts: guestCountOptions, budgets: budgetOptions } = options;
   const e = state.errors ?? {};
   // Came from "Enquire" on a catalogue design: start the message for them (they can edit it)
@@ -110,7 +107,10 @@ export default function InquiryForm({
       // answers in place when validation fails; `action` remains as the no-JavaScript fallback.
       onSubmit={(ev) => {
         ev.preventDefault();
+        if (pending) return; // no double submissions
         const data = new FormData(ev.currentTarget);
+        // First-touch marketing attribution (UTM, referrer, landing page) captured by <Attribution />
+        for (const [k, v] of Object.entries(readAttribution())) data.set(`attr_${k}`, v);
         startTransition(() => formAction(data));
       }}
       className="space-y-6 rounded-2xl bg-white p-6 ring-1 ring-ink/10 md:p-10"
@@ -323,10 +323,6 @@ export default function InquiryForm({
           <textarea id="inspirationImages" name="inspiration" rows={2} className={cn(control, "h-auto py-3")} />
         </Field>
       </fieldset>
-
-      {Object.entries(attribution).map(([k, v]) => (
-        <input key={k} type="hidden" name={`attr_${k}`} value={v} />
-      ))}
 
       {/* Honeypot for bots */}
       <div className="hidden" aria-hidden>

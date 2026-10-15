@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Plus, Wallet } from "lucide-react";
+import { Plus, Wallet } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr, todayISO } from "@/lib/format";
@@ -8,7 +8,7 @@ import { likeTerm, listParams } from "@/lib/list";
 import { PAYMENT_METHODS } from "@/server/finance";
 import { DateRangeFilter, FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { label } from "@/components/admin/status";
-import { Badge, buttonClass, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
+import { Badge, ExportLink, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
 import { VoidPaymentButton } from "../bookings/BookingClient";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -50,9 +50,7 @@ export default async function PaymentsPage({ searchParams }: PageProps<"/admin/p
         description="Every amount received from clients. Booking and invoice balances update automatically."
         actions={
           <>
-            <a href="/api/admin/export/payments" className={buttonClass("secondary")}>
-              <Download className="size-4" aria-hidden /> Export CSV
-            </a>
+            <ExportLink entity="payments" />
             {user.permissions.has("payments.create") && (
               <LinkButton href="/admin/payments/new" variant="primary" icon={Plus}>
                 Record payment

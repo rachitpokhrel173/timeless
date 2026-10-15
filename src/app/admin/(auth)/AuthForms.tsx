@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { LoaderCircle } from "lucide-react";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PASSWORD_HINT } from "@/lib/auth/password-rules";
 import { login, requestPasswordReset, setNewPassword, type AuthFormState } from "./login/actions";
 
 const inputClass = "h-10 w-full rounded-md border border-a-border bg-a-surface px-3 outline-none focus:border-a-accent focus-visible:outline-none";
@@ -99,9 +100,9 @@ export function ResetForm() {
         <label htmlFor="password" className="text-sm font-medium">
           New password
         </label>
-        <input id="password" name="password" type="password" autoComplete="new-password" required minLength={10} className={inputClass} aria-describedby="pw-hint" />
+        <input id="password" name="password" type="password" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={MAX_PASSWORD_LENGTH} className={inputClass} aria-describedby="pw-hint" />
         <p id="pw-hint" className="text-xs text-a-muted">
-          At least 10 characters, with letters and a number.
+          {PASSWORD_HINT}
         </p>
       </div>
       <div className="space-y-1.5">

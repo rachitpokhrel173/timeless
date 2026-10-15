@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ScrollText, ShieldAlert } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDateTime } from "@/lib/format";
+import { fmtDateTime, isoDaysFromNow } from "@/lib/format";
 import { likeTerm, listParams } from "@/lib/list";
 import { DateRangeFilter, FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { Badge, Card, EmptyState, Kpi, PageHeader, Pagination, Table, Tabs, Td, Th, Toolbar } from "@/components/admin/ui";
@@ -48,7 +48,7 @@ async function Activity({ sp, page, pageSize, offset, q, str }: P & { str: (k: s
   const [{ rows, total }, people, entities] = await Promise.all([
     paged<Row<typeof schema.activityLogs>>(query.order("created_at", { ascending: false }).range(offset, offset + pageSize - 1)),
     all<{ id: string; fullName: string; email: string }>(() => adminDb.from(tbl(schema.profiles)).select("id,fullName:full_name,email,user_roles!inner(user_id)").order("full_name").order("id")),
-    all<{ entity: string }>(() => adminDb.from(tbl(schema.activityLogs)).select("entity").gte("created_at", new Date(Date.now() - 180 * 86_400_000).toISOString()).order("entity").order("id")),
+    all<{ entity: string }>(() => adminDb.from(tbl(schema.activityLogs)).select("entity").gte("created_at", isoDaysFromNow(-180)).order("entity").order("id")),
   ]);
   const users = [...new Map(people.map((p) => [p.id, { value: p.id, label: p.fullName || p.email }])).values()];
   const entityOptions = [...new Set(entities.map((e) => e.entity))].map((e) => ({ value: e, label: e.replace(/_/g, " ") }));
@@ -98,7 +98,7 @@ async function Activity({ sp, page, pageSize, offset, q, str }: P & { str: (k: s
 async function Security({ sp, page, pageSize, offset, q }: P) {
   let query = adminDb.from(tbl(schema.loginAttempts)).select(cols(schema.loginAttempts), { count: "exact" });
   if (q) query = query.ilike("email", likeTerm(q));
-  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const since = isoDaysFromNow(-7);
   const [{ rows, total }, week] = await Promise.all([
     paged<Row<typeof schema.loginAttempts>>(query.order("created_at", { ascending: false }).range(offset, offset + pageSize - 1)),
     all<{ success: boolean; ipHash: string | null }>(() => adminDb.from(tbl(schema.loginAttempts)).select("success,ipHash:ip_hash").gte("created_at", since).order("id")),

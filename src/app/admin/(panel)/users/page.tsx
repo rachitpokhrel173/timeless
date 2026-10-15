@@ -122,7 +122,7 @@ function Roles({ roles, links }: { roles: (Row<typeof schema.roles> & { perms: {
   ).map(([group, items]) => ({ group, items }));
   return (
     <div className="space-y-4">
-      <Notice tone="info">Permission changes apply on each user's next page load. The database checks the same permissions for every read and write.</Notice>
+      <Notice tone="info">Permission changes apply on each user&rsquo;s next page load. The database checks the same permissions for every read and write.</Notice>
       {roles.map((r) => (
         <details key={r.id} className="group rounded-xl border border-a-border bg-a-surface">
           <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">

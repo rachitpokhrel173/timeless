@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarCheck, Download, Plus } from "lucide-react";
+import { CalendarCheck, Plus } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr, todayISO } from "@/lib/format";
 import { first, likeTerm, listParams } from "@/lib/list";
 import { FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { BOOKING_STATUS, options, StatusBadge } from "@/components/admin/status";
-import { buttonClass, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
+import { ExportLink, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
 
 export const metadata: Metadata = { title: "Bookings" };
 
@@ -53,9 +53,7 @@ export default async function BookingsPage({ searchParams }: PageProps<"/admin/b
         actions={
           <>
             {money && (
-              <a href="/api/admin/export/bookings" className={buttonClass("secondary")}>
-                <Download className="size-4" aria-hidden /> Export CSV
-              </a>
+              <ExportLink entity="bookings" />
             )}
             {user.permissions.has("bookings.create") && (
               <LinkButton href="/admin/bookings/new" variant="primary" icon={Plus}>

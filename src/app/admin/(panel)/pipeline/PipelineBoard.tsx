@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   closestCorners,
   DndContext,
@@ -144,7 +144,12 @@ export default function PipelineBoard({ initial }: { initial: BoardColumn[] }) {
   const [lost, setLost] = useState<{ id: string; beforeId: string | null; snapshot: BoardColumn[] } | null>(null);
   const [reason, setReason] = useState("");
   const { run, pending } = useRun();
-  useEffect(() => setColumns(initial), [initial]);
+  // New server data (after a refresh) replaces the local board
+  const [shown, setShown] = useState(initial);
+  if (shown !== initial) {
+    setShown(initial);
+    setColumns(initial);
+  }
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const findColumn = (id: string) => columns.find((c) => `col:${c.status}` === id || c.leads.some((l) => l.id === id));

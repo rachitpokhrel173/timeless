@@ -44,7 +44,7 @@ export default async function StaffPage({ searchParams }: PageProps<"/admin/staf
         </Toolbar>
         {shown.length === 0 ? (
           <EmptyState icon={UsersRound} title={people.length ? "No one matches" : "No team members yet"}>
-            Add the people you assign to events — they don't need an admin login.
+            Add the people you assign to events — they don&rsquo;t need an admin login.
           </EmptyState>
         ) : (
           <Table>

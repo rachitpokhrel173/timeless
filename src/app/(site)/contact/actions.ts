@@ -6,6 +6,7 @@ import { getCatalogue, getEventTypes, getInquiryOptions, getSiteSettings } from 
 import { deliverInquiry } from "@/lib/inquiries";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, clientUserAgent, deviceFromUserAgent, hashIp } from "@/lib/request";
+import { todayISO } from "@/lib/format";
 import { formatPrice } from "@/lib/utils";
 import { onInquiryCreated } from "@/server/automation";
 import { createInquiry } from "@/server/crm";
@@ -14,6 +15,13 @@ import type { ContactMethod, EventTypeSlug, InquiryFieldErrors, InquiryFormState
 const text = (formData: FormData, key: string, max = 200) => String(formData.get(key) ?? "").trim().slice(0, max);
 
 const CONTACT_METHODS: ContactMethod[] = ["whatsapp", "phone", "email"];
+
+/** A real YYYY-MM-DD date (rejects e.g. 2026-02-31). */
+const isCalendarDate = (v: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+};
 
 /** Ticked catalogue ids → readable lines for whoever handles the inquiry; unknown ids are dropped. */
 async function designsFrom(ids: string[]) {
@@ -32,8 +40,10 @@ export async function submitInquiry(_prev: InquiryFormState, formData: FormData)
   const ip = await clientIp();
   const ipHash = hashIp(ip);
 
-  // 5 inquiries per 10 minutes per visitor is plenty for real people and stops floods
-  if (!(await rateLimit(`inquiry:${ipHash ?? "unknown"}`, 5, 600))) {
+  // 5 inquiries per 10 minutes per visitor is plenty for real people and stops floods.
+  // If the limiter itself can't be reached, the save below fails too and says so.
+  const allowed = await rateLimit(`inquiry:${ipHash ?? "unknown"}`, 5, 600).catch(() => true);
+  if (!allowed) {
     return {
       status: "error",
       message: `You've sent several inquiries in a short time. Please wait a few minutes, or call us on ${site.phones[0].label}.`,
@@ -70,11 +80,13 @@ export async function submitInquiry(_prev: InquiryFormState, formData: FormData)
 
   const errors: InquiryFieldErrors = {};
   if (input.name.length < 2) errors.name = "Please enter your name.";
-  if (!/^\+?[\d\s-]{7,}$/.test(input.phone)) errors.phone = "Please enter a valid phone number.";
+  const phoneDigits = input.phone.replace(/\D/g, "").length;
+  if (!/^\+?[\d\s()-]+$/.test(input.phone) || phoneDigits < 7 || phoneDigits > 15) errors.phone = "Please enter a valid phone number.";
   if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.email = "Please enter a valid email address.";
   if (!eventTypes.some((e) => e.slug === eventType)) errors.eventType = "Please choose an event type.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.eventDate)) errors.eventDate = "Please choose your event date.";
-  else if (input.eventDate < new Date().toISOString().slice(0, 10)) errors.eventDate = "Please choose a date that hasn't passed.";
+  if (!isCalendarDate(input.eventDate)) errors.eventDate = "Please choose your event date.";
+  else if (input.eventDate < todayISO()) errors.eventDate = "Please choose a date that hasn't passed.";
+  else if (input.eventDate > todayISO(5 * 366)) errors.eventDate = "Please check the year of your event date.";
   if (!CONTACT_METHODS.includes(preferredContact)) errors.preferredContact = "Please choose how we should contact you.";
   if (preferredContact === "email" && !input.email) errors.email = "Please add your email so we can reply.";
 

@@ -301,7 +301,12 @@ function Shell({ user, initialCounts, children }: { user: ShellUser; initialCoun
   const router = useRouter();
   const perms = useMemo(() => new Set(user.permissions), [user.permissions]);
 
-  useEffect(() => setDrawer(false), [pathname]);
+  // Close the mobile drawer after navigating
+  const [drawerPath, setDrawerPath] = useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
+    setDrawer(false);
+  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {

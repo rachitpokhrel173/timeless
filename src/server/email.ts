@@ -2,6 +2,7 @@ import "server-only";
 import { adminDb, exec, schema, tbl, vals } from "@/db";
 import { getSiteSettings } from "@/lib/content";
 import { fmtDateLong, npr } from "@/lib/format";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 /*
  * Transactional email templates. No email provider is connected, so nothing is sent: each
@@ -37,7 +38,7 @@ ${esc(brand.address.street)}, ${esc(brand.address.city)} · ${esc(brand.phones.m
   return { html, text };
 }
 
-const siteUrl = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "https://timelesstieevents.com.np").replace(/\/$/, "");
+const siteUrl = () => resolveSiteUrl();
 
 /** Every template in one place. */
 export const templates = {

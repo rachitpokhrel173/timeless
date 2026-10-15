@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/admin/login", "/admin/forgot-password", "/admin/reset-password", "/client/login"];
+const PUBLIC_PATHS = ["/admin/login", "/admin/forgot-password", "/admin/reset-password", "/admin/accept-invitation", "/client/login"];
 
 /**
  * Runs before private routes:
@@ -44,7 +44,9 @@ export async function proxy(request: NextRequest) {
 
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
   response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("Referrer-Policy", "same-origin");
+  // Email-link pages carry one-time tokens in the URL: never send it on, even to our own assets
+  const linkPage = pathname.startsWith("/admin/accept-invitation") || pathname.startsWith("/auth/");
+  response.headers.set("Referrer-Policy", linkPage ? "no-referrer" : "same-origin");
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }

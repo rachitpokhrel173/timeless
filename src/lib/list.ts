@@ -7,7 +7,7 @@ export function listParams(sp: Record<string, string | string[] | undefined>, pa
 }
 
 /** Escape LIKE wildcards in user input. */
-export const likeTerm = (q: string) => `%${q.replace(/[\%_]/g, (c) => `\${c}`)}%`;
+export const likeTerm = (q: string) => `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /** Route params that should be a record id. */
 export const isUuid = (v: string | undefined | null): v is string => !!v && /^[0-9a-f-]{36}$/i.test(v);

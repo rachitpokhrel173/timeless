@@ -63,7 +63,7 @@ export default async function AlbumPage({ params }: PageProps<"/admin/website/ga
       <Card bodyClassName="p-0">
         {items.length === 0 ? (
           <EmptyState icon={Images} title="No photos yet">
-            Upload photos — they're resized and optimised automatically.
+            Upload photos — they&rsquo;re resized and optimised automatically.
           </EmptyState>
         ) : (
           <ul className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">

@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDate, fmtDateTime, fmtDay, fmtTime, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
 import { maybeRunSweep } from "@/server/automation";
 import { inventoryWithStock } from "@/server/inventory";
 import { dashboardKpis, monthlyRevenue, outstandingTotal, pipelineSnapshot, resolveRange, salesFunnel } from "@/server/metrics";
@@ -43,7 +43,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
             .from(tbl(schema.followups))
             .select(`${cols(schema.followups)},lead:leads(id,name)`)
             .in("status", ["PENDING", "OVERDUE"])
-            .lte("due_at", new Date(Date.now() + 7 * 86_400_000).toISOString())
+            .lte("due_at", isoDaysFromNow(7))
             .order("due_at")
             .limit(30),
         ).then((rows) => rows.map(({ lead, ...f }) => ({ f, lead })))

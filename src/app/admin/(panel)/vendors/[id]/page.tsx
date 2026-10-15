@@ -76,7 +76,7 @@ export default async function VendorPage({ params }: PageProps<"/admin/vendors/[
           <Card title="Event bookings" bodyClassName="p-0">
             {jobs.length === 0 ? (
               <EmptyState compact title="Not booked for any event yet">
-                Book vendors from an event's Vendors tab.
+                Book vendors from an event&rsquo;s Vendors tab.
               </EmptyState>
             ) : (
               <Table>

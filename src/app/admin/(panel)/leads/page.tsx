@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Archive, Download, Kanban, Plus, UserPlus } from "lucide-react";
+import { Archive, Kanban, Plus, UserPlus } from "lucide-react";
 import { adminDb, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate } from "@/lib/format";
@@ -9,7 +9,7 @@ import { LEAD_STAGES } from "@/server/crm";
 import { eventTypeName, eventTypeOptions, sourceOptions, stageOptions, userOptions } from "@/server/lookups";
 import { BulkTable, FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { LEAD_STAGE, PRIORITY, StatusBadge, options } from "@/components/admin/status";
-import { buttonClass, EmptyState, hrefWith, LinkButton, PageHeader, Pagination, Tabs, Toolbar, Card } from "@/components/admin/ui";
+import { ExportLink, EmptyState, hrefWith, LinkButton, PageHeader, Pagination, Tabs, Toolbar, Card } from "@/components/admin/ui";
 import ImportButton from "../ImportButton";
 import { bulkArchiveLeads, bulkAssignLeads, bulkLeadStage } from "./actions";
 
@@ -70,9 +70,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
             <LinkButton href="/admin/pipeline" icon={Kanban}>
               Pipeline board
             </LinkButton>
-            <a href="/api/admin/export/leads" className={buttonClass("secondary")}>
-              <Download className="size-4" aria-hidden /> Export CSV
-            </a>
+            <ExportLink entity="leads" />
             {user.permissions.has("leads.create") && <ImportButton entity="leads" />}
             {user.permissions.has("leads.create") && (
               <LinkButton href="/admin/leads/new" variant="primary" icon={Plus}>

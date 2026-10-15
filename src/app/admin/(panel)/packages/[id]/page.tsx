@@ -59,7 +59,7 @@ export default async function PackagePage({ params }: PageProps<"/admin/packages
         <Card title="Package contents" description="Items linked to inventory are reserved automatically for the event date when this package is booked." bodyClassName="p-0" actions={manage && <PackageItemButton packageId={id} items={itemOptions} />}>
           {lines.length === 0 ? (
             <EmptyState compact title="Nothing listed yet">
-              Add what the package includes — link décor you own so it's reserved with each booking.
+              Add what the package includes — link décor you own so it&rsquo;s reserved with each booking.
             </EmptyState>
           ) : (
             <Table>

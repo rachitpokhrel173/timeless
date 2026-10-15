@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Reset your Timeless Ties password</title>
+  </head>
+  <!--
+    Supabase → Authentication → Emails → "Reset Password". Paste this whole file as the message body.
+    Subject: Reset your Timeless Ties password
+
+    The link goes to /auth/confirm with the one-time token hash, which signs the user in and sends
+    them to /admin/reset-password to choose a new password.
+    {{ .SiteURL }} is Authentication → URL Configuration → Site URL — set it to
+    https://timelesstieevents.com.np (no trailing slash).
+  -->
+  <body style="margin:0;padding:0;background:#f8f3ea;font-family:Helvetica,Arial,sans-serif;color:#2c2224;">
+    <div style="display:none;max-height:0;overflow:hidden;">Choose a new password for your Timeless Ties Events &amp; Decor account.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f3ea;padding:32px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="background:#5a1f2b;padding:26px 32px;text-align:center;">
+                <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:26px;font-style:italic;font-weight:bold;color:#ffffff;">Timeless Ties</p>
+                <p style="margin:4px 0 0;font-size:11px;letter-spacing:4px;text-transform:uppercase;color:#ead7ae;">Events &amp; Decor</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 12px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:normal;color:#5a1f2b;">Reset your password</h1>
+                <p style="margin:0 0 14px;font-size:15px;line-height:1.6;">
+                  Namaste! We received a request to reset the password for the Timeless Ties Events &amp; Decor account <strong>{{ .Email }}</strong>.
+                </p>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.6;">
+                  Click the button below to choose a new password.
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="border-radius:999px;background:#5a1f2b;">
+                      <a
+                        href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery"
+                        style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:999px;"
+                        >Choose a New Password</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:24px 0 6px;font-size:13px;line-height:1.6;color:#5f5658;">If the button doesn&rsquo;t work, copy this link into your browser:</p>
+                <p style="margin:0 0 20px;font-size:12px;line-height:1.5;word-break:break-all;">
+                  <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery" style="color:#5a1f2b;">{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery</a>
+                </p>
+                <p style="margin:0;padding:12px 14px;background:#f8f3ea;border-radius:8px;font-size:13px;line-height:1.6;color:#5f5658;">
+                  For your security, this link can be used only once and expires after a short time. We will never ask for your password by email or phone. If it has expired, request a new one from the &ldquo;Forgot password&rdquo; page.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 32px;border-top:1px solid #eee6da;text-align:center;font-size:12px;line-height:1.6;color:#6f6668;">
+                If you didn&rsquo;t ask to reset your password, you can safely ignore this email &mdash; your password won&rsquo;t change.<br />
+                Timeless Ties Events &amp; Decor &middot; Chabahil, Kathmandu
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

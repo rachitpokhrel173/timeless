@@ -730,9 +730,11 @@ export function BulkTable({
 
   // Drop selections that disappeared after a refresh
   const rowKey = allIds.join(",");
-  useEffect(() => {
-    setSelected((prev) => new Set([...prev].filter((id) => rowKey.split(",").includes(id))));
-  }, [rowKey]);
+  const [selectionRows, setSelectionRows] = useState(rowKey);
+  if (selectionRows !== rowKey) {
+    setSelectionRows(rowKey);
+    setSelected((prev) => new Set([...prev].filter((id) => allIds.includes(id))));
+  }
 
   const exec = (a: BulkAction) =>
     run(() => a.action([...selected]), {

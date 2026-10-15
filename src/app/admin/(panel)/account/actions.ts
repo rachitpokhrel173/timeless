@@ -4,6 +4,7 @@ import { z } from "zod";
 import { adminDb, exec, maybe, schema, tbl } from "@/db";
 import { adminAction, UserError } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { passwordProblem } from "@/lib/auth/password-rules";
 import { supabaseServer } from "@/lib/supabase/server";
 
 /* Preferences are the user's own row; written with the privileged connection after the session check. */
@@ -45,9 +46,8 @@ export const changePassword = adminAction(
     .object({ current: z.string().min(1, "Enter your current password."), password: z.string().max(200), confirm: z.string() })
     .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords don't match." }),
   async ({ current, password }, user) => {
-    if (password.length < 10 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
-      throw new UserError("Use at least 10 characters, with letters and a number.", { password: "Too weak." });
-    }
+    const problem = passwordProblem(password);
+    if (problem) throw new UserError(problem, { password: "Too weak." });
     const supabase = await supabaseServer();
     const check = await supabase.auth.signInWithPassword({ email: user.email, password: current });
     if (check.error) throw new UserError("Current password is incorrect.", { current: "Current password is incorrect." });

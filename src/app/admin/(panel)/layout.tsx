@@ -1,6 +1,7 @@
 import AdminShell from "@/components/admin/AdminShell";
 import { requirePage } from "@/lib/auth/session";
 import { headerCounts } from "@/server/counts";
+import EmailLinkForwarder from "../(auth)/EmailLinkForwarder";
 
 // Every admin page depends on the signed-in user — never prerender or cache
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ export default async function PanelLayout({ children }: LayoutProps<"/admin">) {
       }}
       initialCounts={counts}
     >
+      {/* An invitation opened while already signed in still lands on the password step */}
+      <EmailLinkForwarder />
       {children}
     </AdminShell>
   );

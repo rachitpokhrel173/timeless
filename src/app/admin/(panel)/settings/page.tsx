@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { adminDb, all, cols, many, maybe, schema, tbl, total, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDateTime, relativeTime } from "@/lib/format";
+import { fmtDateTime, isoDaysFromNow, relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { serviceRoleConfigured } from "@/lib/supabase/admin";
 import { mediaOptions } from "@/server/lookups";
@@ -195,7 +195,7 @@ async function Lists() {
 async function System() {
   const [storage, outbox, lastEmail, sweep] = await Promise.all([
     storageHealth(),
-    all<{ status: string }>(() => adminDb.from(tbl(schema.emailOutbox)).select("status").gte("created_at", new Date(Date.now() - 30 * 86_400_000).toISOString()).order("id")),
+    all<{ status: string }>(() => adminDb.from(tbl(schema.emailOutbox)).select("status").gte("created_at", isoDaysFromNow(-30)).order("id")),
     maybe<{ createdAt: Date; subject: string; status: string }>(adminDb.from(tbl(schema.emailOutbox)).select("createdAt:created_at,subject,status").order("created_at", { ascending: false }).limit(1)),
     setting<{ at: string }>("automation_last_sweep"),
   ]);

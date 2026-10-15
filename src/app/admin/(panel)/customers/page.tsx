@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Archive, Contact, Download, Plus } from "lucide-react";
+import { Archive, Contact, Plus } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr } from "@/lib/format";
 import { likeTerm, listParams } from "@/lib/list";
 import { sourceOptions } from "@/server/lookups";
 import { BulkTable, FilterSelect, SearchBox } from "@/components/admin/interactive";
-import { Badge, buttonClass, Card, EmptyState, LinkButton, PageHeader, Pagination, Tabs, Toolbar } from "@/components/admin/ui";
+import { Badge, ExportLink, Card, EmptyState, LinkButton, PageHeader, Pagination, Tabs, Toolbar } from "@/components/admin/ui";
 import ImportButton from "../ImportButton";
 import { bulkArchiveCustomers } from "./actions";
 
@@ -71,9 +71,7 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
         description="Everyone you've worked with or quoted — each with their full history."
         actions={
           <>
-            <a href="/api/admin/export/customers" className={buttonClass("secondary")}>
-              <Download className="size-4" aria-hidden /> Export CSV
-            </a>
+            <ExportLink entity="customers" />
             {user.permissions.has("customers.create") && <ImportButton entity="customers" />}
             {user.permissions.has("customers.create") && (
               <LinkButton href="/admin/customers/new" variant="primary" icon={Plus}>

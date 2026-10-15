@@ -30,7 +30,7 @@ export default async function AccountPage() {
             <TextField label="Phone" name="phone" type="tel" defaultValue={profile.phone ?? ""} />
           </ActionForm>
         </Card>
-        <Card title="Password" description="At least 10 characters with letters and a number. Changing it signs out your other devices.">
+        <Card title="Password" description="At least 12 characters with letters and a number. Changing it signs out your other devices.">
           <ActionForm action={changePassword} submitLabel="Change password" success="Password changed" resetOnSuccess>
             <TextField label="Current password" name="current" type="password" autoComplete="current-password" required />
             <TextField label="New password" name="password" type="password" autoComplete="new-password" required />

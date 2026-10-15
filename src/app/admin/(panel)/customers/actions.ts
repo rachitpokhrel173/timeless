@@ -5,6 +5,7 @@ import { z } from "zod";
 import { adminDb, cols, db, exec, likeEscape, maybe, one, schema, tbl, vals, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { invitationRedirectUrl } from "@/lib/auth/redirects";
 import { serviceRoleConfigured, supabaseAdmin } from "@/lib/supabase/admin";
 import { findCustomer } from "@/server/crm";
 
@@ -109,7 +110,6 @@ export const inviteToPortal = adminAction("customers.update", z.object({ id: zs.
   if (!c) throw new UserError("Customer not found.");
   if (!c.email) throw new UserError("Add the customer's email first.");
   if (c.authUserId) throw new UserError("This customer already has portal access.");
-  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
   // Existing auth user with this email (e.g. invited before) → link it; otherwise send an invitation.
   // Every auth user has a profile (on_auth_user_created trigger), so look it up there.
   const existing = await maybe<{ id: string }>(adminDb.from(tbl(schema.profiles)).select("id").ilike("email", likeEscape(c.email.toLowerCase())));
@@ -117,7 +117,7 @@ export const inviteToPortal = adminAction("customers.update", z.object({ id: zs.
   if (!authId) {
     const { data, error } = await supabaseAdmin().auth.admin.inviteUserByEmail(c.email, {
       data: { full_name: c.name },
-      redirectTo: `${site}/auth/confirm?next=/client`,
+      redirectTo: invitationRedirectUrl(),
     });
     if (error || !data.user) throw new UserError(`Couldn't send the invitation: ${error?.message ?? "unknown error"}`);
     authId = data.user.id;

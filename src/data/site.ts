@@ -1,3 +1,4 @@
+import { resolveSiteUrl } from "@/lib/site-url";
 import type { NavLink, SeoSettings, SiteSettings } from "@/types";
 
 /**
@@ -13,7 +14,7 @@ export const siteSettings: SiteSettings = {
   tagline: "Weddings · Events · Celebrations",
   logo: { src: "/brand/logo-wine.png", alt: "Timeless Ties Events & Decor", width: 311, height: 287 },
   logoOnDark: { src: "/brand/logo-ivory.png", alt: "Timeless Ties Events & Decor", width: 311, height: 287 },
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://timelesstieevents.com.np",
+  url: resolveSiteUrl(),
   locale: "en_NP",
   email: "timelesstieseventsdecor@gmail.com",
   phones: [

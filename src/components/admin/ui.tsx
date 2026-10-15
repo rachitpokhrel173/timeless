@@ -13,6 +13,7 @@ import {
   Circle,
   CircleDashed,
   CircleDot,
+  Download,
   Clock,
   Info,
   Lock,
@@ -138,6 +139,15 @@ export function LinkButton({
       {Icon && <Icon className="size-4" aria-hidden />}
       {children}
     </Link>
+  );
+}
+
+/** CSV / file download from an API route — a plain link (client-side navigation can't download files). */
+export function ExportLink({ entity, label = "Export CSV" }: { entity: string; label?: string }) {
+  return (
+    <a href={`/api/admin/export/${entity}`} download className={buttonClass("secondary")}>
+      <Download className="size-4" aria-hidden /> {label}
+    </a>
   );
 }
 

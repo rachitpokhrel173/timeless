@@ -49,11 +49,20 @@ next-env.d.ts
 /.data
 /.drizzle-scratch
 
-# Supabase folder (migrations, seed, config) is kept local only — never committed
-/supabase
-supabase/.branches/
-supabase/.env
-supabase/*.local.*
+# Supabase: local CLI state and secrets stay out of Git; the SQL and config needed to deploy
+# (migrations, seed, config.toml, email templates) are tracked. None of them may hold real keys —
+# config.toml reads secrets with env(...).
+/supabase/*
+!/supabase/.gitignore
+!/supabase/config.toml
+!/supabase/seed.sql
+!/supabase/migrations/
+!/supabase/templates/
+/supabase/.branches/
+/supabase/.temp/
+/supabase/.env
+/supabase/.env.*
+/supabase/*.local.*
 
 # logs
 logs

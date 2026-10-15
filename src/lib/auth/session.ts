@@ -71,6 +71,31 @@ export async function loadUser(userId: string, sessionId: string | null = null):
 
 export const can = (user: SessionUser | null, permission: Permission) => !!user?.permissions.has(permission);
 
+// Sign-in methods Supabase records (JWT `amr` claim) when someone arrives through an email link
+const EMAIL_LINK_METHODS = new Set(["invite", "recovery", "otp", "magiclink", "email/signup"]);
+const EMAIL_LINK_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+/**
+ * The Supabase user when the current session was started from an invitation or password-reset
+ * link in the last 24 hours — the only sessions allowed to set a password without the old one.
+ * A session from an ordinary password sign-in returns null (use Account → Password instead).
+ */
+export async function emailLinkSession(): Promise<{ id: string; email: string | null } | null> {
+  if (!supabaseConfigured()) return null;
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getClaims().catch(() => ({ data: null }));
+  const claims = data?.claims;
+  if (!claims?.sub) return null;
+  const now = Date.now() / 1000;
+  const amr = (Array.isArray(claims.amr) ? claims.amr : []) as { method?: string; timestamp?: number }[];
+  const fromLink = amr.some((a) => !!a.method && EMAIL_LINK_METHODS.has(a.method) && now - (a.timestamp ?? 0) < EMAIL_LINK_MAX_AGE_SECONDS);
+  if (!fromLink) return null;
+  // The JWT is checked locally; also ask the Auth server, so a session revoked by sign-out is refused
+  const { data: live } = await supabase.auth.getUser();
+  if (live.user?.id !== claims.sub) return null;
+  return { id: claims.sub, email: live.user.email ?? null };
+}
+
 /** For admin pages: sign-in required, staff only, and optionally a specific permission. */
 export async function requirePage(permission?: Permission) {
   const user = await getCurrentUser();

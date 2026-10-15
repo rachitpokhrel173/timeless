@@ -88,10 +88,7 @@ export default function CommandPalette({
   // Debounced server search
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
-      setHits([]);
-      return;
-    }
+    if (q.length < 2) return; // short queries show no records (see `entries`)
     const ctrl = new AbortController();
     const t = setTimeout(async () => {
       setLoading(true);
@@ -119,7 +116,7 @@ export default function CommandPalette({
         .filter((i) => allowed(i, perms) && (match(i.label) || match(g.label)))
         .map((i) => ({ key: `p:${i.href}`, label: i.label, hint: g.label, href: i.href, icon: i.icon, group: "Pages" })),
     ).slice(0, q ? 8 : 6);
-    const results = hits.map((h) => ({
+    const results = (q.length < 2 ? [] : hits).map((h) => ({
       key: `r:${h.type}:${h.id}`,
       label: h.title,
       hint: [h.type, h.subtitle].filter(Boolean).join(" · "),
@@ -130,7 +127,13 @@ export default function CommandPalette({
     return [...results, ...actions, ...pages];
   }, [hits, perms, query]);
 
-  useEffect(() => setActive(0), [query, hits.length]);
+  // Highlight the first entry whenever the results change
+  const resultsKey = `${query}|${hits.length}`;
+  const [activeFor, setActiveFor] = useState(resultsKey);
+  if (activeFor !== resultsKey) {
+    setActiveFor(resultsKey);
+    setActive(0);
+  }
 
   const go = (entry?: Entry) => {
     if (!entry) return;

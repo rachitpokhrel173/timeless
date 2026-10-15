@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { List, Plus, UserPlus } from "lucide-react";
 import { adminDb, all, cols, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
+import { isoDaysFromNow, serverNow } from "@/lib/format";
 import { likeTerm, listParams } from "@/lib/list";
 import { eventTypeName, eventTypeOptions, sourceOptions, stageOptions, userOptions } from "@/server/lookups";
 import { FilterSelect, SearchBox } from "@/components/admin/interactive";
@@ -24,7 +25,7 @@ export default async function PipelinePage({ searchParams }: PageProps<"/admin/p
       .is("deleted_at", null)
       .is("archived_at", null)
       // Closed stages only show the last 60 days so the board stays focused on active work
-      .or(`stage.not.in.(COMPLETED,LOST),updated_at.gt.${new Date(Date.now() - 60 * 86_400_000).toISOString()}`);
+      .or(`stage.not.in.(COMPLETED,LOST),updated_at.gt.${isoDaysFromNow(-60)}`);
     if (q) {
       const term = pgrstValue(likeTerm(q));
       query = query.or(["name", "phone", "number"].map((c) => `${c}.ilike.${term}`).join(","));
@@ -35,7 +36,7 @@ export default async function PipelinePage({ searchParams }: PageProps<"/admin/p
   });
   const rows = matching.slice(0, 800);
   const totals = [...new Set(matching.map((r) => r.stage))].map((stage) => ({ stage, c: matching.filter((r) => r.stage === stage).length }));
-  const now = Date.now();
+  const now = serverNow();
   const columns: BoardColumn[] = stages.map((s) => ({
     status: s.value as BoardColumn["status"],
     label: s.label,

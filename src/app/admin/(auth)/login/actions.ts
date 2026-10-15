@@ -3,7 +3,9 @@
 import { redirect } from "next/navigation";
 import { adminDb, exec, schema, tbl, total, vals } from "@/db";
 import { audit } from "@/lib/audit";
-import { getCurrentUser, loadUser } from "@/lib/auth/session";
+import { passwordProblem } from "@/lib/auth/password-rules";
+import { safeNextPath, siteOrigin } from "@/lib/auth/redirects";
+import { emailLinkSession, getCurrentUser, loadUser } from "@/lib/auth/session";
 import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, clientUserAgent, hashIp } from "@/lib/request";
 import { supabaseConfigured } from "@/lib/supabase/env";
@@ -15,11 +17,9 @@ const MAX_FAILURES = 5;
 const LOCK_MINUTES = 15;
 
 function safeNext(next: FormDataEntryValue | null) {
-  const value = typeof next === "string" ? next : "";
-  return value.startsWith("/admin") && !value.startsWith("//") && !value.startsWith("/admin/login") ? value : "/admin";
+  const value = safeNextPath(next);
+  return value.startsWith("/admin/login") ? "/admin" : value;
 }
-
-const siteUrl = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
 async function recordAttempt(email: string, success: boolean, reason?: string, userId?: string) {
   await exec(
@@ -104,7 +104,7 @@ export async function requestPasswordReset(_prev: AuthFormState, formData: FormD
   const ipKey = hashIp(await clientIp()) ?? "unknown";
   if (await rateLimit(`reset:${ipKey}`, 5, 60 * 60)) {
     const supabase = await supabaseServer();
-    await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteUrl()}/auth/confirm?next=/admin/reset-password` });
+    await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteOrigin()}/auth/confirm?next=/admin/reset-password` });
   }
   return { message: "If an account exists for that email, a reset link is on its way. Check your inbox (and spam folder)." };
 }
@@ -113,13 +113,12 @@ export async function requestPasswordReset(_prev: AuthFormState, formData: FormD
 export async function setNewPassword(_prev: AuthFormState, formData: FormData): Promise<AuthFormState> {
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
-  if (password.length < 10 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) {
-    return { error: "Use at least 10 characters, with letters and at least one number." };
-  }
+  const problem = passwordProblem(password);
+  if (problem) return { error: problem };
   if (password !== confirm) return { error: "The passwords don't match." };
+  // Only a session opened from the reset/invitation email may skip the current password
+  if (!(await emailLinkSession())) return { error: "Your reset link has expired. Request a new one." };
   const supabase = await supabaseServer();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return { error: "Your reset link has expired. Request a new one." };
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.code === "same_password" ? "Choose a password you haven't used before." : "Couldn't update the password. Try again." };
   // Sign out other devices that may have used the old password

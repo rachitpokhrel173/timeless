@@ -241,7 +241,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
         <Card title="Invoices" bodyClassName="p-0" actions={active && can("invoices.create") && !invoices.some((i) => i.status !== "CANCELLED") && <InvoiceButton bookingId={id} dueDate={booking.balanceDueDate} />}>
           {invoices.length === 0 ? (
             <EmptyState compact icon={FileText} title="No invoice yet">
-              Create one when you're ready to bill the client.
+              Create one when you&rsquo;re ready to bill the client.
             </EmptyState>
           ) : (
             <Table>

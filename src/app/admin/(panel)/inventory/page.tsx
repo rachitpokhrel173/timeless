@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, Boxes, Download, Plus } from "lucide-react";
+import { AlertTriangle, Boxes, Plus } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { npr } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { inventoryWithStock } from "@/server/inventory";
 import { inventoryCategoryOptions } from "@/server/lookups";
 import { FilterSelect, SearchBox } from "@/components/admin/interactive";
-import { Badge, buttonClass, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
+import { Badge, ExportLink, Card, EmptyState, Kpi, LinkButton, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
 import { CategoryButton } from "./InventoryClient";
 
 export const metadata: Metadata = { title: "Inventory" };
@@ -38,9 +38,7 @@ export default async function InventoryPage({ searchParams }: PageProps<"/admin/
         description="Décor you own — what's on the shelf, reserved for events, damaged or in maintenance."
         actions={
           <>
-            <a href="/api/admin/export/inventory" className={buttonClass("secondary")}>
-              <Download className="size-4" aria-hidden /> Export CSV
-            </a>
+            <ExportLink entity="inventory" />
             {user.permissions.has("inventory.update") && <CategoryButton />}
             {user.permissions.has("inventory.create") && (
               <LinkButton href="/admin/inventory/new" variant="primary" icon={Plus}>

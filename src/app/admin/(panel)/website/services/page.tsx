@@ -59,7 +59,7 @@ export default async function ServicesPage() {
                 </div>
                 <div className="border-t border-a-border px-4 py-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <p className="text-xs font-semibold tracking-wide text-a-muted uppercase">What's included</p>
+                    <p className="text-xs font-semibold tracking-wide text-a-muted uppercase">What&rsquo;s included</p>
                     {manage && <ServiceItemButton serviceId={s.id} />}
                   </div>
                   {mine.length === 0 ? (

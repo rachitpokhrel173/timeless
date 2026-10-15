@@ -45,7 +45,7 @@ async function main() {
     if (!user) {
       const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
         data: { full_name: name },
-        redirectTo: `${site}/auth/confirm?next=/admin/reset-password`,
+        redirectTo: `${site}/admin/accept-invitation`,
       });
       if (error || !data.user) throw new Error(`Couldn't invite ${email}: ${error?.message}`);
       user = { id: data.user.id };

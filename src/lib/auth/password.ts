@@ -25,9 +25,4 @@ export async function verifyPassword(password: string, stored: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-/** Minimum bar for admin passwords. Returns an error message or null. */
-export function passwordProblem(password: string) {
-  if (password.length < 10) return "Use at least 10 characters.";
-  if (!/[a-zA-Z]/.test(password) || !/\d/.test(password)) return "Mix letters and at least one number.";
-  return null;
-}
+export { MIN_PASSWORD_LENGTH, passwordProblem } from "./password-rules";

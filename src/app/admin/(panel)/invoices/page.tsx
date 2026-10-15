@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { adminDb, all, cols, paged, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr, todayISO } from "@/lib/format";
 import { likeTerm, listParams } from "@/lib/list";
 import { FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { INVOICE_STATUS, options, StatusBadge } from "@/components/admin/status";
-import { buttonClass, Card, EmptyState, Kpi, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
+import { ExportLink, Card, EmptyState, Kpi, PageHeader, Pagination, Table, Td, Th, Toolbar } from "@/components/admin/ui";
 
 export const metadata: Metadata = { title: "Invoices" };
 
@@ -40,9 +40,7 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/admin/i
         title="Invoices"
         description="Bills issued against bookings. Create an invoice from the booking's Invoices tab."
         actions={
-          <a href="/api/admin/export/invoices" className={buttonClass("secondary")}>
-            <Download className="size-4" aria-hidden /> Export CSV
-          </a>
+          <ExportLink entity="invoices" />
         }
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, CalendarCheck, FileText, Images, Printer, Users } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDate, fmtDateTime, fmtTime, npr, num, relativeTime } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtTime, npr, num, relativeTime, serverNow } from "@/lib/format";
 import { isUuid, listParams } from "@/lib/list";
 import { staffConflicts } from "@/server/automation";
 import { eventProfits, vendorPaid, vendorPaymentStatus } from "@/server/finance";
@@ -70,7 +70,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
   ]);
   const [taskRows, teamRows, vendorRows] = counts;
   const openTasks = taskRows.filter((t) => t.status !== "COMPLETED").length;
-  const days = Math.round((new Date(`${event.eventDate}T00:00:00+05:45`).getTime() - Date.now()) / 86_400_000);
+  const days = Math.round((new Date(`${event.eventDate}T00:00:00+05:45`).getTime() - serverNow()) / 86_400_000);
 
   return (
     <>
@@ -238,7 +238,7 @@ async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: b
     { key: null, title: "Tasks" },
     { key: "POST", title: "Post-event checklist" },
   ] as const;
-  const now = Date.now();
+  const now = serverNow();
   return (
     <div className="space-y-4">
       {plan && (
@@ -403,7 +403,7 @@ async function InventoryTab({ eventId, adjust }: { eventId: string; adjust: bool
       <Card title="Reserved inventory" description="Held for this event's décor window. Starting the event checks items out; record returns afterwards." bodyClassName="p-0" actions={adjust && <ReserveButton eventId={eventId} items={picker} />}>
         {lines.length === 0 ? (
           <EmptyState compact title="Nothing reserved">
-            Reserve backdrops, furniture, lights and props so they can't be double-booked.
+            Reserve backdrops, furniture, lights and props so they can&rsquo;t be double-booked.
           </EmptyState>
         ) : (
           <Table>
@@ -487,7 +487,7 @@ async function DesignsTab({ eventId, plan }: { eventId: string; plan: boolean })
   return (
     <div className="space-y-4">
       {plan && <DesignButton eventId={eventId} />}
-      {designs.length === 0 && <EmptyState title="No designs yet">Share mood boards and stage concepts here and record the client's approval.</EmptyState>}
+      {designs.length === 0 && <EmptyState title="No designs yet">Share mood boards and stage concepts here and record the client&rsquo;s approval.</EmptyState>}
       {designs.map((d) => (
         <Card
           key={d.id}

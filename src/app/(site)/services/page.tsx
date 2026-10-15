@@ -13,7 +13,7 @@ export const generateMetadata = (): Promise<Metadata> =>
   pageMetadata({
   title: "Wedding & Event Decoration Services",
   description:
-    "Wedding, engagement and reception décor, haldi and mehendi setups, birthday and party decoration, corporate events and custom décor for pasni and bratabandha in Kathmandu.",
+    "Wedding, reception, haldi and mehendi décor, birthday and party decoration, corporate events, pasni and bratabandha setups across Kathmandu.",
   path: "/services",
 });
 
