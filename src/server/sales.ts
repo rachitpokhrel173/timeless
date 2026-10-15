@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { adminDb, cols, exec, likeEscape, many, maybe, one, schema, tbl, vals, type DB, type Row, type Tx } from "@/db";
 import { UserError } from "@/lib/actions";
 import { todayISO } from "@/lib/format";
-import { couponDiscount, quoteTotals } from "@/lib/quote-math";
+import { couponDiscount, depositShare, quoteTotals } from "@/lib/quote-math";
 import { advanceLead, logLeadActivity } from "./crm";
 import { checkOutEvent, packageRequirements, releaseEvent, setReservations } from "./inventory";
 import { nextNumber } from "./numbering";
@@ -49,7 +49,8 @@ export type QuoteInput = {
   discountType: "PERCENT" | "FIXED";
   discountValue: number;
   taxRate: number;
-  depositPercent: number;
+  /** Advance to confirm, in NPR (capped at the total). */
+  depositAmount: number;
   notes?: string | null;
   terms?: string | null;
   termsVersion?: string | null;
@@ -131,7 +132,7 @@ export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor,
     discountType: input.discountType,
     discountValue: input.discountValue,
     taxRate: input.taxRate,
-    depositPercent: input.depositPercent,
+    depositAmount: input.depositAmount,
   });
   const coupon = await resolveCoupon(conn, input.couponCode, base.subtotal);
   let discountType = input.discountType;
@@ -148,7 +149,7 @@ export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor,
     discountType,
     discountValue,
     taxRate: input.taxRate,
-    depositPercent: input.depositPercent,
+    depositAmount: input.depositAmount,
   });
 
   const values = {
@@ -166,7 +167,7 @@ export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor,
     discountType,
     discountValue,
     taxRate: input.taxRate,
-    depositPercent: input.depositPercent,
+    depositPercent: depositShare(t.depositAmount, t.total),
     notes: input.notes,
     terms: input.terms,
     termsVersion: input.termsVersion,

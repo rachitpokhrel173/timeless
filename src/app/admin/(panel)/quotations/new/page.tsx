@@ -23,7 +23,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/adm
   const values: QuoteEditorValues = {
     validUntil: todayISO(settings.validityDays),
     taxRate: settings.taxRate,
-    depositPercent: settings.depositPercent,
+    depositAmount: settings.depositAmount,
     terms: settings.terms,
     termsVersion: settings.termsVersion,
   };

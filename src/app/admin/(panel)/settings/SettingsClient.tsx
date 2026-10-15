@@ -65,12 +65,12 @@ export function BusinessForm({ values, media }: { values: Business; media: Media
   );
 }
 
-export function QuotationSettingsForm({ values }: { values: { terms: string; termsVersion: string; taxRate: number; depositPercent: number; validityDays: number } }) {
+export function QuotationSettingsForm({ values }: { values: { terms: string; termsVersion: string; taxRate: number; depositAmount: number; validityDays: number } }) {
   return (
     <ActionForm action={saveQuotationSettings} success="Quotation defaults saved">
       <div className="grid gap-4 sm:grid-cols-3">
         <TextField label="Tax / VAT %" name="taxRate" type="number" min={0} max={100} step="0.01" defaultValue={values.taxRate} />
-        <TextField label="Advance %" name="depositPercent" type="number" min={0} max={100} defaultValue={values.depositPercent} hint="Default advance for new quotations (editable per quote)." />
+        <TextField label="Default advance (NPR)" name="depositAmount" type="number" min={0} step={1} defaultValue={values.depositAmount} hint="Filled in on new quotations; change it per quote. 0 = no advance by default." />
         <TextField label="Valid for (days)" name="validityDays" type="number" min={1} defaultValue={values.validityDays} />
       </div>
       <TextArea label="Default terms & conditions" name="terms" rows={9} defaultValue={values.terms} />

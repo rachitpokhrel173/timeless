@@ -3,12 +3,12 @@ import { adminDb, all, maybe, schema, tbl } from "@/db";
 import { DEFAULT_QUOTE_TERMS } from "@/lib/defaults";
 import { customerOptions, eventTypeOptions } from "@/server/lookups";
 
-export type QuoteSettings = { terms?: string; termsVersion?: string; taxRate?: number; depositPercent?: number; validityDays?: number };
+export type QuoteSettings = { terms?: string; termsVersion?: string; taxRate?: number; depositAmount?: number; validityDays?: number };
 
 export async function quoteSettings(): Promise<Required<QuoteSettings>> {
   const row = await maybe<{ value: QuoteSettings }>(adminDb.from(tbl(schema.siteSettings)).select("value").eq("key", "quotation_settings"));
   const v = row?.value ?? {};
-  return { terms: v.terms ?? DEFAULT_QUOTE_TERMS, termsVersion: v.termsVersion ?? "", taxRate: v.taxRate ?? 0, depositPercent: v.depositPercent ?? 50, validityDays: v.validityDays ?? 14 };
+  return { terms: v.terms ?? DEFAULT_QUOTE_TERMS, termsVersion: v.termsVersion ?? "", taxRate: v.taxRate ?? 0, depositAmount: v.depositAmount ?? 0, validityDays: v.validityDays ?? 14 };
 }
 
 /** Everything the quotation editor's pickers need (read after the page's permission check). */

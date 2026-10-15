@@ -41,7 +41,7 @@ const fields = z.object({
   discountType: z.enum(["PERCENT", "FIXED"]).default("FIXED"),
   discountValue: z.coerce.number().min(0).max(1_000_000_000).default(0),
   taxRate: z.coerce.number().min(0).max(100).default(0),
-  depositPercent: z.coerce.number().min(0).max(100).default(50),
+  depositAmount: z.coerce.number().int("Enter the advance in whole rupees.").min(0).max(1_000_000_000).default(0),
   notes: zs.optional(4000),
   terms: zs.optional(8000),
   termsVersion: zs.optional(40),

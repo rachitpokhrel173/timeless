@@ -39,7 +39,7 @@ export function quoteDocProps(
       ...(quote.discountAmount ? [{ label: "Discount", value: quote.discountAmount, negative: true }] : []),
       ...(quote.taxAmount ? [{ label: `Tax (${quote.taxRate}%)`, value: quote.taxAmount }] : []),
       { label: "Total", value: quote.total, strong: true },
-      ...(quote.depositAmount ? [{ label: `Advance to confirm (${quote.depositPercent}%)`, value: quote.depositAmount }] : []),
+      ...(quote.depositAmount ? [{ label: "Advance to confirm", value: quote.depositAmount }] : []),
     ],
     notes: quote.notes,
     terms: quote.terms,

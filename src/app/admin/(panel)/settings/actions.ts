@@ -106,7 +106,7 @@ export const saveQuotationSettings = adminAction(
     terms: zs.text(8000),
     termsVersion: zs.text(40),
     taxRate: z.coerce.number().min(0).max(100),
-    depositPercent: z.coerce.number().min(0).max(100),
+    depositAmount: z.coerce.number().int("Enter the advance in whole rupees.").min(0).max(1_000_000_000),
     validityDays: z.coerce.number().int().min(1).max(365),
   }),
   async (value, user) => {

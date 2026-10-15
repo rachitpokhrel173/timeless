@@ -159,7 +159,7 @@ async function seedWebsite() {
     true,
   );
   // Admin-only settings
-  await setting("quotation_settings", { terms: DEFAULT_QUOTE_TERMS, termsVersion: "2026-10", taxRate: 0, depositPercent: 50, validityDays: 14 }, false);
+  await setting("quotation_settings", { terms: DEFAULT_QUOTE_TERMS, termsVersion: "2026-10", taxRate: 0, depositAmount: 0, validityDays: 14 }, false);
   await setting("invoice_settings", { dueDays: 7, notes: "Thank you for choosing Timeless Ties. Please quote the invoice number with your payment.", bankDetails: "" }, false);
   await setting("notification_settings", { emailNewInquiry: true, emailPaymentReceived: false }, false);
 

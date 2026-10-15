@@ -111,7 +111,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
             customerEmail={quote.customer.email}
             customerPhone={quote.customer.phone}
             shareMessage={shareMessage}
-            advance={{ required: quote.depositAmount, percent: quote.depositPercent, paid: advancePaid }}
+            advance={{ required: quote.depositAmount, paid: advancePaid }}
             methods={PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }))}
             can={{ update: can("quotations.update"), create: can("quotations.create"), approve: can("quotations.approve"), remove: can("quotations.delete"), pay: can("payments.create") }}
           />
@@ -176,7 +176,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
               <div className="border-t border-a-border pt-1.5 text-base font-semibold">
                 <Line label="Total" value={npr(quote.total)} />
               </div>
-              <Line label={`Advance to confirm (${quote.depositPercent}%)`} value={npr(quote.depositAmount)} />
+              <Line label="Advance to confirm" value={npr(quote.depositAmount)} />
             </dl>
           </Card>
 
@@ -200,7 +200,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
             <DetailList
               columns={1}
               items={[
-                ["Required", `${npr(quote.depositAmount)} (${quote.depositPercent}%)`],
+                ["Required", npr(quote.depositAmount)],
                 ["Received", booking ? <span className={advancePaid >= quote.depositAmount ? "font-medium text-a-success" : undefined}>{npr(advancePaid)}</span> : "Not yet"],
                 ["Balance after advance", npr(quote.total - quote.depositAmount)],
               ]}

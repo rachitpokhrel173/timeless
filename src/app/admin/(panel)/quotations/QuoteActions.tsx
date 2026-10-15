@@ -23,7 +23,7 @@ type Props = {
   /** WhatsApp message; `{link}` is replaced with the client link */
   shareMessage: string;
   /** Required advance from the quotation, and what has been paid on its booking so far */
-  advance: { required: number; percent: number; paid: number };
+  advance: { required: number; paid: number };
   methods: Option[];
   can: { update: boolean; create: boolean; approve: boolean; remove: boolean; pay: boolean };
 };
@@ -143,7 +143,7 @@ export default function QuoteActions({ id, status, sent, token, archived, bookin
           icon={Wallet}
           variant="primary"
           title="Record advance payment"
-          description={advance.required > 0 ? `Advance to confirm: ${npr(advance.required)} (${advance.percent}% of the total)` : "No advance is set on this quotation."}
+          description={advance.required > 0 ? `Advance to confirm: ${npr(advance.required)}` : "No advance is set on this quotation."}
         >
           {(close) => (
             <ActionForm

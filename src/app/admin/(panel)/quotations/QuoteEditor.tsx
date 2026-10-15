@@ -26,7 +26,8 @@ export type QuoteEditorValues = {
   discountType?: "PERCENT" | "FIXED";
   discountValue?: number;
   taxRate?: number;
-  depositPercent?: number;
+  /** Advance to confirm, in NPR. */
+  depositAmount?: number;
   notes?: string | null;
   terms?: string | null;
   termsVersion?: string | null;
@@ -59,10 +60,10 @@ export default function QuoteEditor({
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">(values.discountType ?? "FIXED");
   const [discountValue, setDiscountValue] = useState(values.discountValue ?? 0);
   const [taxRate, setTaxRate] = useState(values.taxRate ?? 0);
-  const [depositPercent, setDepositPercent] = useState(values.depositPercent ?? 50);
+  const [depositAmount, setDepositAmount] = useState(values.depositAmount ?? 0);
   const [packageId, setPackageId] = useState(values.packageId ?? "");
   const [stockPick, setStockPick] = useState("");
-  const totals = useMemo(() => quoteTotals({ items, discountType, discountValue, taxRate, depositPercent }), [items, discountType, discountValue, taxRate, depositPercent]);
+  const totals = useMemo(() => quoteTotals({ items, discountType, discountValue, taxRate, depositAmount }), [items, discountType, discountValue, taxRate, depositAmount]);
   const editing = !!values.id;
 
   const update = (i: number, patch: Partial<QuoteLine>) => setItems((all) => all.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -103,7 +104,7 @@ export default function QuoteEditor({
         discountType,
         discountValue,
         taxRate,
-        depositPercent,
+        depositAmount,
         items: items.filter((l) => l.description.trim() || l.unitPrice),
       }}
       submitLabel={editing ? "Save quotation" : "Create quotation"}
@@ -241,10 +242,10 @@ export default function QuoteEditor({
             <Row label="Total" value={npr(totals.total)} strong />
           </div>
           <div className="flex items-center gap-2">
-            <span className="mr-auto">Advance %</span>
-            <input aria-label="Advance percent" type="number" min={0} max={100} value={depositPercent} onChange={(e) => setDepositPercent(Number(e.target.value))} className={`${inputClass} h-8 w-28`} />
+            <span className="mr-auto">Advance to confirm (NPR)</span>
+            <input aria-label="Advance amount in NPR" type="number" min={0} step={1} value={depositAmount} onChange={(e) => setDepositAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))} className={`${inputClass} h-8 w-32`} />
           </div>
-          <Row label="Advance to confirm" value={npr(totals.depositAmount)} />
+          {depositAmount > totals.total && <Row label="" value={`More than the total — capped at ${npr(totals.depositAmount)}`} muted />}
           <Row label="Balance" value={npr(totals.balance)} muted />
         </div>
       </section>

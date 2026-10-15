@@ -65,7 +65,7 @@ export default async function EditQuotationPage({ params }: PageProps<"/admin/qu
             discountType: quote.discountType,
             discountValue: quote.discountValue,
             taxRate: quote.taxRate,
-            depositPercent: quote.depositPercent,
+            depositAmount: quote.depositAmount,
             notes: quote.notes,
             terms: quote.terms,
             termsVersion: quote.termsVersion,
