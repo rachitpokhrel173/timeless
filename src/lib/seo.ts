@@ -72,7 +72,7 @@ export const localBusinessJsonLd = (services: Service[], site: SiteSettings) => 
   url: site.url,
   // Google wants real photos of the business here, and a raster (not SVG) logo
   image: [absolute("/opengraph-image"), ...services.slice(0, 4).map((s) => absolute(s.image.src))],
-  logo: absolute(site.logo?.src ?? "/apple-icon"),
+  logo: absolute(site.logo?.src ?? "/apple-icon.png"),
   hasMap: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${site.name}, ${site.address.street}, ${site.address.city}`,
   )}`,
