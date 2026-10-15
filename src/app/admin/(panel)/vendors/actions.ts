@@ -48,6 +48,10 @@ export const recordVendorPayment = adminAction(
   async ({ vendorId, amount }, user) => {
     const vendor = await maybe<{ name: string }>(db.from(tbl(schema.vendors)).select("name").eq("id", vendorId));
     if (!vendor) throw new UserError("Vendor not found.");
+    // A double click shouldn't pay twice: the same amount to the same vendor seconds apart is a repeat
+    const since = new Date(Date.now() - 15_000).toISOString();
+    const repeat = await maybe(db.from(tbl(schema.expenses)).select("id").eq("vendor_id", vendorId).eq("amount", amount).is("voided_at", null).gte("created_at", since).limit(1));
+    if (repeat) throw new UserError(`${npr(amount)} was just recorded for this vendor.`);
     const categories = await many<{ id: string; slug: string }>(db.from(tbl(schema.expenseCategories)).select("id,slug").in("slug", ["vendor", "other"]));
     const category = categories.find((c) => c.slug === "vendor") ?? categories[0];
     if (!category) throw new UserError("Add a \"Vendor\" expense category first (Settings).");

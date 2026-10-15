@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from "lucide-react";
-import { ActionButton, ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, SelectField, TextField } from "@/components/admin/interactive";
+import { ActionButton, ActionForm, CheckboxField, ConfirmButton, DialogButton, SelectField, TextField } from "@/components/admin/interactive";
 import { VENDOR_CATEGORIES } from "@/components/admin/status";
 import { voidExpense } from "../expenses/actions";
 import { archiveVendor, recordVendorPayment, saveVendor } from "./actions";
@@ -77,11 +77,18 @@ export function ArchiveVendorButton({ id, archived }: { id: string; archived: bo
 /** Amount only: the payment is dated today and filed as a vendor expense. */
 export function RecordVendorPayment({ vendorId }: { vendorId: string }) {
   return (
-    <ActionForm action={recordVendorPayment} extra={{ vendorId }} success="Payment recorded" resetOnSuccess hideFooter className="space-y-3">
+    // The form's own submit button shows a spinner and stays disabled while saving, so one click = one payment
+    <ActionForm
+      action={recordVendorPayment}
+      extra={{ vendorId }}
+      success="Payment recorded"
+      resetOnSuccess
+      submitLabel="Record payment"
+      submitIcon={Plus}
+      className="space-y-3"
+      footerClassName="pt-0 [&>button]:w-full [&>button]:justify-center"
+    >
       <TextField label="Amount (NPR)" name="amount" type="number" inputMode="numeric" min={1} step={1} required placeholder="e.g. 5000" />
-      <Button type="submit" variant="primary" icon={Plus} className="w-full justify-center">
-        Record payment
-      </Button>
     </ActionForm>
   );
 }
