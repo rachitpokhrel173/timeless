@@ -72,6 +72,7 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
             {inquiry.name}
             <StatusBadge map={INQUIRY_STATUS} value={inquiry.status} />
             {inquiry.spam && <Badge tone="danger">Spam</Badge>}
+            {inquiry.utm?.offer && <Badge tone="success">Offer {inquiry.utm.offer}</Badge>}
           </span>
         }
         description={`${eventName}${inquiry.eventDate ? ` · ${fmtDate(inquiry.eventDate)}` : ""} · received ${fmtDateTime(inquiry.createdAt)}`}

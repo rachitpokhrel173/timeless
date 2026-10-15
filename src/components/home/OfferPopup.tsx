@@ -11,6 +11,7 @@ import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import { buttonClass } from "@/components/ui/ButtonLink";
 import Rich from "@/components/ui/Rich";
 import { useSite } from "@/components/site/SiteContext";
+import type { OfferCoupon } from "@/server/offer";
 import { cn, showPlaceholders, whatsappHref } from "@/lib/utils";
 
 /** Wait this long after the page loads before showing the offer. */
@@ -41,7 +42,7 @@ function rememberDismissed(id: string) {
  * Homepage offer, shown once a few seconds after load. Built on <dialog>, so the browser handles
  * focus trapping, Escape and inerting the page. Placeholder offers never reach the live site.
  */
-export default function OfferPopup({ offer }: { offer: HomeOffer }) {
+export default function OfferPopup({ offer, coupon }: { offer: HomeOffer; coupon?: OfferCoupon | null }) {
   const site = useSite();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -65,6 +66,7 @@ export default function OfferPopup({ offer }: { offer: HomeOffer }) {
   }, [open]);
 
   if (!active) return null;
+  const inquiryHref = coupon ? `${INQUIRY_PATH}?offer=${encodeURIComponent(coupon.code)}` : INQUIRY_PATH;
 
   const close = () => {
     rememberDismissed(offer.id);
@@ -130,6 +132,12 @@ export default function OfferPopup({ offer }: { offer: HomeOffer }) {
             <Rich text={offer.heading} />
           </h2>
           <p className="mt-4 text-[0.92rem] leading-relaxed text-muted">{offer.body}</p>
+          {coupon?.spotsLeft != null && coupon.spotsTotal != null && (
+            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-burgundy/10 px-3.5 py-1.5 text-[0.8rem] font-semibold text-burgundy">
+              <span className="size-1.5 rounded-full bg-burgundy" aria-hidden />
+              Only {coupon.spotsLeft} of {coupon.spotsTotal} spots left
+            </p>
+          )}
 
           {offer.perks && offer.perks.length > 0 && (
             <ul className="mt-5 space-y-2.5">
@@ -145,7 +153,7 @@ export default function OfferPopup({ offer }: { offer: HomeOffer }) {
           )}
 
           <div className="mt-7 grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Link href={INQUIRY_PATH} onClick={close} className={buttonClass("primary", "md")}>
+            <Link href={inquiryHref} onClick={close} className={buttonClass("primary", "md")}>
               {offer.cta}
               <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
             </Link>

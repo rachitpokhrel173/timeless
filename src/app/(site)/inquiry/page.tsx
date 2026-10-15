@@ -3,6 +3,7 @@ import Botanical from "@/components/brand/Botanical";
 import { getCatalogue, getEventTypes, getInquiryOptions, getSiteSettings } from "@/lib/content";
 import { pageMetadata } from "@/lib/seo";
 import { telHref, whatsappHref } from "@/lib/utils";
+import { offerCoupon } from "@/server/offer";
 import InquiryForm from "../contact/InquiryForm";
 
 export const generateMetadata = (): Promise<Metadata> =>
@@ -14,7 +15,7 @@ export const generateMetadata = (): Promise<Metadata> =>
 });
 
 export default async function InquiryPage({ searchParams }: PageProps<"/inquiry">) {
-  const [{ event, design }, eventTypes, catalogue, options, site] = await Promise.all([
+  const [{ event, design, offer }, eventTypes, catalogue, options, site] = await Promise.all([
     searchParams,
     getEventTypes(),
     getCatalogue(),
@@ -23,6 +24,8 @@ export default async function InquiryPage({ searchParams }: PageProps<"/inquiry"
   ]);
   // ?design=<id> (repeatable) pre-ticks catalogue designs
   const designs = [design ?? []].flat().filter((id) => catalogue.some((s) => s.items.some((i) => i.id === id)));
+  // ?offer=<coupon> from the homepage offer popup, while it can still be claimed
+  const coupon = typeof offer === "string" ? await offerCoupon(offer) : null;
   const preselected = typeof event === "string" && eventTypes.some((t) => t.slug === event) ? event : undefined;
 
   return (
@@ -48,7 +51,7 @@ export default async function InquiryPage({ searchParams }: PageProps<"/inquiry"
       </section>
 
       <section id="inquiry" className="mx-auto max-w-5xl px-4 pb-24 md:px-8 md:pb-36">
-        <InquiryForm options={options} eventTypes={eventTypes} defaultEventType={preselected} catalogue={catalogue} defaultDesigns={designs} />
+        <InquiryForm options={options} eventTypes={eventTypes} defaultEventType={preselected} catalogue={catalogue} defaultDesigns={designs} offer={coupon} />
       </section>
     </div>
   );

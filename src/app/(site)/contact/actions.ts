@@ -9,6 +9,7 @@ import { clientIp, clientUserAgent, deviceFromUserAgent, hashIp } from "@/lib/re
 import { todayISO } from "@/lib/format";
 import { formatPrice } from "@/lib/utils";
 import { onInquiryCreated } from "@/server/automation";
+import { normalizeCouponCode } from "@/server/offer";
 import { createInquiry } from "@/server/crm";
 import type { ContactMethod, EventTypeSlug, InquiryFieldErrors, InquiryFormState, InquiryInput } from "@/types";
 
@@ -99,6 +100,9 @@ export async function submitInquiry(_prev: InquiryFormState, formData: FormData)
     const v = text(formData, `attr_${k}`, 100);
     if (v) utm[k] = v;
   }
+  // Coupon from the homepage offer popup; staff see it on the inquiry and quotations apply it
+  const offer = normalizeCouponCode(formData.get("offer"));
+  if (offer) utm.offer = offer;
   const userAgent = await clientUserAgent();
 
   try {

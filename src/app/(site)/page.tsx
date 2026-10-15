@@ -15,6 +15,7 @@ import Testimonials from "@/components/home/Testimonials";
 import SocialSection from "@/components/home/SocialSection";
 import FinalCTA from "@/components/home/FinalCTA";
 import OfferPopup from "@/components/home/OfferPopup";
+import { offerCoupon } from "@/server/offer";
 import BeforeAfter from "@/components/home/BeforeAfter";
 import Stats from "@/components/home/Stats";
 
@@ -40,6 +41,9 @@ export default async function Home() {
     getHomeSections(),
   ]);
 
+  // An offer tied to a coupon disappears once the coupon can't be claimed any more
+  const coupon = home.offer.enabled && home.offer.couponCode ? await offerCoupon(home.offer.couponCode) : null;
+
   // Order and visibility are managed under Website → Homepage
   const sections: Record<string, ReactNode> = {
     hero: <Hero hero={home.hero} />,
@@ -61,7 +65,7 @@ export default async function Home() {
   return (
     <>
       {order.map((key) => sections[key] && <Fragment key={key}>{sections[key]}</Fragment>)}
-      <OfferPopup offer={home.offer} />
+      {(!home.offer.couponCode || coupon) && <OfferPopup offer={home.offer} coupon={coupon} />}
     </>
   );
 }

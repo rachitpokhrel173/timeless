@@ -7,6 +7,7 @@ import { contactMethodOptions } from "@/data/inquiry";
 import { buttonClass } from "@/components/ui/ButtonLink";
 import CataloguePicker from "@/components/catalogue/CataloguePicker";
 import { cn, formatPrice } from "@/lib/utils";
+import type { OfferCoupon } from "@/server/offer";
 import { readAttribution } from "@/components/site/Attribution";
 import { checkDateAvailability, submitInquiry } from "./actions";
 
@@ -60,6 +61,7 @@ export default function InquiryForm({
   catalogue,
   defaultDesigns,
   options,
+  offer,
 }: {
   options: InquiryFormOptions;
   eventTypes: EventType[];
@@ -67,6 +69,8 @@ export default function InquiryForm({
   catalogue: CatalogueSection[];
   /** Catalogue item ids to pre-tick, e.g. from "Enquire" on the catalogue page. */
   defaultDesigns?: string[];
+  /** Offer claimed from the homepage popup; sent with the inquiry so the quotation applies it. */
+  offer?: OfferCoupon | null;
 }) {
   const [state, formAction, pending] = useActionState(submitInquiry, initialState);
   const statusRef = useRef<HTMLDivElement>(null);
@@ -118,6 +122,17 @@ export default function InquiryForm({
       {state.status === "error" && (
         <div ref={statusRef} tabIndex={-1} role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 outline-none">
           {state.message}
+        </div>
+      )}
+
+      {offer && (
+        <div className="flex items-start gap-3 rounded-lg bg-gold-light/40 px-4 py-3 text-sm ring-1 ring-gold/40">
+          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-gold-deep" strokeWidth={1.5} aria-hidden />
+          <p>
+            <strong className="font-semibold">Offer applied: {offer.type === "PERCENT" ? `${offer.value}% off` : `Rs ${offer.value.toLocaleString("en-IN")} off`}</strong>
+            {offer.spotsLeft != null && ` — ${offer.spotsLeft} of ${offer.spotsTotal} spots left.`} We&apos;ll include it in your quotation. Spots go to the first confirmed bookings.
+          </p>
+          <input type="hidden" name="offer" value={offer.code} />
         </div>
       )}
 

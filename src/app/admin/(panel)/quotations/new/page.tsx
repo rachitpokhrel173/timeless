@@ -36,7 +36,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/adm
   if (isUuid(inquiryId)) {
     const iq = await maybe<Row<typeof schema.inquiries>>(adminDb.from(tbl(schema.inquiries)).select(cols(schema.inquiries)).eq("id", inquiryId));
     if (iq) {
-      Object.assign(values, { inquiryId: iq.id, leadId: iq.leadId, customerId: iq.customerId, eventType: iq.eventType, eventDate: iq.eventDate, venue: iq.venue, guestCount: guests(iq.guestCount), packageId: iq.packageId, title: `${iq.name} — ${iq.eventType.replace(/-/g, " ")}` });
+      Object.assign(values, { inquiryId: iq.id, leadId: iq.leadId, customerId: iq.customerId, eventType: iq.eventType, eventDate: iq.eventDate, venue: iq.venue, guestCount: guests(iq.guestCount), packageId: iq.packageId, title: `${iq.name} — ${iq.eventType.replace(/-/g, " ")}`, couponCode: iq.utm?.offer ?? null });
       if (!iq.customerId) customerLabel = `${iq.name} (from inquiry ${iq.number})`;
       source = `inquiry ${iq.number}`;
     }

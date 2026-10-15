@@ -419,16 +419,7 @@ export async function recordClientDecision(tx: Tx, token: string, d: ClientDecis
           .digest("hex"),
       },
     });
-    if (quote.couponId) {
-      const coupon = await maybe<{ usedCount: number }>(tx.from(tbl(schema.coupons)).select("usedCount:used_count").eq("id", quote.couponId));
-      if (coupon)
-        await exec(
-          tx
-            .from(tbl(schema.coupons))
-            .update({ used_count: coupon.usedCount + 1 })
-            .eq("id", quote.couponId),
-        );
-    }
+    await countCouponUse(tx, quote.couponId);
     await advanceLead(tx, quote.leadId, "CONFIRMED", null, `Client accepted ${quote.number}`);
   } else {
     await exec(
@@ -590,6 +581,13 @@ export async function createBooking(conn: Conn, input: BookingInput, actor: Acto
   return { booking, event, shortages };
 }
 
+/** A quotation with a coupon was accepted (by the client or by staff): that's one use of the coupon. */
+async function countCouponUse(conn: Conn, couponId: string | null) {
+  if (!couponId) return;
+  const coupon = await maybe<{ usedCount: number }>(conn.from(tbl(schema.coupons)).select("usedCount:used_count").eq("id", couponId));
+  if (coupon) await exec(conn.from(tbl(schema.coupons)).update({ used_count: coupon.usedCount + 1 }).eq("id", couponId));
+}
+
 /** Accepted (or, by staff, approved) quotation → booking + booked items + event + reservations. */
 export async function bookingFromQuotation(conn: Conn, quotationId: string, actor: Actor, status: "PENDING" | "CONFIRMED" = "PENDING") {
   const quote = await getQuote(conn, quotationId);
@@ -623,6 +621,7 @@ export async function bookingFromQuotation(conn: Conn, quotationId: string, acto
       name: actor ? `${actor.name} (staff)` : null,
       message: "Approved by staff when converted to a booking",
     });
+    await countCouponUse(conn, quote.couponId);
   }
   const items = await quoteItems(conn, quotationId);
   const result = await createBooking(

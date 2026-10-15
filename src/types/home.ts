@@ -58,6 +58,12 @@ export type HomeOffer = {
   note?: string;
   cta: string;
   image: ImageAsset;
+  /**
+   * Coupon claimed through this offer, e.g. "FIRST10". Visitors who follow the popup carry it to
+   * the inquiry form, and quotations made from their inquiry apply it. The popup hides itself once
+   * the coupon is used up, expired or switched off (Reports → coupons).
+   */
+  couponCode?: string;
   /** Change this when the offer changes, so visitors who closed the old one see the new one. */
   id: string;
   /** Sample copy: shown (labelled) in development only, never on the live site. */
