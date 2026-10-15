@@ -4,7 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { todayISO } from "@/lib/format";
 import { isUuid, listParams } from "@/lib/list";
 import { Card, PageHeader } from "@/components/admin/ui";
-import QuoteEditor, { type QuoteEditorValues } from "../QuoteEditor";
+import QuoteEditor, { type QuoteEditorValues, type QuoteLine } from "../QuoteEditor";
 import { editorOptions, quoteSettings } from "../editor-data";
 
 export const metadata: Metadata = { title: "New quotation" };
@@ -13,6 +13,22 @@ const guests = (v: string | null | undefined) => {
   const n = Number.parseInt((v ?? "").replace(/[^\d]/g, ""), 10);
   return Number.isFinite(n) && n > 0 ? n : null;
 };
+
+/**
+ * Starting lines from what the visitor picked on the inquiry form: catalogue designs keep their
+ * listed price ("Entrance Décor: Golden Dome Tunnel (Rs 15,000 each)"); services have no price,
+ * so they start at 0 for staff to fill in.
+ */
+function inquiryLines(designs: string[] | null, services: string[] | null): QuoteLine[] {
+  const fromDesigns = (designs ?? []).map((d): QuoteLine => {
+    const m = /^(.*?)\s*\(Rs\s*([\d,]+)\s*(.*?)\)\s*$/.exec(d);
+    if (!m) return { description: d, quantity: 1, unit: "", unitPrice: 0 };
+    const unit = m[3]!.replace(/\bonwards\b/, "").trim();
+    return { description: m[1]!, quantity: 1, unit: unit === "each" ? "" : unit, unitPrice: Number(m[2]!.replace(/,/g, "")) };
+  });
+  const fromServices = (services ?? []).map((name): QuoteLine => ({ description: name, quantity: 1, unit: "", unitPrice: 0 }));
+  return [...fromDesigns, ...fromServices];
+}
 
 /** Start a quotation, optionally prefilled from ?customer=, ?lead= or ?inquiry=. */
 export default async function NewQuotationPage({ searchParams }: PageProps<"/admin/quotations/new">) {
@@ -36,7 +52,7 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/adm
   if (isUuid(inquiryId)) {
     const iq = await maybe<Row<typeof schema.inquiries>>(adminDb.from(tbl(schema.inquiries)).select(cols(schema.inquiries)).eq("id", inquiryId));
     if (iq) {
-      Object.assign(values, { inquiryId: iq.id, leadId: iq.leadId, customerId: iq.customerId, eventType: iq.eventType, eventDate: iq.eventDate, venue: iq.venue, guestCount: guests(iq.guestCount), packageId: iq.packageId, title: `${iq.name} — ${iq.eventType.replace(/-/g, " ")}`, couponCode: iq.utm?.offer ?? null });
+      Object.assign(values, { inquiryId: iq.id, leadId: iq.leadId, customerId: iq.customerId, eventType: iq.eventType, eventDate: iq.eventDate, venue: iq.venue, guestCount: guests(iq.guestCount), packageId: iq.packageId, title: `${iq.name} — ${iq.eventType.replace(/-/g, " ")}`, couponCode: iq.utm?.offer ?? null, items: inquiryLines(iq.designs, iq.services) });
       if (!iq.customerId) customerLabel = `${iq.name} (from inquiry ${iq.number})`;
       source = `inquiry ${iq.number}`;
     }
