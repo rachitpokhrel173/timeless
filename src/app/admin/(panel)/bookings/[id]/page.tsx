@@ -9,7 +9,6 @@ import { fmtDate, fmtDateTime, npr, num, todayISO } from "@/lib/format";
 import { first, isUuid, listParams } from "@/lib/list";
 import { balanceOf, PAYMENT_METHODS } from "@/server/finance";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
-import Notes from "@/components/admin/Notes";
 import { BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, label, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
 import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, VoidPaymentButton } from "../BookingClient";
@@ -160,7 +159,6 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                 </Table>
               )}
             </Card>
-            <Notes entityType="booking" entityId={id} canEdit={can("bookings.update")} />
           </div>
           <div className="space-y-4">
             <Card title="Event" actions={event && <StatusBadge map={EVENT_STATUS} value={event.status} />}>

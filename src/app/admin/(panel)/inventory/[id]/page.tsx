@@ -7,7 +7,6 @@ import { fmtDate, fmtDateTime, npr } from "@/lib/format";
 import { isUuid } from "@/lib/list";
 import { inventoryWithStock } from "@/server/inventory";
 import { inventoryCategoryOptions, vendorOptions } from "@/server/lookups";
-import Notes from "@/components/admin/Notes";
 import { ArchivedBadge, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, Notice, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import { ArchiveItemButton, EditItemButton, StockButton } from "../InventoryClient";
@@ -182,7 +181,6 @@ export default async function InventoryItemPage({ params }: PageProps<"/admin/in
               </ul>
             </Card>
           )}
-          <Notes entityType="inventory" entityId={id} canEdit={can("inventory.update")} />
         </div>
       </div>
     </>

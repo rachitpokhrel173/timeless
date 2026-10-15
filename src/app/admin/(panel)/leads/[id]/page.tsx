@@ -10,7 +10,6 @@ import ActivityTimeline from "@/components/admin/ActivityTimeline";
 import { ContactButtons } from "@/components/admin/contact-links";
 import FollowUps from "@/components/admin/FollowUps";
 import { ActionButton, ConfirmButton } from "@/components/admin/interactive";
-import Notes from "@/components/admin/Notes";
 import { ArchivedBadge, INQUIRY_STATUS, LEAD_STAGE, PRIORITY, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
 import { Card, DetailList, EmptyState, LinkButton, PageHeader } from "@/components/admin/ui";
 import { convertLeadToCustomer, deleteLead, setLeadArchived } from "../actions";
@@ -174,8 +173,6 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
               </ul>
             )}
           </Card>
-
-          <Notes entityType="lead" entityId={lead.id} canEdit={can("leads.update")} />
 
           {(can("leads.update") || can("leads.delete")) && (
             <Card title="Manage">

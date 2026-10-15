@@ -10,7 +10,6 @@ import { signedUrl } from "@/server/storage";
 import ActivityTimeline from "@/components/admin/ActivityTimeline";
 import { ContactButtons } from "@/components/admin/contact-links";
 import FollowUps from "@/components/admin/FollowUps";
-import Notes from "@/components/admin/Notes";
 import { BOOKING_STATUS, INQUIRY_STATUS, LEAD_STAGE, QUOTE_STATUS, StatusBadge, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, PageHeader } from "@/components/admin/ui";
 import { InquiryStatusForm } from "../InquiryClient";
@@ -215,7 +214,6 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
               </ul>
             )}
           </Card>
-          <Notes entityType="inquiry" entityId={inquiry.id} canEdit={can("leads.update")} />
         </div>
       </div>
     </>

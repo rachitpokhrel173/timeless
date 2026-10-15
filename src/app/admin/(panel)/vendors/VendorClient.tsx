@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Archive, ArchiveRestore, Pencil, Plus } from "lucide-react";
-import { ActionButton, ActionForm, CheckboxField, ConfirmButton, DialogButton, SelectField, TextArea, TextField } from "@/components/admin/interactive";
+import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from "lucide-react";
+import { ActionButton, ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, SelectField, TextField } from "@/components/admin/interactive";
 import { VENDOR_CATEGORIES } from "@/components/admin/status";
-import { archiveVendor, saveVendor } from "./actions";
+import { voidExpense } from "../expenses/actions";
+import { archiveVendor, recordVendorPayment, saveVendor } from "./actions";
 
 
 export type VendorValues = {
@@ -18,7 +19,6 @@ export type VendorValues = {
   defaultCost?: number;
   rating?: number | null;
   paymentInfo?: string | null;
-  notes?: string | null;
   active?: boolean;
 };
 
@@ -54,7 +54,6 @@ export function VendorButton({ values }: { values?: VendorValues }) {
               options={[5, 4, 3, 2, 1].map((n) => ({ value: String(n), label: `${"★".repeat(n)}${"☆".repeat(5 - n)}` }))}
             />
             <TextField label="Payment details" name="paymentInfo" defaultValue={values?.paymentInfo ?? ""} placeholder="Bank / eSewa / Khalti" />
-            <TextArea label="Notes" name="notes" rows={3} defaultValue={values?.notes ?? ""} wrapClassName="sm:col-span-2" />
             <CheckboxField name="active" label="Active — available to book" defaultChecked={values?.active ?? true} />
           </div>
         </ActionForm>
@@ -74,3 +73,32 @@ export function ArchiveVendorButton({ id, archived }: { id: string; archived: bo
     </ConfirmButton>
   );
 }
+
+/** Amount only: the payment is dated today and filed as a vendor expense. */
+export function RecordVendorPayment({ vendorId }: { vendorId: string }) {
+  return (
+    <ActionForm action={recordVendorPayment} extra={{ vendorId }} success="Payment recorded" resetOnSuccess hideFooter className="space-y-3">
+      <TextField label="Amount (NPR)" name="amount" type="number" inputMode="numeric" min={1} step={1} required placeholder="e.g. 5000" />
+      <Button type="submit" variant="primary" icon={Plus} className="w-full justify-center">
+        Record payment
+      </Button>
+    </ActionForm>
+  );
+}
+
+export function RemoveVendorPayment({ id, label }: { id: string; label: string }) {
+  return (
+    <ConfirmButton
+      icon={Trash2}
+      size="icon-sm"
+      title="Remove this payment?"
+      body={`${label} will no longer count as paid. You can restore it from Expenses.`}
+      confirmLabel="Remove"
+      success="Payment removed"
+      action={() => voidExpense({ id })}
+    >
+      <span className="sr-only">Remove payment</span>
+    </ConfirmButton>
+  );
+}
+

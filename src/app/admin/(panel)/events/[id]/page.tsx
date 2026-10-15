@@ -11,7 +11,6 @@ import { eventProfits, vendorPaid, vendorPaymentStatus } from "@/server/finance"
 import { availabilityForEvent } from "@/server/inventory";
 import { eventTypeName, eventTypeOptions, staffOptions, userOptions, vendorOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
-import Notes from "@/components/admin/Notes";
 import UploadButton from "@/components/admin/Upload";
 import { BOOKING_STATUS, DESIGN_STATUS, EVENT_STATUS, PAY_STATUS, PRIORITY, StatusBadge, TASK_STATUS, VENDOR_STATUS, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
@@ -187,7 +186,6 @@ async function Overview({
             </ul>
           )}
         </Card>
-        <Notes entityType="event" entityId={event.id} canEdit={canEdit} />
       </div>
       <div className="space-y-4">
         <Card title="Details">

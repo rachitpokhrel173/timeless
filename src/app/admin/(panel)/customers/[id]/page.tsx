@@ -11,7 +11,6 @@ import ActivityTimeline, { type TimelineEntry } from "@/components/admin/Activit
 import { ContactButtons } from "@/components/admin/contact-links";
 import FollowUps from "@/components/admin/FollowUps";
 import { ActionButton, ConfirmButton } from "@/components/admin/interactive";
-import Notes from "@/components/admin/Notes";
 import { ArchivedBadge, BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, LEAD_STAGE, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, Kpi, LinkButton, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import { deleteContact, deleteCustomer, inviteToPortal, revokePortal, setCustomerArchived } from "../actions";
@@ -327,8 +326,6 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
               )}
             </Card>
           )}
-
-          <Notes entityType="customer" entityId={customer.id} canEdit={can("customers.update")} />
 
           {can("customers.update") && (
             <Card title="Client portal" description="Customers see their quotations, bookings, invoices, schedule, shared documents and designs — nothing else.">

@@ -6,7 +6,6 @@ import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr, num, todayISO } from "@/lib/format";
 import { isUuid } from "@/lib/list";
 import { ContactButtons } from "@/components/admin/contact-links";
-import Notes from "@/components/admin/Notes";
 import { ArchivedBadge, EVENT_STATUS, StatusBadge, TASK_STATUS, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, PageHeader } from "@/components/admin/ui";
 import { ArchiveStaffButton, AvailabilityButton, ClearAvailabilityButton, StaffButton } from "../StaffClient";
@@ -96,7 +95,6 @@ export default async function StaffMemberPage({ params }: PageProps<"/admin/staf
               <EventList rows={past.slice(0, 20)} />
             </Card>
           )}
-          <Notes entityType="staff" entityId={id} canEdit={manage} />
         </div>
         <div className="space-y-4">
           <Card title="Details">

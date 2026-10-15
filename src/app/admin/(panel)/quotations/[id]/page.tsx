@@ -10,7 +10,6 @@ import { quoteImages } from "@/server/documents";
 import { PAYMENT_METHODS } from "@/server/finance";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import ActivityTimeline from "@/components/admin/ActivityTimeline";
-import Notes from "@/components/admin/Notes";
 import { ArchivedBadge, label, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, Notice, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import QuoteActions from "../QuoteActions";
@@ -192,7 +191,6 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
             </Card>
           )}
 
-          <Notes entityType="quotation" entityId={quote.id} canEdit={can("quotations.update")} />
         </div>
 
         <div className="space-y-4">

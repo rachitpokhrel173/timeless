@@ -1,9 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { db, one, schema, tbl, vals } from "@/db";
-import { adminAction, zs } from "@/lib/actions";
+import { db, many, maybe, one, schema, tbl, vals } from "@/db";
+import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { npr, todayISO } from "@/lib/format";
 
 const CATEGORIES = ["FLORIST", "PHOTOGRAPHER", "CATERER", "LIGHTING", "SOUND", "TRANSPORT", "PRINTING", "FURNITURE", "OTHER"] as const;
 
@@ -24,7 +25,6 @@ export const saveVendor = adminAction(
       .nullable()
       .transform((v) => (v === "" || v === undefined ? null : v)),
     paymentInfo: zs.optional(500),
-    notes: zs.optional(2000),
     active: z.boolean().default(true),
   }),
   async ({ id, ...input }, user) => {
@@ -40,3 +40,23 @@ export const archiveVendor = adminAction("vendors.manage", z.object({ id: zs.uui
   await audit(user, archived ? "archive" : "restore", "vendor", id, `${archived ? "Archived" : "Restored"} vendor ${v.name}`);
 });
 
+
+/** Pay a vendor: just the amount. Saved as today's expense under the "Vendor" category. */
+export const recordVendorPayment = adminAction(
+  "expenses.create",
+  z.object({ vendorId: zs.uuid(), amount: zs.money().refine((n) => n > 0, "Enter an amount above zero.") }),
+  async ({ vendorId, amount }, user) => {
+    const vendor = await maybe<{ name: string }>(db.from(tbl(schema.vendors)).select("name").eq("id", vendorId));
+    if (!vendor) throw new UserError("Vendor not found.");
+    const categories = await many<{ id: string; slug: string }>(db.from(tbl(schema.expenseCategories)).select("id,slug").in("slug", ["vendor", "other"]));
+    const category = categories.find((c) => c.slug === "vendor") ?? categories[0];
+    if (!category) throw new UserError("Add a \"Vendor\" expense category first (Settings).");
+    const e = await one<{ id: string }>(
+      db
+        .from(tbl(schema.expenses))
+        .insert(vals(schema.expenses, { categoryId: category.id, description: `Payment to ${vendor.name}`, amount, date: todayISO(), vendorId, method: "CASH", createdBy: user.id }))
+        .select("id"),
+    );
+    await audit(user, "create", "expense", e.id, `Paid ${npr(amount)} to vendor ${vendor.name}`);
+  },
+);
