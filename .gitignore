@@ -55,3 +55,8 @@ next-env.d.ts
 # logs
 logs
 *.log
+
+# Local docs and AI-assistant instructions — kept on this machine, not in GitHub
+/AGENTS.md
+/CLAUDE.md
+/README.md
