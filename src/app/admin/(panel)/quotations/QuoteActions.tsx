@@ -20,6 +20,8 @@ type Props = {
   hasEventDate: boolean;
   customerEmail: string | null;
   customerPhone: string | null;
+  /** Whether an email provider is connected, so "Email the link" really sends */
+  emailReady: boolean;
   /** WhatsApp message; `{link}` is replaced with the client link */
   shareMessage: string;
   /** Required advance from the quotation, and what has been paid on its booking so far */
@@ -28,7 +30,7 @@ type Props = {
   can: { update: boolean; create: boolean; approve: boolean; remove: boolean; pay: boolean };
 };
 
-export default function QuoteActions({ id, status, sent, token, archived, bookingId, hasEventDate, customerEmail, customerPhone, shareMessage, advance, methods, can }: Props) {
+export default function QuoteActions({ id, status, sent, token, archived, bookingId, hasEventDate, customerEmail, customerPhone, emailReady, shareMessage, advance, methods, can }: Props) {
   const router = useRouter();
   const toast = useToast();
   const { run, pending } = useRun();
@@ -129,7 +131,13 @@ export default function QuoteActions({ id, status, sent, token, archived, bookin
               <CheckboxField
                 name="email"
                 label={customerEmail ? `Email the link to ${customerEmail}` : "Email the client"}
-                hint={customerEmail ? "Email delivery needs an email provider — until one is connected, share the link yourself." : "No email on file — share the link yourself after sending."}
+                hint={
+                  !customerEmail
+                    ? "No email on file — share the link yourself after sending."
+                    : emailReady
+                      ? "They'll get an email with the link. You can also share it on WhatsApp."
+                      : "Email isn't connected yet (Settings → System health) — share the link yourself."
+                }
                 defaultChecked={!!customerEmail}
                 disabled={!customerEmail}
               />

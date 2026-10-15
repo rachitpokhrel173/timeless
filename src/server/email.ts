@@ -109,6 +109,9 @@ export const templates = {
 
 export type TemplateName = keyof typeof templates;
 
+/** True when emails are actually sent (Resend is set up), not just recorded. */
+export const emailConfigured = () => !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+
 /** Send one message through Resend's HTTP API. */
 async function deliver(to: string, rendered: Rendered, replyTo: string | undefined): Promise<{ status: "SENT" | "FAILED" | "NOT_CONFIGURED"; error?: string }> {
   const key = process.env.RESEND_API_KEY;

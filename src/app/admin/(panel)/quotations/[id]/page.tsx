@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { emailConfigured } from "@/server/email";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
@@ -109,6 +110,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
             hasEventDate={!!quote.eventDate}
             customerEmail={quote.customer.email}
             customerPhone={quote.customer.phone}
+            emailReady={emailConfigured()}
             shareMessage={shareMessage}
             advance={{ required: quote.depositAmount, paid: advancePaid }}
             methods={PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }))}
