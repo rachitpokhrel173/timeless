@@ -548,3 +548,12 @@ details > summary {
 details > summary::-webkit-details-marker {
   display: none;
 }
+
+/* Admin tables: a row with a link opens on click anywhere (see AdminShell), so show it as clickable */
+#admin-main tbody tr:has(a[href^="/"]:not([target="_blank"])) {
+  cursor: pointer;
+}
+#admin-main tbody tr:has(a[href^="/"]:not([target="_blank"])):hover {
+  background-color: color-mix(in srgb, var(--a-subtle) 60%, transparent);
+}
+

@@ -317,6 +317,26 @@ function Shell({ user, initialCounts, children }: { user: ShellUser; initialCoun
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
+  // Click anywhere on a table row to open it: the row's first link is its record. Buttons,
+  // checkboxes, menus and other links keep their own behaviour, and selecting text doesn't navigate.
+  useEffect(() => {
+    const main = document.getElementById("admin-main");
+    if (!main) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("a, button, input, select, textarea, label, summary, dialog, [role='button'], [role='menu'], [role='menuitem'], [contenteditable]")) return;
+      const row = target.closest("tbody tr");
+      if (!row || !main.contains(row) || window.getSelection()?.toString()) return;
+      const link = row.querySelector<HTMLAnchorElement>("a[href^='/']:not([target='_blank'])");
+      if (!link) return;
+      const href = link.getAttribute("href")!;
+      if (e.metaKey || e.ctrlKey) window.open(href, "_blank", "noopener");
+      else router.push(href);
+    };
+    main.addEventListener("click", onClick);
+    return () => main.removeEventListener("click", onClick);
+  }, [router]);
   // Lock page scroll behind the mobile drawer
   useEffect(() => {
     document.body.style.overflow = drawer ? "hidden" : "";
