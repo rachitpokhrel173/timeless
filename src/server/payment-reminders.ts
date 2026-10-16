@@ -64,6 +64,33 @@ export async function sendPaymentReminderNow(bookingId: string) {
   return { status: await send(b, due, await bankDetails(), { entityType: "booking", entityId: b.id }), due };
 }
 
+export type OutstandingBooking = {
+  id: string;
+  number: string;
+  customer: string;
+  email: string | null;
+  title: string;
+  eventDate: string | null;
+  total: number;
+  paid: number;
+  due: NonNullable<ReturnType<typeof amountDue>>;
+};
+
+/** Active bookings with money still owed, soonest due first (for Record payment and the reminders list). */
+export async function outstandingBookings(): Promise<OutstandingBooking[]> {
+  const rows = await all<ReminderBooking>(() =>
+    adminDb.from(tbl(schema.bookings)).select(SELECT).in("status", ["PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]).is("archived_at", null).order("id"),
+  );
+  return rows
+    .flatMap((b) => {
+      const due = amountDue(b);
+      if (!due) return [];
+      const event = Array.isArray(b.e) ? b.e[0] : b.e;
+      return [{ id: b.id, number: b.number, customer: b.c.name, email: b.c.email, title: event?.title ?? b.number, eventDate: event?.eventDate ?? null, total: b.totalAmount, paid: b.amountPaid, due }];
+    })
+    .sort((a, b) => (a.due.dueDate ?? "9999").localeCompare(b.due.dueDate ?? "9999"));
+}
+
 /** Daily sweep: returns how many reminders went out (or were recorded, when email isn't connected). */
 export async function runPaymentReminders(config: { daysBefore?: unknown; overdueReminder?: unknown }) {
   const today = todayISO();

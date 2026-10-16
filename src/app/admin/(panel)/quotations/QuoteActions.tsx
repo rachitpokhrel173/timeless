@@ -2,18 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Archive, ArchiveRestore, BookmarkPlus, CalendarCheck, Copy, Wallet, ExternalLink, Pencil, Printer, RefreshCw, Send, Share2, Trash2, XCircle } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarCheck, Copy, Wallet, ExternalLink, Pencil, Printer, RefreshCw, Send, Share2, Trash2, XCircle } from "lucide-react";
 import { ActionButton, ActionForm, Button, CheckboxField, ConfirmButton, Dialog, DialogButton, Menu, SelectField, TextArea, TextField, useRun, useToast, type Option } from "@/components/admin/interactive";
 import { npr, todayISO } from "@/lib/format";
 import { whatsappLink } from "@/components/admin/contact-links";
 import { LinkButton } from "@/components/admin/ui";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
-import { archiveQuote, convertQuote, deleteQuote, duplicateQuote, recordAdvance, resetQuoteLink, saveQuoteAsTemplate, sendQuote, setQuoteOutcome } from "./actions";
+import { archiveQuote, convertQuote, deleteQuote, duplicateQuote, recordAdvance, resetQuoteLink, sendQuote, setQuoteOutcome } from "./actions";
 
 type Props = {
   id: string;
-  /** Suggested name when saving as a template */
-  title: string;
   status: string;
   sent: boolean;
   token: string;
@@ -32,7 +30,7 @@ type Props = {
   can: { update: boolean; create: boolean; approve: boolean; remove: boolean; pay: boolean };
 };
 
-export default function QuoteActions({ id, title, status, sent, token, archived, bookingId, hasEventDate, customerEmail, customerPhone, emailReady, shareMessage, advance, methods, can }: Props) {
+export default function QuoteActions({ id, status, sent, token, archived, bookingId, hasEventDate, customerEmail, customerPhone, emailReady, shareMessage, advance, methods, can }: Props) {
   const router = useRouter();
   const toast = useToast();
   const { run, pending } = useRun();
@@ -111,27 +109,6 @@ export default function QuoteActions({ id, title, status, sent, token, archived,
         <ActionButton icon={Copy} action={() => duplicateQuote({ id })}>
           Duplicate
         </ActionButton>
-      )}
-      {can.create && (
-        <DialogButton label="Save as template" icon={BookmarkPlus} title="Save as a quotation template" description="Reuse these line items and prices for future quotations.">
-          {(close) => (
-            <ActionForm
-              action={saveQuoteAsTemplate}
-              extra={{ id }}
-              submitLabel="Save template"
-              success={false}
-              onCancel={close}
-              onSuccess={(d) => {
-                close();
-                toast("success", (d as { replaced: boolean }).replaced ? "Template updated" : "Template saved — pick it under “Start from a template” on a new quotation");
-              }}
-            >
-              <TextField label="Template name" name="name" required defaultValue={title.replace(/^.*?—\s*/, "")} placeholder="e.g. Standard wedding package" autoFocus />
-              <TextArea label="Description (optional)" name="description" rows={2} placeholder="What it covers, when to use it" />
-              <p className="text-xs text-a-muted">The line items, discount, tax, advance and client notes are saved — not the client, dates or venue. Saving with an existing template&apos;s name replaces it.</p>
-            </ActionForm>
-          )}
-        </DialogButton>
       )}
       {can.update && editable && (
         <DialogButton label={sent ? "Re-send" : "Send to client"} icon={Send} variant={sent ? "secondary" : "primary"} title={sent ? "Re-send quotation" : "Send quotation"}>

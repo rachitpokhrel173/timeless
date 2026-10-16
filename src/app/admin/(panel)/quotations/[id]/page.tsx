@@ -102,7 +102,6 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
         actions={
           <QuoteActions
             id={quote.id}
-            title={quote.title}
             status={quote.status}
             sent={!!quote.sentAt}
             token={quote.publicToken}
