@@ -2,7 +2,7 @@ import "server-only";
 import { adminDb, exec, schema, tbl, vals } from "@/db";
 import { getSiteSettings } from "@/lib/content";
 import { fmtDateLong, npr } from "@/lib/format";
-import { resolveSiteUrl } from "@/lib/site-url";
+import { PRODUCTION_ORIGIN, resolveSiteUrl } from "@/lib/site-url";
 
 /*
  * Transactional email templates, sent through Resend when RESEND_API_KEY and EMAIL_FROM are set
@@ -17,94 +17,226 @@ type Brand = Awaited<ReturnType<typeof getSiteSettings>>;
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+const C = { wine: "#641a35", gold: "#a8834a", ink: "#24201d", muted: "#6b625a", line: "#ece4d8", cream: "#f7f3ec", card: "#fbf8f3" };
+const SERIF = "Georgia,'Times New Roman',serif";
+const SANS = "Helvetica,Arial,sans-serif";
+
+type Mail = {
+  /** Inbox preview line shown after the subject. */
+  preheader: string;
+  heading: string;
+  paragraphs: string[];
+  /** Summary card, e.g. quotation number, event and total. A `strong` row is highlighted. */
+  details?: { label: string; value: string; strong?: boolean }[];
+  cta?: { label: string; href: string };
+  footnote?: string;
+  /** Sign off as the team (client emails); off for internal staff emails. */
+  signOff?: boolean;
+};
+
+/** Links in emails always point at the live site: a localhost link is useless to a client, even when sent while testing locally. */
+const siteUrl = () => {
+  const origin = resolveSiteUrl();
+  return /localhost|127\.0\.0\.1/.test(origin) ? PRODUCTION_ORIGIN : origin;
+};
+const first = (name: string) => name.split(" ")[0];
+
+/** Email clients need absolute image URLs. */
+const absolute = (src: string) => (/^https?:\/\//.test(src) ? src : `${siteUrl()}${src.startsWith("/") ? "" : "/"}${src}`);
+
 /** One shared, brand-styled layout for every email. */
-function layout(brand: Brand, heading: string, paragraphs: string[], cta?: { label: string; href: string }, footnote?: string) {
-  const body = paragraphs.map((p) => `<p style="margin:0 0 14px;line-height:1.6">${esc(p)}</p>`).join("");
-  const button = cta
-    ? `<p style="margin:22px 0"><a href="${esc(cta.href)}" style="background:#3d5245;color:#fff;text-decoration:none;padding:11px 20px;border-radius:6px;display:inline-block;font-weight:600">${esc(cta.label)}</a></p>`
+function layout(brand: Brand, m: Mail) {
+  const body = m.paragraphs.map((p) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.65;color:${C.ink}">${esc(p)}</p>`).join("");
+
+  const row = (d: NonNullable<Mail["details"]>[number], i: number) => {
+    const sep = i ? `border-top:1px solid ${C.line};` : "";
+    const value = d.strong ? `font-family:${SERIF};font-size:19px;color:${C.wine};font-weight:bold` : `font-size:14px;color:${C.ink};font-weight:600`;
+    return `<tr><td style="padding:12px 18px;${sep}font-size:13px;color:${C.muted}">${esc(d.label)}</td><td align="right" style="padding:12px 18px;${sep}${value}">${esc(d.value)}</td></tr>`;
+  };
+  const details = m.details?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;background:${C.card};border:1px solid ${C.line};border-radius:8px">${m.details.map(row).join("")}</table>`
     : "";
-  const html = `<!doctype html><html><body style="margin:0;background:#f7f3ec;font-family:Helvetica,Arial,sans-serif;color:#24201d">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px">
-<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border:1px solid #e3dbcf;border-radius:10px">
-<tr><td style="padding:26px 28px 6px;border-bottom:1px solid #efe7dc">
-<div style="font-family:Georgia,serif;font-size:22px;color:#641a35">${esc(brand.name)}</div>
-<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7a5f36;margin-top:4px">${esc(brand.tagline)}</div></td></tr>
-<tr><td style="padding:24px 28px 10px"><h1 style="font-family:Georgia,serif;font-weight:normal;font-size:22px;margin:0 0 16px">${esc(heading)}</h1>${body}${button}
-${footnote ? `<p style="font-size:12px;color:#6b625a;line-height:1.5">${esc(footnote)}</p>` : ""}</td></tr>
-<tr><td style="padding:16px 28px 24px;font-size:12px;color:#6b625a;border-top:1px solid #efe7dc">
-${esc(brand.address.street)}, ${esc(brand.address.city)} · ${esc(brand.phones.map((p) => p.label).join(" / "))} · ${esc(brand.email)}</td></tr>
-</table></td></tr></table></body></html>`;
-  const text = [heading, "", ...paragraphs, cta ? `\n${cta.label}: ${cta.href}` : "", footnote ?? "", "", `${brand.name} · ${brand.phones[0]?.label ?? ""} · ${brand.email}`].join(
-    "\n",
-  );
+
+  const button = m.cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 12px"><tr><td style="background:${C.wine};border-radius:999px">
+<a href="${esc(m.cta.href)}" style="display:inline-block;padding:14px 32px;font-family:${SANS};font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;letter-spacing:.3px">${esc(m.cta.label)} &rarr;</a></td></tr></table>
+<p style="margin:0 0 20px;font-size:12px;line-height:1.5;color:${C.muted}">Button not working? Open this link:<br><a href="${esc(m.cta.href)}" style="color:${C.wine};word-break:break-all">${esc(m.cta.href)}</a></p>`
+    : "";
+
+  const footnote = m.footnote
+    ? `<p style="margin:0 0 18px;padding:10px 14px;background:${C.cream};border-left:3px solid ${C.gold};font-size:12.5px;line-height:1.5;color:${C.muted}">${esc(m.footnote)}</p>`
+    : "";
+
+  const signOff = m.signOff
+    ? `<p style="margin:24px 0 0;font-size:15px;line-height:1.6;color:${C.ink}">Warm regards,<br><span style="font-family:${SERIF};font-size:17px;color:${C.wine}">The ${esc(brand.shortName)} team</span></p>`
+    : "";
+
+  const logo = brand.logo ? `<img src="${esc(absolute(brand.logo.src))}" width="64" alt="" style="display:block;margin:0 auto 10px;width:64px;height:auto;border:0">` : "";
+
+  const link = `color:${C.wine};text-decoration:none`;
+  const dot = " &nbsp;·&nbsp; ";
+  const phones = brand.phones.map((p) => `<a href="tel:${esc(p.e164)}" style="${link}">${esc(p.label)}</a>`).join(dot);
+  const whatsapp = brand.whatsapp ? `${dot}<a href="https://wa.me/${esc(brand.whatsapp)}" style="${link}">WhatsApp</a>` : "";
+  const socials = brand.socials.filter((s) => s.url).map((s) => `<a href="${esc(s.url)}" style="${link}">${esc(s.label)}</a>`);
+  const site = siteUrl();
+  const webLinks = [...socials, `<a href="${esc(site)}" style="${link}">${esc(site.replace(/^https?:\/\//, ""))}</a>`].join(dot);
+
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(m.heading)}</title></head>
+<body style="margin:0;padding:0;background:${C.cream};font-family:${SANS};color:${C.ink};-webkit-text-size-adjust:100%">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${esc(m.preheader)}${"&#8199;&#847;".repeat(40)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.cream}"><tr><td align="center" style="padding:32px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#ffffff;border:1px solid ${C.line};border-radius:12px;overflow:hidden">
+<tr><td style="height:4px;background:${C.wine};font-size:0;line-height:0">&nbsp;</td></tr>
+<tr><td align="center" style="padding:28px 32px 22px;border-bottom:1px solid ${C.line}">${logo}
+<div style="font-family:${SERIF};font-size:21px;color:${C.wine}">${esc(brand.name)}</div>
+<div style="font-size:10.5px;letter-spacing:2.5px;text-transform:uppercase;color:${C.gold};margin-top:6px">${esc(brand.tagline)}</div></td></tr>
+<tr><td style="padding:30px 32px">
+<h1 style="margin:0 0 18px;font-family:${SERIF};font-weight:normal;font-size:25px;line-height:1.3;color:${C.ink}">${esc(m.heading)}</h1>
+${body}${details}${button}${footnote}${signOff}</td></tr>
+<tr><td align="center" style="padding:22px 32px 26px;background:${C.card};border-top:1px solid ${C.line};font-size:12px;line-height:1.8;color:${C.muted}">
+<div style="font-family:${SERIF};font-size:14px;color:${C.wine}">${esc(brand.name)}</div>
+<div>${esc(brand.address.street)}, ${esc(brand.address.city)}, ${esc(brand.address.country)}</div>
+<div>${phones}${whatsapp}</div>
+<div><a href="mailto:${esc(brand.email)}" style="${link}">${esc(brand.email)}</a></div>
+<div>${webLinks}</div></td></tr>
+</table>
+<p style="margin:16px 0 0;font-size:11px;line-height:1.6;color:#9a9087">This is an automated email — please do not reply to this message.<br>To get in touch, call or WhatsApp us, or write to ${esc(brand.email)}.</p>
+</td></tr></table></body></html>`;
+
+  const text = [
+    m.heading,
+    "",
+    ...m.paragraphs,
+    ...(m.details?.length ? ["", ...m.details.map((d) => `${d.label}: ${d.value}`)] : []),
+    m.cta ? `\n${m.cta.label}: ${m.cta.href}` : "",
+    m.footnote ?? "",
+    m.signOff ? `\nWarm regards,\nThe ${brand.shortName} team` : "",
+    "",
+    `${brand.name} · ${brand.phones.map((p) => p.label).join(" / ")} · ${brand.email}`,
+    "",
+    "This is an automated email — please do not reply to this message.",
+  ].join("\n");
   return { html, text };
 }
 
-const siteUrl = () => resolveSiteUrl();
-
 /** Every template in one place. */
 export const templates = {
-  inquiryConfirmation: (b: Brand, d: { name: string; eventType: string; eventDate?: string | null; reference?: string }): Rendered => ({
-    subject: `We received your inquiry${d.reference ? ` (${d.reference})` : ""} — ${b.shortName}`,
-    ...layout(b, `Thank you, ${d.name.split(" ")[0]}!`, [
-      `We've received your inquiry for your ${d.eventType.replace(/-/g, " ")}${d.eventDate ? ` on ${fmtDateLong(d.eventDate)}` : ""}.${d.reference ? ` Your reference is ${d.reference}.` : ""}`,
-      "Someone from our team will contact you shortly to talk through your ideas. If it's urgent, call or WhatsApp us any time.",
-    ]),
-  }),
+  inquiryConfirmation: (b: Brand, d: { name: string; eventType: string; eventDate?: string | null; reference?: string }): Rendered => {
+    const event = d.eventType.replace(/-/g, " ");
+    return {
+      subject: `We received your inquiry${d.reference ? ` (${d.reference})` : ""} — ${b.shortName}`,
+      ...layout(b, {
+        preheader: "Thank you for reaching out — our team will be in touch shortly.",
+        heading: `Thank you, ${first(d.name)}!`,
+        paragraphs: [
+          `We've received your inquiry and can't wait to hear more about your ${event}.`,
+          "Someone from our team will contact you shortly to talk through your ideas. If it's urgent, call or WhatsApp us any time.",
+        ],
+        details: [
+          ...(d.reference ? [{ label: "Reference", value: d.reference }] : []),
+          { label: "Event", value: event.replace(/^\w/, (c) => c.toUpperCase()) },
+          ...(d.eventDate ? [{ label: "Date", value: fmtDateLong(d.eventDate) }] : []),
+        ],
+        signOff: true,
+      }),
+    };
+  },
   quotationSent: (b: Brand, d: { name: string; number: string; title: string; total: number; validUntil?: string | null; token: string }): Rendered => ({
     subject: `Your quotation ${d.number} from ${b.shortName}`,
-    ...layout(
-      b,
-      `Your quotation is ready`,
-      [
-        `Hi ${d.name.split(" ")[0]}, here is our quotation for ${d.title}.`,
-        `Total: ${npr(d.total)}${d.validUntil ? ` · valid until ${fmtDateLong(d.validUntil)}` : ""}.`,
-        "You can review it, download a PDF, accept it or ask for changes using the button below.",
+    ...layout(b, {
+      preheader: `Your quotation for ${d.title} is ready — ${npr(d.total)}.`,
+      heading: "Your quotation is ready",
+      paragraphs: [
+        `Hi ${first(d.name)}, thank you for considering us for ${d.title}. We've prepared a quotation based on everything we discussed.`,
+        "Open it to review each item, download a PDF, accept it online or ask us for changes.",
       ],
-      { label: "View quotation", href: `${siteUrl()}/quote/${d.token}` },
-      "This link is personal to you — please don't share it.",
-    ),
+      details: [
+        { label: "Quotation", value: d.number },
+        { label: "Event", value: d.title },
+        ...(d.validUntil ? [{ label: "Valid until", value: fmtDateLong(d.validUntil) }] : []),
+        { label: "Total", value: npr(d.total), strong: true },
+      ],
+      cta: { label: "View your quotation", href: `${siteUrl()}/quote/${d.token}` },
+      footnote: "This link is personal to you — please don't share it. Questions? Call or WhatsApp us any time.",
+      signOff: true,
+    }),
   }),
   quotationAccepted: (b: Brand, d: { name: string; number: string; title: string; deposit: number }): Rendered => ({
     subject: `Thank you — ${d.number} accepted`,
-    ...layout(b, "We're delighted to be part of your celebration", [
-      `Hi ${d.name.split(" ")[0]}, thank you for accepting quotation ${d.number} for ${d.title}.`,
-      d.deposit > 0 ? `To confirm your date, an advance of ${npr(d.deposit)} is due. We'll be in touch with payment details.` : "We'll be in touch shortly with next steps.",
-    ]),
+    ...layout(b, {
+      preheader: `We're delighted to be part of ${d.title}.`,
+      heading: "We're delighted to be part of your celebration",
+      paragraphs: [
+        `Hi ${first(d.name)}, thank you for accepting quotation ${d.number} for ${d.title}.`,
+        d.deposit > 0 ? "To confirm your date, an advance is due. We'll be in touch with payment details." : "We'll be in touch shortly with next steps.",
+      ],
+      details: [
+        { label: "Quotation", value: d.number },
+        { label: "Event", value: d.title },
+        ...(d.deposit > 0 ? [{ label: "Advance to confirm", value: npr(d.deposit), strong: true }] : []),
+      ],
+      signOff: true,
+    }),
   }),
   bookingConfirmation: (b: Brand, d: { name: string; number: string; title: string; date: string; venue?: string | null; portalUrl?: string | null }): Rendered => ({
     subject: `Booking confirmed — ${d.title}`,
-    ...layout(
-      b,
-      "Your booking is confirmed",
-      [
-        `Hi ${d.name.split(" ")[0]}, your booking ${d.number} for ${d.title} on ${fmtDateLong(d.date)}${d.venue ? ` at ${d.venue}` : ""} is confirmed.`,
-        "We'll share the schedule and designs as planning progresses.",
+    ...layout(b, {
+      preheader: `${d.title} on ${fmtDateLong(d.date)} is confirmed.`,
+      heading: "Your booking is confirmed",
+      paragraphs: [`Hi ${first(d.name)}, your date is reserved! We'll share the schedule and designs as planning progresses.`],
+      details: [
+        { label: "Booking", value: d.number },
+        { label: "Event", value: d.title },
+        { label: "Date", value: fmtDateLong(d.date), strong: true },
+        ...(d.venue ? [{ label: "Venue", value: d.venue }] : []),
       ],
-      d.portalUrl ? { label: "Open your event page", href: d.portalUrl } : undefined,
-    ),
+      cta: d.portalUrl ? { label: "Open your event page", href: d.portalUrl } : undefined,
+      signOff: true,
+    }),
   }),
   paymentReceipt: (b: Brand, d: { name: string; receipt: string; amount: number; balance: number; title: string }): Rendered => ({
     subject: `Payment received — ${d.receipt}`,
-    ...layout(b, "Thank you for your payment", [
-      `Hi ${d.name.split(" ")[0]}, we've received ${npr(d.amount)} for ${d.title} (receipt ${d.receipt}).`,
-      d.balance > 0 ? `Remaining balance: ${npr(d.balance)}.` : "Your booking is now fully paid.",
-    ]),
+    ...layout(b, {
+      preheader: `We've received ${npr(d.amount)} — thank you.`,
+      heading: "Thank you for your payment",
+      paragraphs: [`Hi ${first(d.name)}, we've received your payment for ${d.title}.${d.balance > 0 ? "" : " Your booking is now fully paid."}`],
+      details: [
+        { label: "Receipt", value: d.receipt },
+        { label: "Event", value: d.title },
+        { label: "Amount received", value: npr(d.amount), strong: true },
+        ...(d.balance > 0 ? [{ label: "Remaining balance", value: npr(d.balance) }] : []),
+      ],
+      signOff: true,
+    }),
   }),
   eventReminder: (b: Brand, d: { name: string; title: string; date: string; days: number }): Rendered => ({
     subject: `${d.days} days to go — ${d.title}`,
-    ...layout(b, "Your celebration is almost here", [
-      `Hi ${d.name.split(" ")[0]}, just a reminder that ${d.title} is on ${fmtDateLong(d.date)}.`,
-      "If anything has changed — timings, guest numbers, venue access — please let us know as soon as possible.",
-    ]),
-  }),
-  followUpReminder: (b: Brand, d: { staff: string; count: number }): Rendered => ({
-    subject: `You have ${d.count} follow-up${d.count === 1 ? "" : "s"} today`,
-    ...layout(b, "Today's follow-ups", [`Hi ${d.staff.split(" ")[0]}, you have ${d.count} follow-up${d.count === 1 ? "" : "s"} due today.`], {
-      label: "Open follow-ups",
-      href: `${siteUrl()}/admin/follow-ups`,
+    ...layout(b, {
+      preheader: `${d.title} is on ${fmtDateLong(d.date)}.`,
+      heading: "Your celebration is almost here",
+      paragraphs: [
+        `Hi ${first(d.name)}, just ${d.days} days to go until ${d.title}!`,
+        "If anything has changed — timings, guest numbers, venue access — please let us know as soon as possible.",
+      ],
+      details: [
+        { label: "Event", value: d.title },
+        { label: "Date", value: fmtDateLong(d.date), strong: true },
+      ],
+      signOff: true,
     }),
   }),
+  followUpReminder: (b: Brand, d: { staff: string; count: number }): Rendered => {
+    const n = `${d.count} follow-up${d.count === 1 ? "" : "s"}`;
+    return {
+      subject: `You have ${n} today`,
+      ...layout(b, {
+        preheader: `${n} due today.`,
+        heading: "Today's follow-ups",
+        paragraphs: [`Hi ${first(d.staff)}, you have ${n} due today.`],
+        cta: { label: "Open follow-ups", href: `${siteUrl()}/admin/follow-ups` },
+      }),
+    };
+  },
 };
 
 export type TemplateName = keyof typeof templates;
