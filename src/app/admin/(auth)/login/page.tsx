@@ -12,10 +12,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/admin/logi
   if (user) redirect(user.isStaff ? "/admin" : "/client");
   const { next, error } = await searchParams;
   return (
-    <AuthShell title="Studio admin" description="Sign in to manage events, clients and the website.">
+    <AuthShell title="Welcome back" description="Sign in to the Timeless Ties studio to manage events, clients and the website.">
       <EmailLinkForwarder />
       <LoginForm next={typeof next === "string" ? next : undefined} notice={error === "link" ? "That link is invalid or has expired. Request a new one." : undefined} />
-      <p className="mt-6 text-center text-xs text-a-muted">Accounts are created by an administrator under System → Users &amp; Roles.</p>
+      <p className="mt-6 text-center text-xs leading-relaxed text-a-muted">Need an account? Ask an administrator to invite you from System → Users &amp; Roles.</p>
     </AuthShell>
   );
 }

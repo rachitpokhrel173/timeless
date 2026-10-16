@@ -9,8 +9,8 @@ import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, PASSWORD_HINT, passwordChecks
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 import { acceptInvitation, type InvitationState } from "./actions";
 
-const inputClass = "h-10 w-full rounded-md border border-a-border bg-a-surface px-3 pr-11 outline-none focus:border-a-accent focus-visible:outline-none";
-const cardClass = "space-y-4 rounded-xl border border-a-border bg-a-surface p-6 shadow-sm";
+const inputClass = "h-11 w-full rounded-lg border border-a-border bg-a-surface px-3.5 pr-11 outline-none transition-colors focus:border-a-accent focus:ring-3 focus:ring-a-accent/15 focus-visible:outline-none";
+const cardClass = "space-y-5 rounded-2xl border border-a-border bg-a-surface p-7 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_12px_32px_-12px_rgb(0_0_0/0.12)]";
 
 type LinkCheck = "idle" | "checking" | "expired" | "invalid";
 
