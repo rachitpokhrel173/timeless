@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileText, Plus } from "lucide-react";
+import { FileText, LayoutTemplate, Plus } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr, todayISO } from "@/lib/format";
@@ -51,11 +51,16 @@ export default async function QuotationsPage({ searchParams }: PageProps<"/admin
         title="Quotations"
         description="Price proposals sent to clients. Accepted quotes become bookings."
         actions={
-          user.permissions.has("quotations.create") && (
-            <LinkButton href="/admin/quotations/new" variant="primary" icon={Plus}>
-              New quotation
+          <>
+            <LinkButton href="/admin/quotations/templates" icon={LayoutTemplate}>
+              Templates
             </LinkButton>
-          )
+            {user.permissions.has("quotations.create") && (
+              <LinkButton href="/admin/quotations/new" variant="primary" icon={Plus}>
+                New quotation
+              </LinkButton>
+            )}
+          </>
         }
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

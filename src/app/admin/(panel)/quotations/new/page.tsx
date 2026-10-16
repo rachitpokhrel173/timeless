@@ -3,6 +3,7 @@ import { adminDb, cols, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { todayISO } from "@/lib/format";
 import { isUuid, listParams } from "@/lib/list";
+import { getQuoteTemplate } from "@/server/quote-templates";
 import { Card, PageHeader } from "@/components/admin/ui";
 import QuoteEditor, { type QuoteEditorValues, type QuoteLine } from "../QuoteEditor";
 import { editorOptions, quoteSettings } from "../editor-data";
@@ -66,12 +67,27 @@ export default async function NewQuotationPage({ searchParams }: PageProps<"/adm
   } else if (isUuid(customerId)) {
     values.customerId = customerId;
   }
+  // ?template= adds a saved template's lines after anything prefilled above, with its pricing defaults
+  const templateId = str("template");
+  const template = isUuid(templateId) ? await getQuoteTemplate(templateId) : null;
+  if (template) {
+    Object.assign(values, {
+      items: [...(values.items ?? []), ...template.items],
+      eventType: values.eventType ?? template.eventType,
+      discountType: template.discountType,
+      discountValue: template.discountValue,
+      taxRate: template.taxRate,
+      depositAmount: template.depositAmount,
+      notes: template.notes,
+    });
+    source = source ? `${source} and the “${template.name}” template` : `the “${template.name}” template`;
+  }
   // A lead without a customer gets one on save; an inquiry without a lead can't — let staff pick.
   if (customerLabel && !values.leadId) customerLabel = undefined;
 
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHeader title="New quotation" description={source ? `Prefilled from ${source}.` : "Build the quote line by line, or start from a package."} back={{ href: "/admin/quotations", label: "Quotations" }} />
+      <PageHeader title="New quotation" description={source ? `Prefilled from ${source}.` : "Build the quote line by line, or start from a template or package."} back={{ href: "/admin/quotations", label: "Quotations" }} />
       <Card>
         <QuoteEditor values={values} {...options} customerLabel={customerLabel} />
       </Card>

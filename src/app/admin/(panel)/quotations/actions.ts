@@ -1,13 +1,15 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { cols, db, exec, maybe, one, schema, tbl, type Row } from "@/db";
+import { cols, db, exec, many, maybe, one, schema, tbl, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { ensureCustomerForLead } from "@/server/crm";
 import { sendEmail } from "@/server/email";
 import { notify } from "@/server/notifications";
+import { listQuoteTemplates, writeQuoteTemplates, type QuoteTemplate, type TemplateLine } from "@/server/quote-templates";
 import { npr } from "@/lib/format";
 import { PAYMENT_METHODS, recordPayment } from "@/server/finance";
 import { bookingFromQuotation, duplicateQuotation, markSent, newToken, saveQuotation, setBookingStatus } from "@/server/sales";
@@ -182,4 +184,54 @@ export const deleteQuote = adminAction("quotations.delete", z.object({ id: zs.uu
   await exec(quotes().update({ deleted_at: new Date().toISOString() }).eq("id", id));
   await audit(user, "delete", "quotation", id, `Deleted draft quotation ${q.number}`);
   redirect("/admin/quotations");
+});
+
+/* ───────── Templates ───────── */
+
+/** Save a quotation's lines and pricing as a reusable template. A template with the same name is replaced. */
+export const saveQuoteAsTemplate = adminAction(
+  "quotations.create",
+  z.object({ id: zs.uuid(), name: zs.required("Name", 80), description: zs.optional(300) }),
+  async ({ id, name, description }, user) => {
+    const quote = await maybe<Pick<QuoteTemplate, "eventType" | "discountType" | "discountValue" | "taxRate" | "depositAmount" | "notes">>(
+      quotes().select("eventType:event_type,discountType:discount_type,discountValue:discount_value,taxRate:tax_rate,depositAmount:deposit_amount,notes").eq("id", id),
+    );
+    if (!quote) throw new UserError("Quotation not found.");
+    const items = await many<TemplateLine>(
+      db.from(tbl(schema.quotationItems)).select("description,details,quantity,unit,unitPrice:unit_price,inventoryItemId:inventory_item_id").eq("quotation_id", id).order("position"),
+    );
+    if (!items.length) throw new UserError("This quotation has no line items to save.");
+    const all = await listQuoteTemplates();
+    const existing = all.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    const template: QuoteTemplate = { ...quote, id: existing?.id ?? randomUUID(), name, description, items, updatedAt: new Date().toISOString() };
+    await writeQuoteTemplates([...all.filter((t) => t.id !== template.id), template], user.id);
+    await audit(user, existing ? "update" : "create", "quotation_template", template.id, `${existing ? "Updated" : "Saved"} quotation template “${name}”`);
+    return { replaced: !!existing };
+  },
+);
+
+export const renameQuoteTemplate = adminAction(
+  "quotations.create",
+  z.object({ templateId: zs.uuid(), name: zs.required("Name", 80), description: zs.optional(300) }),
+  async ({ templateId, name, description }, user) => {
+    const all = await listQuoteTemplates();
+    if (!all.some((t) => t.id === templateId)) throw new UserError("Template not found.");
+    if (all.some((t) => t.id !== templateId && t.name.toLowerCase() === name.toLowerCase())) throw new UserError("Another template already has that name.", { name: "Already used." });
+    await writeQuoteTemplates(
+      all.map((t) => (t.id === templateId ? { ...t, name, description, updatedAt: new Date().toISOString() } : t)),
+      user.id,
+    );
+    await audit(user, "update", "quotation_template", templateId, `Renamed quotation template to “${name}”`);
+  },
+);
+
+export const deleteQuoteTemplate = adminAction("quotations.create", z.object({ templateId: zs.uuid() }), async ({ templateId }, user) => {
+  const all = await listQuoteTemplates();
+  const template = all.find((t) => t.id === templateId);
+  if (!template) throw new UserError("Template not found.");
+  await writeQuoteTemplates(
+    all.filter((t) => t.id !== templateId),
+    user.id,
+  );
+  await audit(user, "delete", "quotation_template", templateId, `Deleted quotation template “${template.name}”`);
 });

@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Ban, CheckCircle2, CirclePlay, FileText, Pencil, Trophy, Undo2, Wallet } from "lucide-react";
-import { todayISO } from "@/lib/format";
-import { ActionForm, CheckboxField, DialogButton, SelectField, TextArea, TextField, type Option } from "@/components/admin/interactive";
+import { Ban, BellRing, CheckCircle2, CirclePlay, FileText, Pencil, Trophy, Undo2, Wallet } from "lucide-react";
+import { fmtDate, todayISO } from "@/lib/format";
+import { ActionForm, CheckboxField, ConfirmButton, DialogButton, SelectField, TextArea, TextField, type Option } from "@/components/admin/interactive";
 import { createInvoiceAction } from "../invoices/actions";
 import { recordPaymentAction, voidPaymentAction } from "../payments/actions";
-import { setBookingStatusAction, updateBookingMoney } from "./actions";
+import { sendPaymentReminderAction, setBookingStatusAction, updateBookingMoney } from "./actions";
 
 const FLOW: Record<string, { to: string; label: string; icon: typeof CheckCircle2; primary?: boolean }[]> = {
   PENDING: [{ to: "CONFIRMED", label: "Confirm booking", icon: CheckCircle2, primary: true }],
@@ -84,6 +84,26 @@ export function PaymentButton({
         </ActionForm>
       )}
     </DialogButton>
+  );
+}
+
+/** Email the client what they owe next (the advance first, then the balance). */
+export function PaymentReminderButton({ id, email, due }: { id: string; email: string | null; due: { stage: "advance" | "balance"; amount: number; dueDate: string | null } }) {
+  const what = `${due.stage === "advance" ? "advance" : "balance"} of NPR ${due.amount.toLocaleString("en-IN")}`;
+  return (
+    <ConfirmButton
+      icon={BellRing}
+      variant="secondary"
+      confirmVariant="primary"
+      disabled={!email}
+      title="Send a payment reminder?"
+      body={email ? `${email} gets an email about the ${what}${due.dueDate ? `, due ${fmtDate(due.dueDate)}` : ""}, with your payment details from Settings → Invoices.` : "This client has no email address."}
+      confirmLabel="Send reminder"
+      success="Payment reminder emailed"
+      action={() => sendPaymentReminderAction({ id })}
+    >
+      Send reminder
+    </ConfirmButton>
   );
 }
 

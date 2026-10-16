@@ -1,12 +1,12 @@
 import "server-only";
 import { adminDb, exec, schema, tbl, vals } from "@/db";
 import { getSiteSettings } from "@/lib/content";
-import { fmtDateLong, npr } from "@/lib/format";
+import { fmtDateLong, npr, todayISO } from "@/lib/format";
 import { PRODUCTION_ORIGIN, resolveSiteUrl } from "@/lib/site-url";
 
 /*
  * Transactional email templates, sent through Resend when RESEND_API_KEY and EMAIL_FROM are set
- * (EMAIL_FROM must be an address on a domain verified in Resend). Without them nothing is sent and
+ * (EMAIL_FROM is the no-reply address on the domain verified in Resend). Without them nothing is sent and
  * each message is recorded as "not configured", so the admin can see exactly what would have gone
  * out. Every attempt lands in the outbox. (Sign-in, invite and password-reset emails are sent by
  * Supabase Auth itself.)
@@ -64,7 +64,7 @@ function layout(brand: Brand, m: Mail) {
     : "";
 
   const footnote = m.footnote
-    ? `<p style="margin:0 0 18px;padding:10px 14px;background:${C.cream};border-left:3px solid ${C.gold};font-size:12.5px;line-height:1.5;color:${C.muted}">${esc(m.footnote)}</p>`
+    ? `<p style="margin:0 0 18px;padding:10px 14px;background:${C.cream};border-left:3px solid ${C.gold};font-size:12.5px;line-height:1.5;color:${C.muted};white-space:pre-line">${esc(m.footnote)}</p>`
     : "";
 
   const signOff = m.signOff
@@ -209,6 +209,40 @@ export const templates = {
       signOff: true,
     }),
   }),
+  paymentReminder: (
+    b: Brand,
+    d: { name: string; booking: string; title: string; eventDate?: string | null; stage: "advance" | "balance"; amount: number; dueDate?: string | null; bankDetails?: string | null },
+  ): Rendered => {
+    const what = d.stage === "advance" ? "advance to confirm your booking" : "remaining balance";
+    const today = todayISO();
+    const late = !!d.dueDate && d.dueDate < today;
+    const when = !d.dueDate ? "is now due" : late ? `was due on ${fmtDateLong(d.dueDate)}` : d.dueDate === today ? "is due today" : `is due on ${fmtDateLong(d.dueDate)}`;
+    return {
+      subject: late ? `Payment overdue — ${d.booking}` : `Payment reminder — ${npr(d.amount)} for ${d.title}`,
+      ...layout(b, {
+        preheader: `${npr(d.amount)} ${when.replace(/^is /, "")} for ${d.title}.`,
+        heading: late ? "Your payment is now overdue" : "A friendly payment reminder",
+        paragraphs: [
+          `Hi ${first(d.name)}, this is a reminder that the ${what} for ${d.title} ${when}.`,
+          late
+            ? "Please make the payment as soon as you can so we can keep everything on track for your celebration."
+            : "Paying on time lets us lock in your décor, team and materials for the day.",
+        ],
+        details: [
+          { label: "Booking", value: d.booking },
+          { label: "Event", value: d.title },
+          ...(d.eventDate ? [{ label: "Event date", value: fmtDateLong(d.eventDate) }] : []),
+          ...(d.dueDate ? [{ label: "Due date", value: fmtDateLong(d.dueDate) }] : []),
+          { label: d.stage === "advance" ? "Advance due" : "Balance due", value: npr(d.amount), strong: true },
+        ],
+        footnote: [
+          d.bankDetails ? `How to pay:\n${d.bankDetails}` : "You can pay by cash, bank transfer, eSewa or Khalti — call or WhatsApp us for details.",
+          "Already paid? Thank you! Please send us your receipt on WhatsApp so we can update your booking.",
+        ].join("\n\n"),
+        signOff: true,
+      }),
+    };
+  },
   eventReminder: (b: Brand, d: { name: string; title: string; date: string; days: number }): Rendered => ({
     subject: `${d.days} days to go — ${d.title}`,
     ...layout(b, {
@@ -244,8 +278,8 @@ export type TemplateName = keyof typeof templates;
 /** True when emails are actually sent (Resend is set up), not just recorded. */
 export const emailConfigured = () => !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 
-/** Send one message through Resend's HTTP API. */
-async function deliver(to: string, rendered: Rendered, replyTo: string | undefined): Promise<{ status: "SENT" | "FAILED" | "NOT_CONFIGURED"; error?: string }> {
+/** Send one message through Resend's HTTP API. No reply-to: every email comes from the no-reply address. */
+async function deliver(to: string, rendered: Rendered): Promise<{ status: "SENT" | "FAILED" | "NOT_CONFIGURED"; error?: string }> {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!key || !from) return { status: "NOT_CONFIGURED" };
@@ -253,7 +287,7 @@ async function deliver(to: string, rendered: Rendered, replyTo: string | undefin
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject: rendered.subject, html: rendered.html, text: rendered.text, ...(replyTo && { reply_to: replyTo }) }),
+      body: JSON.stringify({ from, to: [to], subject: rendered.subject, html: rendered.html, text: rendered.text }),
       signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) return { status: "SENT" };
@@ -273,7 +307,7 @@ export async function sendEmail<T extends TemplateName>(
   if (!to) return "NO_RECIPIENT";
   const brand = await getSiteSettings();
   const rendered = (templates[template] as (b: Brand, d: typeof data) => Rendered)(brand, data);
-  const { status, error } = await deliver(to, rendered, process.env.EMAIL_REPLY_TO || brand.email || undefined);
+  const { status, error } = await deliver(to, rendered);
   if (error) console.error(`[email] ${template} to ${to} failed:`, error);
   await exec(
     adminDb
@@ -292,6 +326,7 @@ export async function previewTemplate(name: TemplateName) {
     quotationAccepted: { name: "Anil Sharma", number: "QT-2026-001", title: "Priya & Anil Wedding", deposit: 242500 },
     bookingConfirmation: { name: "Anil Sharma", number: "BK-2026-001", title: "Priya & Anil Wedding", date: "2026-10-12", venue: "Hotel Shanker" },
     paymentReceipt: { name: "Anil Sharma", receipt: "RC-2026-001", amount: 100000, balance: 150000, title: "Priya & Anil Wedding" },
+    paymentReminder: { name: "Anil Sharma", booking: "BK-2026-001", title: "Priya & Anil Wedding", eventDate: "2026-12-12", stage: "balance", amount: 150000, dueDate: "2026-12-05" },
     eventReminder: { name: "Anil Sharma", title: "Priya & Anil Wedding", date: "2026-10-12", days: 7 },
     followUpReminder: { staff: "Sita Karki", count: 3 },
   }[name];

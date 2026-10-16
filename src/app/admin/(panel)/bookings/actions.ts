@@ -6,6 +6,7 @@ import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { sendEmail } from "@/server/email";
 import { notify } from "@/server/notifications";
+import { sendPaymentReminderNow } from "@/server/payment-reminders";
 import { createBooking, setBookingStatus } from "@/server/sales";
 
 const time = () =>
@@ -77,6 +78,16 @@ export const updateBookingMoney = adminAction(
     await audit(user, "update", "booking", id, `Updated amounts on ${b.number}`, { totalAmount: v.totalAmount, depositAmount: v.depositAmount });
   },
 );
+
+export const sendPaymentReminderAction = adminAction("payments.create", z.object({ id: zs.uuid() }), async ({ id }, user) => {
+  const r = await sendPaymentReminderNow(id);
+  if (r.status === "NOT_FOUND") throw new UserError("Booking not found.");
+  if (r.status === "NOTHING_DUE") throw new UserError("Nothing is owed on this booking.");
+  if (r.status === "NO_EMAIL") throw new UserError("This client has no email address. Add one to the customer, or remind them on WhatsApp.");
+  if (r.status === "NOT_CONFIGURED") throw new UserError("Email isn't connected (Settings → System health), so the reminder was only recorded in the outbox.");
+  if (r.status === "FAILED") throw new UserError("The email couldn't be sent. Try again in a minute.");
+  await audit(user, "remind", "booking", id, `Emailed a payment reminder for ${r.due!.stage === "advance" ? "the advance" : "the balance"}`);
+});
 
 export const setBookingStatusAction = adminAction(
   ["bookings.update", "bookings.cancel"],

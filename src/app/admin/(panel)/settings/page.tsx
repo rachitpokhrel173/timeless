@@ -5,6 +5,7 @@ import { requirePage } from "@/lib/auth/session";
 import { fmtDateTime, isoDaysFromNow, relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { serviceRoleConfigured } from "@/lib/supabase/admin";
+import { ensureRules } from "@/server/automation";
 import { mediaOptions } from "@/server/lookups";
 import { storageHealth } from "@/server/storage";
 import { quoteSettings } from "../quotations/editor-data";
@@ -82,6 +83,7 @@ async function Sales() {
 }
 
 async function Automations() {
+  await ensureRules();
   const [rules, runs] = await Promise.all([
     many<Row<typeof schema.automationRules>>(adminDb.from(tbl(schema.automationRules)).select(cols(schema.automationRules)).order("key")),
     many<Row<typeof schema.automationRuns>>(adminDb.from(tbl(schema.automationRuns)).select(cols(schema.automationRuns)).order("created_at", { ascending: false }).limit(25)),

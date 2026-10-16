@@ -5,6 +5,7 @@ export type RuleKey =
   | "quote.accepted"
   | "quote.expiring"
   | "payment.overdue"
+  | "payment.reminder"
   | "event.upcoming"
   | "inventory.low"
   | "task.overdue"
@@ -40,6 +41,14 @@ export const DEFAULT_RULES: { key: RuleKey; name: string; trigger: string; descr
     trigger: "Daily — bookings past their balance or advance due date",
     description: "Raise a notification for every booking with money still owed after its due date.",
     config: {},
+  },
+  {
+    key: "payment.reminder",
+    name: "Payment reminder to clients",
+    trigger: "Daily — advances and balances coming due",
+    description:
+      "Email the client a few days before their advance or balance is due, and once more if it becomes overdue (within a week). Each reminder is sent once; clients without an email are skipped.",
+    config: { daysBefore: 3, overdueReminder: true },
   },
   {
     key: "event.upcoming",

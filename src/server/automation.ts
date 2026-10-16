@@ -1,11 +1,12 @@
 import "server-only";
 import { adminDb, all, cols, exec, many, maybe, schema, tbl, vals, type Row } from "@/db";
-import type { RuleKey } from "@/lib/defaults";
+import { DEFAULT_RULES, type RuleKey } from "@/lib/defaults";
 import { fmtDate, npr, todayISO } from "@/lib/format";
 import { sendEmail } from "./email";
 import { vendorPaid } from "./finance";
 import { checkLowStock } from "./inventory";
 import { notify } from "./notifications";
+import { runPaymentReminders } from "./payment-reminders";
 import { bookingFromQuotation } from "./sales";
 
 /*
@@ -21,6 +22,16 @@ type Rule = typeof schema.automationRules.$inferSelect;
 async function rule(key: RuleKey): Promise<Rule | null> {
   const row = await maybe<Rule>(adminDb.from(tbl(schema.automationRules)).select(cols(schema.automationRules)).eq("key", key));
   return row?.enabled ? row : null;
+}
+
+/** Add any built-in rule that's missing (rules added after the first seed), leaving existing ones untouched. */
+export async function ensureRules() {
+  await exec(
+    adminDb.from(tbl(schema.automationRules)).upsert(
+      DEFAULT_RULES.map((r) => ({ key: r.key, name: r.name, trigger: r.trigger, description: r.description, config: r.config })),
+      { onConflict: "key", ignoreDuplicates: true },
+    ),
+  );
 }
 
 async function logRun(key: RuleKey, summary: string, ok = true) {
@@ -177,6 +188,7 @@ export async function onStaffAssigned(staffId: string, eventId: string) {
 export async function runScheduledAutomations() {
   const today = todayISO();
   const results: string[] = [];
+  await ensureRules();
 
   // Quotations about to expire / expired
   const qe = await rule("quote.expiring");
@@ -275,6 +287,14 @@ export async function runScheduledAutomations() {
     }
     await logRun("payment.overdue", `${overdueInvoices.length} invoice(s) now overdue, ${late.length} booking(s) behind on payments`);
     results.push("payment.overdue");
+  }
+
+  // Payment reminders to clients
+  const pr = await rule("payment.reminder");
+  if (pr) {
+    const { soon, late } = await runPaymentReminders(pr.config);
+    await logRun("payment.reminder", `${soon} due-soon and ${late} overdue reminder(s) emailed`);
+    results.push("payment.reminder");
   }
 
   // Upcoming events

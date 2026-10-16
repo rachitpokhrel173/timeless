@@ -11,7 +11,8 @@ import { balanceOf, PAYMENT_METHODS } from "@/server/finance";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import { BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, label, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
-import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, VoidPaymentButton } from "../BookingClient";
+import { amountDue } from "@/server/payment-reminders";
+import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, PaymentReminderButton, VoidPaymentButton } from "../BookingClient";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -55,6 +56,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
   const openInvoices = invoices.filter((i) => !["CANCELLED", "PAID", "DRAFT"].includes(i.status)).map((i) => ({ value: i.id, label: `${i.number} · ${npr(i.total - i.amountPaid)} due` }));
   const methods = PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }));
   const active = booking.status !== "CANCELLED";
+  const due = active && booking.status !== "COMPLETED" ? amountDue(booking) : null;
   const base = `/admin/bookings/${id}`;
 
   return (
@@ -198,7 +200,16 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
         <Card
           title="Payments"
           bodyClassName="p-0"
-          actions={active && can("payments.create") && balance > 0 && <PaymentButton bookingId={id} balance={balance} invoices={openInvoices} hasEmail={!!booking.customer.email} methods={methods} variant="secondary" />}
+          actions={
+            active &&
+            can("payments.create") &&
+            balance > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {due && <PaymentReminderButton id={id} email={booking.customer.email} due={due} />}
+                <PaymentButton bookingId={id} balance={balance} invoices={openInvoices} hasEmail={!!booking.customer.email} methods={methods} variant="secondary" />
+              </div>
+            )
+          }
         >
           {payments.length === 0 ? (
             <EmptyState compact icon={Wallet} title="No payments yet" />

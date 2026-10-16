@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Package, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, LayoutTemplate, Package, Plus, Trash2 } from "lucide-react";
 import { npr } from "@/lib/format";
 import { lineAmount, quoteTotals } from "@/lib/quote-math";
 import { ActionForm, Button, inputClass, SelectField, TextArea, TextField, type Option } from "@/components/admin/interactive";
@@ -36,6 +36,15 @@ export type QuoteEditorValues = {
 
 type PackageOption = Option & { price: number; lines: { label: string; quantity: number; inventoryItemId: string | null }[] };
 type StockOption = Option & { price: number; unit: string };
+export type TemplateOption = Option & {
+  description?: string | null;
+  items: QuoteLine[];
+  discountType: "PERCENT" | "FIXED";
+  discountValue: number;
+  taxRate: number;
+  depositAmount: number;
+  notes?: string | null;
+};
 
 const blank = (): QuoteLine => ({ description: "", quantity: 1, unit: "", unitPrice: 0 });
 
@@ -45,6 +54,7 @@ export default function QuoteEditor({
   packages,
   stock,
   eventTypes,
+  templates = [],
   customerLabel,
 }: {
   values: QuoteEditorValues;
@@ -52,6 +62,7 @@ export default function QuoteEditor({
   packages: PackageOption[];
   stock: StockOption[];
   eventTypes: Option[];
+  templates?: TemplateOption[];
   /** Shown instead of the customer picker when the customer comes from a lead that isn't converted yet. */
   customerLabel?: string;
 }) {
@@ -63,6 +74,9 @@ export default function QuoteEditor({
   const [depositAmount, setDepositAmount] = useState(values.depositAmount ?? 0);
   const [packageId, setPackageId] = useState(values.packageId ?? "");
   const [stockPick, setStockPick] = useState("");
+  const [templatePick, setTemplatePick] = useState("");
+  // Notes is an uncontrolled field: a template remounts it with the template's text
+  const [notes, setNotes] = useState({ key: 0, value: values.notes ?? "" });
   const totals = useMemo(() => quoteTotals({ items, discountType, discountValue, taxRate, depositAmount }), [items, discountType, discountValue, taxRate, depositAmount]);
   const editing = !!values.id;
 
@@ -83,6 +97,19 @@ export default function QuoteEditor({
       { description: `${pkg.label} package`, quantity: 1, unit: "package", unitPrice: pkg.price, details: pkg.lines.map((l) => `${l.quantity} × ${l.label}`).join(", ") || null },
     ];
     setItems((all) => [...all.filter((l) => l.description.trim()), ...lines]);
+  }
+
+  /** Add a template's lines (after any lines already filled in) and take over its pricing defaults. */
+  function applyTemplate() {
+    const t = templates.find((x) => x.value === templatePick);
+    if (!t) return;
+    setItems((all) => [...all.filter((l) => l.description.trim()), ...t.items.map((l) => ({ ...l }))]);
+    setDiscountType(t.discountType);
+    setDiscountValue(t.discountValue);
+    setTaxRate(t.taxRate);
+    setDepositAmount(t.depositAmount);
+    if (t.notes) setNotes((n) => ({ key: n.key + 1, value: t.notes! }));
+    setTemplatePick("");
   }
 
   function addStock() {
@@ -133,6 +160,24 @@ export default function QuoteEditor({
         <TextField label="Valid until" name="validUntil" type="date" defaultValue={values.validUntil ?? ""} hint="The client can accept online until this date." />
         <TextField label="Coupon code" name="couponCode" defaultValue={values.couponCode ?? ""} hint="Optional — applied if it gives a bigger discount." />
       </section>
+
+      {templates.length > 0 && (
+        <section className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-a-border bg-a-subtle/40 px-3 py-2.5">
+          <LayoutTemplate className="size-4 text-a-muted" aria-hidden />
+          <span className="mr-auto text-[13px] font-medium">Start from a template</span>
+          <select aria-label="Quotation template" value={templatePick} onChange={(e) => setTemplatePick(e.target.value)} className={`${inputClass} w-auto max-w-72`}>
+            <option value="">Choose a template…</option>
+            {templates.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label} — {npr(quoteTotals(t).total)}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="primary" icon={LayoutTemplate} onClick={applyTemplate} disabled={!templatePick}>
+            Use template
+          </Button>
+        </section>
+      )}
 
       <section className="space-y-3 border-t border-a-border pt-4">
         <div className="flex flex-wrap items-end gap-2">
@@ -219,7 +264,7 @@ export default function QuoteEditor({
 
       <section className="grid gap-6 border-t border-a-border pt-4 lg:grid-cols-[1fr_340px]">
         <div className="space-y-4">
-          <TextArea label="Notes for the client" name="notes" rows={3} defaultValue={values.notes ?? ""} />
+          <TextArea key={notes.key} label="Notes for the client" name="notes" rows={3} defaultValue={notes.value} />
           <TextArea label="Terms & conditions" name="terms" rows={7} defaultValue={values.terms ?? ""} hint="Defaults come from Settings → Quotations." />
         </div>
         <div className="space-y-3 rounded-lg border border-a-border bg-a-subtle/50 p-4 text-[13px]">
