@@ -39,7 +39,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/admin"
       <link rel="apple-touch-icon" href="/apple-icon.png" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
-      <meta name="apple-mobile-web-app-title" content="TT Admin" />
+      <meta name="apple-mobile-web-app-title" content="Timeless TEM" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       <script dangerouslySetInnerHTML={{ __html: installScript }} />
       <script dangerouslySetInnerHTML={{ __html: themeScript }} />

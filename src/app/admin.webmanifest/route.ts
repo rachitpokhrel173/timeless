@@ -8,7 +8,7 @@ export async function GET() {
   const manifest: MetadataRoute.Manifest = {
     id: "/admin",
     name: `${site.shortName} Admin`,
-    short_name: "TT Admin",
+    short_name: "Timeless TEM",
     description: `Bookings, customers and invoices for ${site.name}.`,
     start_url: "/admin",
     scope: "/admin",
