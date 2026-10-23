@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { LockKeyhole, Mail, MapPin, Phone } from "lucide-react";
 import { legalLinks, navLinks } from "@/data/site";
 import { getSiteSettings } from "@/lib/content";
 import { mailHref, telHref } from "@/lib/utils";
@@ -68,6 +68,13 @@ export default async function SiteFooter() {
                   </Link>
                 </li>
               ))}
+              <li>
+                {/* Staff sign-in; signed-out visitors land on /admin/login */}
+                <Link href="/admin" prefetch={false} rel="nofollow" className="flex items-center gap-1.5 transition-colors hover:text-ivory">
+                  <LockKeyhole className="size-3.5" strokeWidth={1.5} aria-hidden />
+                  Admin
+                </Link>
+              </li>
             </ul>
             <span className="hidden h-3 w-px bg-ivory/20 sm:block" aria-hidden />
             <BuiltBy />
