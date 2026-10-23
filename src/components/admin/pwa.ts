@@ -44,7 +44,7 @@ export function ServiceWorker() {
  * "ios" — iPhone/iPad, which only installs via Share → Add to Home Screen;
  * "android" — an Android browser that hasn't offered a prompt (yet, or at all), installed from its ⋮ menu;
  * null — already installed, or the browser doesn't support installing.
- * Installing needs HTTPS, so a phone on the dev server's http://192.168.x.x address only gets the iOS hint.
+ * Installing needs HTTPS; on the dev server's http://192.168.x.x address the steps say so.
  */
 export function useInstall() {
   const mode = useSyncExternalStore<"prompt" | "ios" | "android" | null>(
@@ -53,7 +53,7 @@ export function useInstall() {
       if (matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone) return null;
       if (deferred) return "prompt";
       if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return "ios";
-      return /Android/.test(navigator.userAgent) && window.isSecureContext ? "android" : null;
+      return /Android/.test(navigator.userAgent) ? "android" : null;
     },
     () => null,
   );

@@ -10,7 +10,6 @@ import { inventoryWithStock } from "@/server/inventory";
 import { dashboardKpis, monthlyRevenue, outstandingTotal, pipelineSnapshot, resolveRange, salesFunnel } from "@/server/metrics";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import { BarList, ColumnChart, Funnel } from "@/components/admin/charts";
-import InstallApp from "@/components/admin/InstallApp";
 import RangeFilter from "@/components/admin/RangeFilter";
 import { INQUIRY_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, EmptyState, Kpi, LinkButton, PageHeader } from "@/components/admin/ui";
@@ -103,8 +102,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
           </>
         }
       />
-
-      <InstallApp className="mb-5" />
 
       {/* Mobile quick actions */}
       <div className="mb-5 grid grid-cols-2 gap-2 sm:hidden">
