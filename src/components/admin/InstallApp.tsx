@@ -1,11 +1,12 @@
 "use client";
 
 import { Download } from "lucide-react";
-import InstallSteps from "@/components/admin/InstallSteps";
-import { useInstall } from "@/components/admin/pwa";
+import { cn } from "@/lib/utils";
+import InstallSteps from "./InstallSteps";
+import { useInstall } from "./pwa";
 
-/** Offers to install the admin app from the sign-in pages, before anyone has signed in. */
-export default function InstallApp() {
+/** Full-width offer to install the admin app, shown on the sign-in pages and the dashboard until it's installed. */
+export default function InstallApp({ className }: { className?: string }) {
   const { mode, install } = useInstall();
   if (!mode) return null;
   if (mode === "prompt")
@@ -13,14 +14,14 @@ export default function InstallApp() {
       <button
         type="button"
         onClick={() => void install()}
-        className="mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-md border border-a-border text-[13px] font-medium transition-colors hover:bg-a-hover"
+        className={cn("flex h-10 w-full items-center justify-center gap-2 rounded-md border border-a-border text-[13px] font-medium transition-colors hover:bg-a-hover", className)}
       >
         <Download className="size-4 text-a-muted" aria-hidden />
         Install the admin app
       </button>
     );
   return (
-    <div className="mt-6 rounded-md border border-a-border px-3 py-2.5">
+    <div className={cn("rounded-md border border-a-border px-3 py-2.5", className)}>
       <p className="mb-1 flex items-center gap-2 text-[13px] font-medium">
         <Download className="size-4 text-a-muted" aria-hidden />
         Install the admin app

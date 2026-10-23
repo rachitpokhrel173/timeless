@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { supabaseConfigured } from "@/lib/supabase/env";
-import InstallApp from "./InstallApp";
+import InstallApp from "@/components/admin/InstallApp";
 
 /** Split layout shared by sign-in, forgot and reset password and invitations: a décor photo beside the form. */
 export default function AuthShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -43,7 +43,7 @@ export default function AuthShell({ title, description, children }: { title: str
             </p>
           )}
           {children}
-          <InstallApp />
+          <InstallApp className="mt-6" />
         </div>
 
         <p className="text-center text-[11px] text-a-muted">© {new Date().getFullYear()} Timeless Ties Events &amp; Decor</p>
