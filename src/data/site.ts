@@ -42,8 +42,8 @@ export const siteSettings: SiteSettings = {
       url: "https://www.instagram.com/timelesstieseventsdecor",
       handle: "@timelesstieseventsdecor",
     },
-    // TODO: add the Facebook page URL — links with an empty url are hidden everywhere
-    { platform: "facebook", label: "Facebook", url: "" },
+    { platform: "facebook", label: "Facebook", url: "https://www.facebook.com/profile.php?id=61584109396187" },
+    // TODO: add the TikTok profile URL — links with an empty url are hidden everywhere
     { platform: "tiktok", label: "TikTok", url: "" },
   ],
 };

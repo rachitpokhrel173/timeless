@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  Download,
   ExternalLink,
   FilePlus2,
   Inbox,
@@ -19,6 +20,7 @@ import {
   Moon,
   Plus,
   Search,
+  Share,
   Sun,
   UserCircle,
   UserPlus,
@@ -32,6 +34,7 @@ import { cn } from "@/lib/utils";
 import CommandPalette from "./CommandPalette";
 import { ToastProvider, useToast } from "./interactive";
 import { allowed, NAV } from "./nav";
+import { useInstall } from "./pwa";
 
 export type ShellUser = { id: string; name: string; email: string; roleName: string; permissions: string[]; theme: "light" | "dark" | "system"; collapsed: boolean };
 type Counts = { notifications: number; inquiries: number };
@@ -213,6 +216,7 @@ function QuickAdd({ perms }: { perms: Set<string> }) {
 function UserMenu({ user }: { user: ShellUser }) {
   const { open, setOpen, ref } = usePopover();
   const [theme, setTheme] = useState(user.theme);
+  const { mode: installMode, install } = useInstall();
   const applyTheme = (t: ShellUser["theme"]) => {
     setTheme(t);
     const root = document.querySelector<HTMLElement>(".admin-root");
@@ -278,6 +282,28 @@ function UserMenu({ user }: { user: ShellUser }) {
             <ExternalLink className="size-4 text-a-muted" aria-hidden />
             View website
           </a>
+          {installMode === "prompt" && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void install();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[13px] hover:bg-a-hover"
+            >
+              <Download className="size-4 text-a-muted" aria-hidden />
+              Install app
+            </button>
+          )}
+          {installMode === "ios" && (
+            <p className="flex gap-2 px-2.5 py-2 text-xs text-a-muted">
+              <Share className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                To install, tap Share, then <span className="font-medium text-a-text">Add to Home Screen</span>.
+              </span>
+            </p>
+          )}
           <form action={logout}>
             <button type="submit" role="menuitem" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-a-danger hover:bg-a-danger-soft">
               <LogOut className="size-4" aria-hidden />

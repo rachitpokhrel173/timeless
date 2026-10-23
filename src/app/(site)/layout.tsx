@@ -1,10 +1,12 @@
 import { getServices, getSiteSettings } from "@/lib/content";
 import Attribution from "@/components/site/Attribution";
+import GoogleAnalytics from "@/components/site/GoogleAnalytics";
 import { SiteProvider } from "@/components/site/SiteContext";
 import { jsonLd, localBusinessJsonLd, websiteJsonLd } from "@/lib/seo";
 import Navigation from "@/components/navigation/Navigation";
 import SiteFooter from "@/components/footer/SiteFooter";
 import QuickContact from "@/components/layout/QuickContact";
+import SharePage from "@/components/layout/SharePage";
 import IntroCurtain from "@/components/brand/IntroCurtain";
 
 /** Public website chrome. The admin and client portal have their own layouts. */
@@ -13,6 +15,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
 
   return (
     <SiteProvider value={site}>
+      <GoogleAnalytics />
       <Attribution />
       <IntroCurtain />
       <script type="application/ld+json" dangerouslySetInnerHTML={jsonLd([localBusinessJsonLd(services, site), websiteJsonLd(site)])} />
@@ -26,6 +29,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
       <main id="main" className="flex-1">
         {children}
       </main>
+      <SharePage />
       <SiteFooter />
       <QuickContact />
     </SiteProvider>

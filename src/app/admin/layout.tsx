@@ -1,9 +1,21 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { ServiceWorker } from "@/components/admin/pwa";
 import { getCurrentUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s · Timeless Ties Admin" },
   robots: { index: false, follow: false },
+  // Installable as its own app (see app/admin.webmanifest and public/admin-sw.js)
+  manifest: "/admin.webmanifest",
+  appleWebApp: { capable: true, title: "TT Admin", statusBarStyle: "default" },
+  icons: { apple: "/apple-icon.png" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f7f3ec" },
+    { media: "(prefers-color-scheme: dark)", color: "#151715" },
+  ],
 };
 
 // Applies the "system" theme before paint so dark-mode users don't see a light flash
@@ -20,6 +32,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/admin"
       suppressHydrationWarning
     >
       <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      <ServiceWorker />
       {children}
     </div>
   );
