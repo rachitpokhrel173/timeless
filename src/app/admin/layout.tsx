@@ -5,10 +5,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 export const metadata: Metadata = {
   title: { default: "Admin", template: "%s · Timeless Ties Admin" },
   robots: { index: false, follow: false },
-  // Installable as its own app (see app/admin.webmanifest and public/admin-sw.js)
+  // Replaces the site's manifest link; the tags browsers need for installing are rendered below
   manifest: "/admin.webmanifest",
-  appleWebApp: { capable: true, title: "TT Admin", statusBarStyle: "default" },
-  icons: { apple: "/apple-icon.png" },
 };
 
 export const viewport: Viewport = {
@@ -31,6 +29,15 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/admin"
       data-theme={pref === "dark" ? "dark" : "light"}
       suppressHydrationWarning
     >
+      {/* Installable as its own app (see app/admin.webmanifest and public/admin-sw.js). Rendered here rather
+          than through `metadata`: production streams metadata into <body>, where Chrome ignores the manifest
+          link and reports "This app cannot be installed". React hoists these tags into <head>. */}
+      <link rel="manifest" href="/admin.webmanifest" />
+      <link rel="apple-touch-icon" href="/apple-icon.png" />
+      <meta name="mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-capable" content="yes" />
+      <meta name="apple-mobile-web-app-title" content="TT Admin" />
+      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       <ServiceWorker />
       {children}

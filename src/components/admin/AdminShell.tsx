@@ -217,7 +217,8 @@ function QuickAdd({ perms }: { perms: Set<string> }) {
 function InstallButton() {
   const { mode, install } = useInstall();
   const { open, setOpen, ref } = usePopover();
-  if (!mode) return null;
+  // Computers that didn't offer a prompt are often already installed; the sign-in page covers them
+  if (!mode || mode === "desktop") return null;
   return (
     <div ref={ref} className="relative">
       <button

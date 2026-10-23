@@ -38,22 +38,26 @@ export function ServiceWorker() {
   return null;
 }
 
+export type InstallMode = "prompt" | "ios" | "android" | "desktop";
+
 /**
  * How the admin app can be installed right now:
  * "prompt" — the browser offered an install prompt (Chrome, Edge, Android);
  * "ios" — iPhone/iPad, which only installs via Share → Add to Home Screen;
  * "android" — an Android browser that hasn't offered a prompt (yet, or at all), installed from its ⋮ menu;
+ * "desktop" — a computer browser that hasn't offered a prompt: it may already be installed, or the browser
+ *   (e.g. Brave) didn't fire the event; installed from the address-bar icon or the browser menu;
  * null — already installed, or the browser doesn't support installing.
  * Installing needs HTTPS; on the dev server's http://192.168.x.x address the steps say so.
  */
 export function useInstall() {
-  const mode = useSyncExternalStore<"prompt" | "ios" | "android" | null>(
+  const mode = useSyncExternalStore<InstallMode | null>(
     subscribe,
     () => {
       if (matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone) return null;
       if (deferred) return "prompt";
       if (/iPad|iPhone|iPod/.test(navigator.userAgent)) return "ios";
-      return /Android/.test(navigator.userAgent) ? "android" : null;
+      return /Android/.test(navigator.userAgent) ? "android" : "desktop";
     },
     () => null,
   );
