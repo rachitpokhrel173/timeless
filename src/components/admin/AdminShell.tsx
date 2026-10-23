@@ -20,7 +20,6 @@ import {
   Moon,
   Plus,
   Search,
-  Share,
   Sun,
   UserCircle,
   UserPlus,
@@ -34,6 +33,7 @@ import { cn } from "@/lib/utils";
 import CommandPalette from "./CommandPalette";
 import { ToastProvider, useToast } from "./interactive";
 import { allowed, NAV } from "./nav";
+import InstallSteps from "./InstallSteps";
 import { useInstall } from "./pwa";
 
 export type ShellUser = { id: string; name: string; email: string; roleName: string; permissions: string[]; theme: "light" | "dark" | "system"; collapsed: boolean };
@@ -213,10 +213,35 @@ function QuickAdd({ perms }: { perms: Set<string> }) {
   );
 }
 
+/** Header button to install the admin as an app; phones without an install prompt get the steps instead. */
+function InstallButton() {
+  const { mode, install } = useInstall();
+  const { open, setOpen, ref } = usePopover();
+  if (!mode) return null;
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => (mode === "prompt" ? void install() : setOpen((o) => !o))}
+        aria-expanded={mode === "prompt" ? undefined : open}
+        className="flex h-9 items-center gap-1.5 rounded-md border border-a-border px-2.5 text-[13px] font-medium text-a-text transition-colors duration-150 hover:bg-a-hover"
+      >
+        <Download className="size-4 text-a-muted" aria-hidden />
+        Install<span className="hidden sm:inline"> app</span>
+      </button>
+      {open && mode !== "prompt" && (
+        <div className="absolute right-0 z-40 mt-1 w-64 rounded-lg border border-a-border bg-a-surface p-3 shadow-lg">
+          <p className="mb-1.5 text-[13px] font-medium">Install the admin app</p>
+          <InstallSteps mode={mode} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UserMenu({ user }: { user: ShellUser }) {
   const { open, setOpen, ref } = usePopover();
   const [theme, setTheme] = useState(user.theme);
-  const { mode: installMode, install } = useInstall();
   const applyTheme = (t: ShellUser["theme"]) => {
     setTheme(t);
     const root = document.querySelector<HTMLElement>(".admin-root");
@@ -282,28 +307,6 @@ function UserMenu({ user }: { user: ShellUser }) {
             <ExternalLink className="size-4 text-a-muted" aria-hidden />
             View website
           </a>
-          {installMode === "prompt" && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                void install();
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[13px] hover:bg-a-hover"
-            >
-              <Download className="size-4 text-a-muted" aria-hidden />
-              Install app
-            </button>
-          )}
-          {installMode === "ios" && (
-            <p className="flex gap-2 px-2.5 py-2 text-xs text-a-muted">
-              <Share className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <span>
-                To install, tap Share, then <span className="font-medium text-a-text">Add to Home Screen</span>.
-              </span>
-            </p>
-          )}
           <form action={logout}>
             <button type="submit" role="menuitem" className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-[13px] text-a-danger hover:bg-a-danger-soft">
               <LogOut className="size-4" aria-hidden />
@@ -436,6 +439,7 @@ function Shell({ user, initialCounts, children }: { user: ShellUser; initialCoun
               <kbd className="ml-auto hidden rounded border border-a-border bg-a-surface px-1.5 text-[11px] font-medium sm:inline">Ctrl K</kbd>
             </button>
             <div className="ml-auto flex items-center gap-1.5">
+              <InstallButton />
               <QuickAdd perms={perms} />
               <Link
                 href="/admin/notifications"

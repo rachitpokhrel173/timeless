@@ -1,11 +1,13 @@
 "use client";
 
-import { Download, Share } from "lucide-react";
+import { Download } from "lucide-react";
+import InstallSteps from "@/components/admin/InstallSteps";
 import { useInstall } from "@/components/admin/pwa";
 
 /** Offers to install the admin app from the sign-in pages, before anyone has signed in. */
 export default function InstallApp() {
   const { mode, install } = useInstall();
+  if (!mode) return null;
   if (mode === "prompt")
     return (
       <button
@@ -17,14 +19,13 @@ export default function InstallApp() {
         Install the admin app
       </button>
     );
-  if (mode === "ios")
-    return (
-      <p className="mt-6 flex items-start justify-center gap-2 text-xs text-a-muted">
-        <Share className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span>
-          Install as an app: tap Share, then <span className="font-medium text-a-text">Add to Home Screen</span>.
-        </span>
+  return (
+    <div className="mt-6 rounded-md border border-a-border px-3 py-2.5">
+      <p className="mb-1 flex items-center gap-2 text-[13px] font-medium">
+        <Download className="size-4 text-a-muted" aria-hidden />
+        Install the admin app
       </p>
-    );
-  return null;
+      <InstallSteps mode={mode} />
+    </div>
+  );
 }
