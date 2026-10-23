@@ -19,6 +19,9 @@ export const viewport: Viewport = {
 // Applies the "system" theme before paint so dark-mode users don't see a light flash
 const themeScript = `(function(){try{var r=document.currentScript.parentElement;if(r.dataset.pref==="system"){r.dataset.theme=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}}catch(e){}})()`;
 
+// Chrome can fire beforeinstallprompt before the app's scripts load; keep it for useInstall() to pick up
+const installScript = `window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__installPrompt=e})`;
+
 export default async function AdminRootLayout({ children }: LayoutProps<"/admin">) {
   const user = await getCurrentUser();
   const pref = user?.prefs.theme ?? "system";
@@ -38,6 +41,7 @@ export default async function AdminRootLayout({ children }: LayoutProps<"/admin"
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-title" content="TT Admin" />
       <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+      <script dangerouslySetInnerHTML={{ __html: installScript }} />
       <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       <ServiceWorker />
       {children}

@@ -4,8 +4,9 @@ import { useEffect, useSyncExternalStore } from "react";
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
-// Chrome/Edge fire beforeinstallprompt once, possibly before React mounts, so it's captured at module load
-let deferred: InstallPromptEvent | null = null;
+// Chrome/Edge fire beforeinstallprompt once, possibly before this module loads: the admin layout's inline
+// script keeps an early event on window.__installPrompt, and later ones are caught here
+let deferred: InstallPromptEvent | null = typeof window !== "undefined" ? ((window as { __installPrompt?: InstallPromptEvent }).__installPrompt ?? null) : null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
