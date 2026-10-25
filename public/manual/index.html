@@ -1,0 +1,843 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<meta name="robots" content="noindex, nofollow">
+<title>Timeless Ties Video Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</head>
+<body>
+<style>
+/* Layout: a video player (16:9 stage + caption + controls) beside a chapter rail; recording notes below. */
+:root {
+  --bg: #f6f2ee;
+  --surface: #fffdfb;
+  --ink: #2a1d21;
+  --muted: #6e5f63;
+  --line: #e4d9d0;
+  --wine: #641a35;
+  --gold: #9c7740;
+  --on-wine: #ffffff;
+  --frame: #1d1517;
+  --display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161113; --surface: #211a1c; --ink: #f2e9e5; --muted: #b6a7a3; --line: #3b2f31;
+    --wine: #d47d9f; --gold: #cfa86c; --on-wine: #1b1214; --frame: #0d0a0b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161113; --surface: #211a1c; --ink: #f2e9e5; --muted: #b6a7a3; --line: #3b2f31;
+  --wine: #d47d9f; --gold: #cfa86c; --on-wine: #1b1214; --frame: #0d0a0b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 56px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+header .kick { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+header h1 { font-family: var(--display); font-weight: 600; font-size: clamp(34px, 5vw, 50px); line-height: 1.05; margin: 4px 0 8px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 68ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 22px; align-items: start; }
+@media (max-width: 960px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* Player */
+.player { background: var(--frame); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.screen { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; background: #f4f1ec; }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; }
+.bigplay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(20, 12, 15, .28); border: 0; cursor: pointer; z-index: 80; }
+.bigplay span { width: 84px; height: 84px; border-radius: 50%; background: #641a35; display: grid; place-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.bigplay:focus-visible span { outline: 3px solid #e7c98f; outline-offset: 4px; }
+.bar { height: 6px; background: rgba(255,255,255,.14); cursor: pointer; position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #c9a15f; width: 0; }
+.caption { color: #f3ece6; padding: 14px 18px 4px; min-height: 92px; }
+.caption .where { font-family: var(--mono); font-size: 11.5px; color: #c9a15f; letter-spacing: .04em; }
+.caption p { margin: 4px 0 0; font-size: 16px; line-height: 1.5; max-width: 80ch; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px 14px; }
+.controls button, .controls select {
+  height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06);
+  color: #f3ece6; font: 600 13px var(--body); padding: 0 12px; cursor: pointer;
+}
+.controls button.main { background: #f3ece6; color: #2a1d21; border-color: #f3ece6; min-width: 92px; }
+.controls button:focus-visible, .controls select:focus-visible { outline: 2px solid #e7c98f; outline-offset: 2px; }
+.controls .time { font-family: var(--mono); font-size: 12px; color: #bdb0aa; margin-left: auto; }
+.controls select option { color: #2a1d21; }
+.player:fullscreen { justify-content: center; border-radius: 0; }
+.player:fullscreen .screen { width: min(100vw, calc((100vh - 170px) * 16 / 9)); margin: 0 auto; }
+
+/* Chapter rail */
+.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.rail h2 { font-family: var(--display); font-weight: 600; font-size: 24px; margin: 2px 6px 8px; }
+.chap { display: grid; grid-template-columns: 28px 1fr; gap: 10px; text-align: left; background: none; border: 0; border-radius: 10px; padding: 9px 8px; color: var(--ink); font: 500 14px var(--body); cursor: pointer; }
+.chap b { font-family: var(--mono); font-weight: 500; font-size: 12px; color: var(--muted); padding-top: 2px; }
+.chap small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.chap:hover { background: color-mix(in srgb, var(--gold) 10%, transparent); }
+.chap.on { background: color-mix(in srgb, var(--wine) 12%, transparent); }
+.chap.on b { color: var(--wine); }
+.chap:focus-visible { outline: 2px solid var(--wine); outline-offset: 1px; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; min-width: 0; }
+.note h3 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0 0 8px; }
+.note ol, .note ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.note kbd { font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; background: var(--bg); }
+.note a { color: var(--wine); }
+
+/* ───────── Stage: pictures of the real app, fixed light palette ───────── */
+.stage { font-family: var(--body); color: #24201d; font-size: 13px; line-height: 1.4; background: #f4f1ec; }
+.app { display: grid; grid-template-columns: 212px 1fr; height: 720px; }
+.side { background: #231c1b; color: #cfc5ba; padding: 14px 10px; font-size: 12px; overflow: hidden; }
+.brand { font-family: var(--display); color: #fff; font-size: 21px; font-weight: 600; padding: 2px 8px 6px; }
+.brand small { display: block; font-family: var(--body); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #b89a66; font-weight: 600; }
+.grp { margin-top: 7px; border-radius: 8px; }
+.grp > b { display: block; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: #8c8177; padding: 3px 8px; }
+.ni { padding: 2px 8px; border-radius: 6px; line-height: 17px; }
+.ni.on { background: rgba(184,154,102,.25); color: #fff; font-weight: 600; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.top { height: 54px; flex: none; display: flex; align-items: center; gap: 14px; padding: 0 24px; background: #fff; border-bottom: 1px solid #e7e0d7; }
+.search { width: 420px; height: 34px; border: 1px solid #e2dbd2; border-radius: 9px; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #8a7f76; background: #faf8f5; }
+.bell { margin-left: auto; position: relative; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; border: 1px solid #e7e0d7; }
+.bell .dot { position: absolute; top: -5px; right: -6px; background: #641a35; color: #fff; font-size: 10.5px; font-weight: 700; border-radius: 99px; padding: 1px 6px; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: #a8834a; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+.content { padding: 22px 28px; flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; gap: 14px; }
+.crumb { font-size: 12px; color: #8a7f76; margin-bottom: -10px; }
+.hrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hrow .sp { flex: 1; }
+.pt { font-size: 23px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+.pd { color: #7a6f67; font-size: 13px; margin-top: -10px; }
+.card { background: #fff; border: 1px solid #e7e0d7; border-radius: 12px; padding: 16px; }
+.card.p0 { padding: 0; overflow: hidden; }
+.card h4 { margin: 0 0 10px; font-size: 14px; }
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 14px; }
+.g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.f label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 5px; color: #3b332e; }
+.f .hint, .hint { font-size: 11.5px; color: #8a7f76; margin-top: 4px; }
+.in { min-height: 34px; border: 1px solid #ddd5cb; border-radius: 8px; padding: 0 10px; display: flex; align-items: center; background: #fff; white-space: nowrap; overflow: hidden; font-size: 13px; }
+.in.sel { justify-content: space-between; }
+.in.sel::after { content: ""; width: 7px; height: 7px; border-right: 1.5px solid #7a6f67; border-bottom: 1.5px solid #7a6f67; transform: rotate(45deg) translateY(-2px); margin-left: 10px; flex: none; }
+.in.ta { align-items: flex-start; padding: 8px 10px; white-space: pre-wrap; line-height: 1.5; min-height: 64px; font-size: 12.5px; }
+.in.typing::after { content: ""; width: 1.5px; height: 16px; background: #641a35; margin-left: 1px; animation: blink .8s steps(1) infinite; }
+.in.open { border-color: #a8834a; box-shadow: 0 0 0 3px rgba(168,131,74,.2); }
+@keyframes blink { 50% { opacity: 0; } }
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid #ddd5cb; font-size: 13px; font-weight: 600; background: #fff; white-space: nowrap; transition: transform .12s; }
+.btn.p { background: #641a35; color: #fff; border-color: #641a35; }
+.btn.sm { height: 30px; padding: 0 11px; font-size: 12.5px; }
+.btn.danger { color: #b42318; border-color: transparent; background: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.wide { width: 100%; justify-content: center; height: 40px; }
+.press { transform: scale(.95); }
+.cb { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; }
+.cb i { width: 17px; height: 17px; border: 1.5px solid #b9afa4; border-radius: 4px; flex: none; margin-top: 1px; display: grid; place-items: center; font-style: normal; color: #fff; font-size: 12px; font-weight: 700; }
+.cb.on i { background: #641a35; border-color: #641a35; }
+.cb.on i::after { content: "\2713"; }
+.cb small { display: block; color: #8a7f76; font-size: 11.5px; }
+.pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 99px; font-size: 11.5px; font-weight: 700; background: #eee9e2; color: #5d544d; }
+.pill.gold { background: #f5ead6; color: #7d5d26; }
+.pill.green { background: #def0e3; color: #23663f; }
+.pill.blue { background: #e1ebf7; color: #2b5a8f; }
+.pill.red { background: #f9e1de; color: #a1251a; }
+.pill.amber { background: #fbecd2; color: #8a5a0f; }
+.tb { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tb th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #8a7f76; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid #ece6de; background: #fbf9f6; }
+.tb td { padding: 10px 14px; border-bottom: 1px solid #f0ebe4; vertical-align: top; }
+.tb tr:last-child td { border-bottom: 0; }
+.tb td.r, .tb th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.tb .sm { font-size: 11.5px; color: #8a7f76; }
+.tb .gold { color: #a8834a; }
+.tb tr.new td { background: #fdf8ee; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid #e7e0d7; }
+.tabs span { padding: 8px 14px; font-weight: 600; color: #7a6f67; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs span.on { color: #24201d; border-color: #641a35; }
+.kpi { background: #fff; border: 1px solid #e7e0d7; border-radius: 12px; padding: 14px 16px; }
+.kpi small { display: block; color: #7a6f67; font-size: 12px; }
+.kpi b { display: block; font-size: 22px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kpi em { font-style: normal; font-size: 11.5px; color: #8a7f76; }
+.dl { display: grid; grid-template-columns: 120px 1fr; gap: 7px 12px; font-size: 13px; }
+.dl dt { color: #8a7f76; }
+.dl dd { margin: 0; font-weight: 500; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row .sp { flex: 1; }
+.ring { outline: 3px solid rgba(201,161,95,.95) !important; outline-offset: 3px; border-radius: 8px; box-shadow: 0 0 0 9px rgba(201,161,95,.18); transition: outline-offset .2s; }
+.pop { animation: pop .35s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.ov { position: absolute; inset: 0; background: rgba(24,16,14,.38); display: flex; align-items: center; justify-content: center; z-index: 20; }
+.dlg { width: 560px; background: #fff; border-radius: 14px; padding: 20px 22px; box-shadow: 0 24px 60px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 13px; }
+.dlg h3 { margin: 0; font-size: 17px; }
+.dlg p { margin: 0; color: #7a6f67; font-size: 13px; }
+.dlg .foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.menu { position: absolute; z-index: 25; background: #fff; border: 1px solid #e2dbd2; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.16); width: 280px; padding: 6px; }
+.menu .mh { font-size: 11.5px; color: #8a7f76; padding: 6px 10px 8px; }
+.menu .mi { padding: 9px 10px; border-radius: 8px; font-weight: 500; }
+.menu .mi.danger { color: #b42318; }
+.toast { position: absolute; right: 26px; bottom: 26px; z-index: 40; background: #1f2b23; color: #fff; padding: 12px 16px; border-radius: 11px; font-size: 13.5px; font-weight: 500; display: flex; gap: 9px; align-items: center; box-shadow: 0 12px 30px rgba(0,0,0,.25); animation: pop .3s ease-out; max-width: 560px; }
+.toast i { width: 18px; height: 18px; border-radius: 50%; background: #3f9b63; display: grid; place-items: center; font-style: normal; font-size: 11px; flex: none; }
+.toast i::after { content: "\2713"; }
+.cur { position: absolute; left: 0; top: 0; z-index: 60; width: 26px; height: 26px; pointer-events: none; transition: transform .7s cubic-bezier(.45,.05,.2,1); filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.rip { position: absolute; z-index: 59; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 3px solid rgba(201,161,95,.95); pointer-events: none; animation: rip .55s ease-out forwards; }
+@keyframes rip { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+
+/* Slides */
+.slide { position: absolute; inset: 0; background: #3d0f20; color: #f6eee6; display: flex; align-items: center; padding: 0 110px; }
+.slide::before { content: ""; position: absolute; inset: 34px; border: 1px solid rgba(214,182,124,.35); border-radius: 6px; pointer-events: none; }
+.slide .kick { font-size: 15px; letter-spacing: .2em; text-transform: uppercase; color: #d6b67c; font-weight: 600; }
+.slide h1 { font-family: var(--display); font-weight: 600; font-size: 96px; line-height: 1; margin: 14px 0 18px; }
+.slide h1 em { color: #d6b67c; font-weight: 500; }
+.slide p { font-size: 24px; color: #e3d4c8; margin: 0; max-width: 900px; }
+.slide .steps { display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+.slide .steps span { border: 1px solid rgba(214,182,124,.5); border-radius: 99px; padding: 8px 18px; font-size: 17px; }
+.slide table { border-collapse: collapse; width: 100%; font-size: 17px; margin-top: 18px; }
+.slide td { padding: 9px 12px; border-bottom: 1px solid rgba(214,182,124,.22); }
+.slide td:first-child { font-family: var(--display); font-size: 21px; color: #fff; width: 360px; }
+.slide td:last-child { color: #e3d4c8; }
+.slide .tag { font-size: 12px; color: #d6b67c; letter-spacing: .1em; text-transform: uppercase; }
+
+/* Login */
+.auth { position: absolute; inset: 0; background: #f1ece5; display: flex; align-items: center; justify-content: center; }
+.acard { width: 420px; background: #fff; border: 1px solid #e7e0d7; border-radius: 16px; padding: 30px 32px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 50px rgba(60,30,30,.08); }
+.alogo { font-family: var(--display); font-size: 32px; font-weight: 600; color: #641a35; text-align: center; }
+.asub { text-align: center; color: #7a6f67; margin-top: -10px; }
+.alink { text-align: center; color: #641a35; font-weight: 600; font-size: 13px; }
+.url { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); background: #fff; border: 1px solid #e2dbd2; border-radius: 99px; padding: 6px 18px; font-family: var(--mono); font-size: 12.5px; color: #5d544d; }
+
+/* Public site */
+.site { position: absolute; inset: 0; background: #fbf7f2; overflow: hidden; }
+.snav { display: flex; align-items: center; gap: 26px; padding: 18px 48px; border-bottom: 1px solid #ece4d8; font-size: 14px; color: #5d544d; background: #fff; }
+.snav .slogo { font-family: var(--display); font-size: 26px; font-weight: 600; color: #641a35; margin-right: auto; }
+.snav .on { color: #641a35; font-weight: 700; }
+.shero { padding: 26px 48px 10px; }
+.shero h1 { font-family: var(--display); font-size: 46px; font-weight: 600; margin: 0; color: #2a1d21; }
+.shero h1 em { color: #a8834a; }
+.shero p { margin: 4px 0 0; color: #6b625a; font-size: 15px; }
+.sform { margin: 12px 48px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; padding: 22px; }
+.sform .full { grid-column: 1 / -1; }
+.thanks { grid-column: 1 / -1; background: #e4f2e8; color: #1f5c37; border-radius: 10px; padding: 12px 14px; font-weight: 600; }
+
+/* Email */
+.inbox { position: absolute; inset: 0; background: #eef1f5; display: grid; grid-template-columns: 250px 1fr; }
+.ilist { background: #fff; border-right: 1px solid #dfe4ea; padding: 16px 0; }
+.ilist b { display: block; padding: 0 18px 12px; font-size: 16px; }
+.ilist .it { padding: 10px 18px; border-left: 3px solid transparent; font-size: 12.5px; color: #4a5260; }
+.ilist .it.on { background: #e8eef7; border-color: #2b5a8f; color: #1d2430; font-weight: 600; }
+.imsg { overflow: hidden; display: flex; flex-direction: column; }
+.ihead { padding: 16px 26px 10px; background: #fff; border-bottom: 1px solid #dfe4ea; }
+.isub { font-size: 18px; font-weight: 600; color: #1d2430; }
+.ifrom { font-size: 12px; color: #6a7383; margin-top: 2px; }
+.em { background: #f7f3ec; flex: 1; padding: 18px 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+.emc { width: 540px; background: #fff; border: 1px solid #ece4d8; border-radius: 12px; overflow: hidden; }
+.emtop { height: 4px; background: #641a35; }
+.embrand { text-align: center; padding: 16px 24px 12px; border-bottom: 1px solid #ece4d8; font-family: Georgia, serif; color: #641a35; font-size: 19px; }
+.embody { padding: 16px 26px 18px; font-size: 13.5px; line-height: 1.6; color: #24201d; }
+.embody h3 { font-family: Georgia, serif; font-weight: normal; font-size: 22px; margin: 0 0 10px; }
+.embody p { margin: 0 0 9px; }
+.emdet { width: 100%; border-collapse: collapse; background: #fbf8f3; border: 1px solid #ece4d8; border-radius: 8px; margin: 6px 0 12px; }
+.emdet td { padding: 7px 14px; border-top: 1px solid #ece4d8; font-size: 12.5px; color: #6b625a; }
+.emdet tr:first-child td { border-top: 0; }
+.emdet td + td { text-align: right; color: #24201d; font-weight: 600; }
+.emdet td.big { font-family: Georgia, serif; font-size: 17px; color: #641a35; }
+.emcta { display: inline-block; background: #641a35; color: #fff; border-radius: 99px; padding: 10px 24px; font-weight: 700; font-size: 13.5px; }
+.emsign { margin-top: 12px !important; }
+.emsign i { font-family: Georgia, serif; color: #641a35; font-style: normal; font-size: 15px; }
+.emfoot { font-size: 11px; color: #9a9087; margin-top: 10px; }
+
+/* Phone */
+.desk { position: absolute; inset: 0; background: linear-gradient(160deg, #efe7dd, #e4d8ca); display: flex; align-items: center; justify-content: center; gap: 70px; }
+.phone { width: 330px; height: 676px; background: #1b1617; border-radius: 44px; padding: 12px; box-shadow: 0 30px 70px rgba(50,25,20,.3); }
+.pscreen { width: 100%; height: 100%; background: #fbf8f4; border-radius: 34px; overflow: hidden; display: flex; flex-direction: column; }
+.pbar { font-family: var(--mono); font-size: 10.5px; color: #6b625a; background: #f0ebe4; padding: 26px 16px 8px; text-align: center; }
+.pc { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.plogo { font-family: var(--display); font-size: 21px; font-weight: 600; color: #641a35; text-align: center; }
+.ptitle { font-weight: 700; font-size: 15px; }
+.psub { color: #7a6f67; font-size: 11.5px; margin-top: -6px; }
+.ptb { width: 100%; border-collapse: collapse; font-size: 11.5px; border-radius: 8px; }
+.ptb td { padding: 5px 0; border-bottom: 1px solid #ece4d8; }
+.ptb td + td { text-align: right; font-variant-numeric: tabular-nums; }
+.ptot { display: flex; justify-content: space-between; font-size: 13px; }
+.ptot b { color: #641a35; }
+.padv { font-size: 11.5px; color: #7a6f67; margin-top: -4px; }
+.ppdf { color: #641a35; font-weight: 600; font-size: 12px; }
+.pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.pp { border: 1px solid #cfc6bb; border-radius: 99px; padding: 4px 10px; font-size: 11px; font-weight: 600; background: #fff; }
+.pp.on { background: #5a1f2b; border-color: #5a1f2b; color: #fff; }
+.pc .in { min-height: 30px; font-size: 12px; }
+.pc .cb { font-size: 11.5px; }
+.pc .btn.wide { height: 36px; background: #5a1f2b; border-color: #5a1f2b; }
+.pok { background: #e4f2e8; color: #1f5c37; border-radius: 10px; padding: 12px; font-weight: 600; font-size: 12.5px; line-height: 1.5; }
+.desk .side-note { width: 300px; font-family: var(--display); font-size: 30px; line-height: 1.2; color: #3d0f20; }
+.desk .side-note small { display: block; font-family: var(--body); font-size: 15px; color: #6b625a; margin-top: 10px; line-height: 1.5; }
+
+/* Lists & misc */
+.list { display: flex; flex-direction: column; }
+.list .li { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid #f0ebe4; }
+.list .li:last-child { border-bottom: 0; }
+.list .li .n { width: 18px; color: #8a7f76; font-variant-numeric: tabular-nums; font-size: 12px; }
+.list .li .t { flex: 1; min-width: 0; }
+.list .li .t small { display: block; color: #8a7f76; font-size: 11.5px; }
+.ok { width: 18px; height: 18px; border-radius: 50%; background: #3f9b63; color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex: none; }
+.ok::after { content: "\2713"; }
+.off { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c9bfb4; flex: none; }
+.tog { width: 36px; height: 20px; border-radius: 99px; background: #641a35; position: relative; flex: none; }
+.tog::after { content: ""; position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.tog.no { background: #d6cdc2; }
+.tog.no::after { right: auto; left: 3px; }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.tile { border-radius: 10px; height: 118px; position: relative; overflow: hidden; border: 1px solid #e7e0d7; }
+.tile .cap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.92); font-size: 11px; padding: 5px 8px; display: flex; align-items: center; gap: 6px; }
+.tile .cap .sp { flex: 1; }
+.ph1 { background: linear-gradient(135deg, #e9c9c4, #c98d8a 60%, #8c4a52); }
+.ph2 { background: linear-gradient(135deg, #f3e3c2, #d6b67c 55%, #a8834a); }
+.ph3 { background: linear-gradient(135deg, #dfe6d5, #a9b98f 60%, #6c7d55); }
+.ph4 { background: linear-gradient(135deg, #f2dfe6, #d9a6b8 55%, #9b5470); }
+.ph5 { background: linear-gradient(135deg, #e7e0f0, #b8a8d0 60%, #75629a); }
+.ph6 { background: linear-gradient(135deg, #fbefe1, #eec9a0 55%, #c08a55); }
+.thumb { border-radius: 10px; height: 120px; }
+.preview { border-radius: 12px; overflow: hidden; border: 1px solid #e7e0d7; }
+.preview .pv { background: linear-gradient(120deg, rgba(40,15,22,.82), rgba(40,15,22,.35)), linear-gradient(135deg, #e9c9c4, #8c4a52); color: #fff; padding: 34px 26px; min-height: 230px; }
+.preview .pv small { letter-spacing: .14em; text-transform: uppercase; font-size: 10.5px; color: #e4c98f; font-weight: 600; }
+.preview .pv div { font-family: var(--display); font-size: 36px; font-weight: 600; line-height: 1.1; margin: 8px 0 10px; }
+.preview .pv div em { color: #e4c98f; font-weight: 500; }
+.preview .pv .b { display: inline-block; background: #fff; color: #641a35; border-radius: 99px; padding: 7px 16px; font-size: 12px; font-weight: 700; }
+.foot-bar { margin: auto -28px -22px; border-top: 1px solid #e7e0d7; background: #fff; padding: 12px 28px; display: flex; align-items: center; gap: 10px; }
+.foot-bar .warn { color: #b7791f; font-size: 12px; font-weight: 600; margin-right: auto; }
+@media (prefers-reduced-motion: reduce) { .cur { transition: none; } .pop, .toast, .rip { animation: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="kick">Timeless Ties Events &amp; Decor · staff training</div>
+    <h1>Video manual</h1>
+    <p>Press play to watch the whole flow: a website inquiry, the quotation, the booking and advance, payments and email, and editing the website. A voice reads each step and the captions show the same words.</p>
+  </header>
+
+  <div class="layout">
+    <section class="player" id="player" aria-label="Video manual player">
+      <div class="screen" id="screen">
+        <div class="stage" id="stage"></div>
+        <button class="bigplay" id="bigplay" aria-label="Play the video manual"><span><svg width="34" height="34" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="#fff"/></svg></span></button>
+      </div>
+      <div class="bar" id="bar" title="Jump to a step"><i id="fill"></i></div>
+      <div class="caption" aria-live="polite">
+        <div class="where" id="where"></div>
+        <p id="cap"></p>
+      </div>
+      <div class="controls">
+        <button id="prev" aria-label="Previous step">Back</button>
+        <button id="play" class="main">Play</button>
+        <button id="next" aria-label="Next step">Next</button>
+        <button id="voiceBtn" aria-pressed="true">Voice on</button>
+        <select id="voiceSel" aria-label="Voice"></select>
+        <select id="rateSel" aria-label="Speed">
+          <option value="0.9">0.9×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.15">1.15×</option>
+          <option value="1.3">1.3×</option>
+        </select>
+        <button id="fs">Full screen</button>
+        <span class="time" id="time"></span>
+      </div>
+    </section>
+
+    <nav class="rail" aria-label="Chapters">
+      <h2>Chapters</h2>
+      <div id="chapters" style="display:flex;flex-direction:column;gap:2px"></div>
+    </nav>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ───────── building blocks ───────── */
+  const F = (label, val, t, cls = "", hint = "") =>
+    `<div class="f"><label>${label}</label><div class="in ${cls}" data-t="${t}">${val}</div>${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
+  const B = (txt, t, k = "") => `<span class="btn ${k}" data-t="${t}">${txt}</span>`;
+  const CB = (txt, t, on, sub = "") => `<div class="cb ${on ? "on" : ""}" data-t="${t}"><i></i><span>${txt}${sub ? `<small>${sub}</small>` : ""}</span></div>`;
+  const P = (txt, tone = "") => `<span class="pill ${tone}">${txt}</span>`;
+  const ICON = {
+    search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+    bell: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5d544d" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+    up: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5d544d" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>',
+    down: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5d544d" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+    pen: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5d544d" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>'
+  };
+  const NAV = [
+    ["Overview", ["Dashboard", "Notifications"]],
+    ["Clients & Sales", ["Leads", "Inquiries", "Pipeline", "Customers", "Quotations", "Bookings"]],
+    ["Event Management", ["Calendar", "Events", "Tasks"]],
+    ["Operations", ["Inventory", "Vendors", "Staff"]],
+    ["Finance", ["Invoices", "Payments", "Expenses"]],
+    ["Website", ["Website CMS", "Services", "Packages", "Gallery", "Testimonials"]],
+    ["System", ["Settings", "Users & Roles", "Activity Logs"]]
+  ];
+  function shell(active, body, overlay = "", badge = 0) {
+    const side = NAV.map(([g, items], i) =>
+      `<div class="grp" data-t="g${i}"><b>${g.replace("&", "&amp;")}</b>${items.map(n => `<div class="ni ${n === active ? "on" : ""}">${n.replace("&", "&amp;")}</div>`).join("")}</div>`).join("");
+    return `<div class="app"><aside class="side"><div class="brand">Timeless Ties<small>Admin</small></div>${side}</aside>
+      <div class="main"><div class="top"><div class="search" data-t="search">${ICON.search} Search customers, quotations, bookings…</div>
+      <div class="bell" data-t="bell">${ICON.bell}${badge ? `<span class="dot">${badge}</span>` : ""}</div><div class="avatar">TT</div></div>
+      <div class="content">${body}</div></div></div>${overlay}`;
+  }
+  function mail(subject, heading, paras, rows, cta, list) {
+    return `<div class="inbox"><div class="ilist"><b>Inbox</b>${list.map((l, i) => `<div class="it ${i === 0 ? "on" : ""}">${l}</div>`).join("")}</div>
+      <div class="imsg"><div class="ihead"><div class="isub">${subject}</div><div class="ifrom">Timeless Ties Events &amp; Decor &lt;noreply@timelesstieevents.com.np&gt; · to priya@example.com</div></div>
+      <div class="em"><div class="emc"><div class="emtop"></div><div class="embrand">Timeless Ties Events &amp; Decor</div>
+      <div class="embody"><h3>${heading}</h3>${paras.map(p => `<p>${p}</p>`).join("")}
+      <table class="emdet" data-t="det">${rows.map(([a, b, big]) => `<tr><td>${a}</td><td class="${big ? "big" : ""}">${b}</td></tr>`).join("")}</table>
+      ${cta ? `<span class="emcta" data-t="cta">${cta} &rarr;</span>` : ""}
+      <p class="emsign">Warm regards,<br><i>The Timeless Ties team</i></p></div></div>
+      <div class="emfoot">This is an automated email. Please do not reply to this message.</div></div></div></div>`;
+  }
+
+  /* ───────── screens reused by several steps ───────── */
+  function quoteView(o) {
+    const sent = o.status !== "Draft";
+    const actions = `${sent ? B("Share", "share") : ""}${B("Print / PDF", "print")}${o.status !== "Accepted" ? B("Edit", "edit") : ""}${B("Duplicate", "dup")}
+      ${o.status !== "Accepted" ? B(sent ? "Re-send" : "Send to client", "send", sent ? "" : "p") : ""}${B("Record advance", "recadv", o.status === "Accepted" ? "p" : "")}${B("Convert to booking", "convert")}${sent && o.status !== "Accepted" ? B("Mark declined", "decl", "danger") : ""}`;
+    const tone = { Draft: "", Sent: "blue", Accepted: "green" }[o.status];
+    const body = `<div class="crumb">Quotations /</div>
+      <div class="hrow"><h2 class="pt">Priya &amp; Anil — wedding reception</h2><span data-t="st-a">${P(o.status, tone)}</span><span data-t="st-b" hidden>${P("Sent", "blue")}</span></div>
+      <div class="pd">QT-2026-021 · Priya Sharma · valid until 20 Nov 2026</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">${actions}</div>
+      <div class="g2" style="grid-template-columns:1.55fr 1fr">
+        <div class="card p0"><table class="tb"><thead><tr><th>Description</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>
+          <tr><td><b>Royal Wedding package</b><div class="sm">1 × stage backdrop, 2 × entrance arch, 40 × table centrepiece</div></td><td class="r">1</td><td class="r">3,50,000</td><td class="r">3,50,000</td></tr>
+          <tr><td><b>Fairy-light canopy</b><div class="sm gold">Linked to inventory</div></td><td class="r">2</td><td class="r">12,000</td><td class="r">24,000</td></tr>
+          <tr><td><b>Mandap with fresh florals</b></td><td class="r">1</td><td class="r">85,000</td><td class="r">85,000</td></tr>
+          <tr><td class="sm">Subtotal 4,59,000 · discount 5% −22,950 · VAT 13% +56,687</td><td></td><td class="r"><b>Total</b></td><td class="r"><b>NPR 4,92,737</b></td></tr>
+        </tbody></table></div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="card"><h4>Client</h4><dl class="dl"><dt>Name</dt><dd>Priya Sharma</dd><dt>Email</dt><dd>priya@example.com</dd><dt>Event</dt><dd>12 Dec 2026 · Hotel Shanker</dd><dt>Guests</dt><dd>300</dd></dl></div>
+          <div class="card"><h4>Advance</h4><dl class="dl"><dt>To confirm</dt><dd>NPR 1,00,000</dd><dt>Balance</dt><dd>NPR 3,92,737</dd></dl></div>
+        </div>
+      </div>`;
+    let overlay = "";
+    if (o.send) overlay += `<div class="ov" data-t="dlg-send"><div class="dlg"><h3>Send quotation</h3>
+      <p>The client gets a private link to review, download and accept the quotation. Sending freezes this version.</p>
+      ${CB("Email the link to priya@example.com", "emcb", true, "They'll get an email with the link. You can also share it on WhatsApp.")}
+      <div class="foot">${B("Cancel", "x")}${B("Mark as sent", "marksent", "p")}</div></div></div>`;
+    if (o.menu) overlay += `<div class="menu" data-t="menu" hidden style="left:242px;top:206px"><div class="mh">Client can view &amp; download — no login needed</div>
+      <div class="mi" data-t="m-wa">Send on WhatsApp</div><div class="mi" data-t="m-copy">Copy client link</div><div class="mi" data-t="m-open">Open client view</div><div class="mi danger" data-t="m-reset">Reset link</div></div>`;
+    if (o.adv) overlay += `<div class="ov" data-t="dlg-adv" hidden><div class="dlg"><h3>Record advance payment</h3><p>Advance to confirm: NPR 1,00,000. This turns the quotation into a booking (with its event and inventory reservations) and records the payment against it.</p>
+      <div class="g2">${F("Advance received (NPR)", "1,00,000", "amt")}${F("Date received", "25 Oct 2026", "pdate")}${F("Method", "Cash", "meth", "sel")}${F("Reference", "", "ref")}</div>
+      ${CB("Confirm the booking now", "conf", true, "Leave unticked to keep it pending until NPR 1,00,000 in total is paid.")}
+      <div class="foot">${B("Cancel", "x2")}${B("Record advance &amp; book", "savadv", "p")}</div></div></div>`;
+    return shell("Quotations", body, overlay);
+  }
+
+  /* ───────── the scenes ───────── */
+  const CHAPTERS = ["Welcome and signing in", "A new inquiry", "Making a quotation", "Sending and sharing", "What the client sees", "Booking and the advance", "Payments and email", "Editing the website"];
+
+  const S = [];
+  const add = (ch, title, say, html, steps = []) => S.push({ ch, title, say, html, steps });
+
+  /* 1. Welcome */
+  add(0, "Welcome",
+    "Welcome to the Timeless Ties video manual. In about ten minutes you will see how an inquiry becomes a quotation, a booking and a payment, how the emails work, and how to edit the website.",
+    () => `<div class="slide"><div><div class="kick">Timeless Ties Events &amp; Decor</div><h1>The admin panel, <em>step by step</em></h1><p>From the first website inquiry to a paid, confirmed event.</p>
+      <div class="steps"><span>Inquiry</span><span>Quotation</span><span>Booking</span><span>Payment</span><span>Email</span><span>Website</span></div></div></div>`);
+  add(0, "Signing in",
+    "Staff sign in at slash admin slash login, with the email and password from their invitation. If you forget your password, click Forgot password and a reset link is emailed to you.",
+    () => `<div class="auth"><div class="url">timelesstieevents.com.np/admin/login</div><div class="acard"><div class="alogo">Timeless Ties</div><div class="asub">Sign in to the admin panel</div>
+      ${F("Email", "", "email")}${F("Password", "", "pw")}${B("Sign in", "signin", "p wide")}<div class="alink" data-t="forgot">Forgot password?</div></div></div>`,
+    [{ t: "type", to: "email", text: "you@timelesstieevents.com.np" }, { t: "type", to: "pw", text: "••••••••••" }, { t: "click", to: "signin" }, { t: "hl", to: "forgot" }]);
+  add(0, "The dashboard",
+    "This is the dashboard. The menu on the left is grouped by job: clients and sales, events, operations, finance and the website. You only see the parts your role allows. The search bar at the top finds any customer, quotation or booking.",
+    () => shell("Dashboard", `<h2 class="pt">Dashboard</h2><div class="pd">Today at a glance.</div>
+      <div class="g4"><div class="kpi"><small>New inquiries</small><b>3</b><em>this week</em></div><div class="kpi"><small>Quotations awaiting reply</small><b>4</b><em>NPR 14,80,000</em></div><div class="kpi"><small>Events this month</small><b>6</b><em>next: 2 Nov</em></div><div class="kpi"><small>Money owed</small><b>NPR 7,37,737</b><em>3 bookings</em></div></div>
+      <div class="g2"><div class="card"><h4>Upcoming events</h4><div class="list"><div class="li"><div class="t">Rai engagement<small>2 Nov 2026 · Soaltee</small></div>${P("Confirmed", "green")}</div><div class="li"><div class="t">Thapa bratabandha<small>9 Nov 2026 · Bhaktapur</small></div>${P("Confirmed", "green")}</div><div class="li"><div class="t">Karki 25th anniversary<small>21 Nov 2026 · Dhulikhel</small></div>${P("Pending", "amber")}</div></div></div>
+      <div class="card"><h4>Today's follow-ups</h4><div class="list"><div class="li"><div class="t">Call Sunita Rai about the advance<small>Phone · due today</small></div></div><div class="li"><div class="t">Send gallery ideas to Bikash<small>WhatsApp · due today</small></div></div></div></div></div>`),
+    [{ t: "hl", to: "g1" }, { t: "hl", to: "g2" }, { t: "hl", to: "g4" }, { t: "hl", to: "g5" }, { t: "hl", to: "search" }]);
+
+  /* 2. Inquiry */
+  add(1, "The website inquiry form",
+    "It starts on the website. A visitor fills in the inquiry form with their name, contact details, event type, date and guest count, and clicks Send inquiry.",
+    () => `<div class="site"><div class="snav"><span class="slogo">Timeless Ties</span><span>Home</span><span>Services</span><span>Gallery</span><span>Catalogue</span><span>About</span><span class="on">Contact</span></div>
+      <div class="shero"><h1>Let's plan your <em>celebration</em></h1><p>Tell us about your event and our team will get back to you.</p></div>
+      <div class="card sform">${F("Your name", "", "nm")}${F("Phone", "", "ph")}${F("Email", "", "ml")}${F("Event type", "Choose…", "et", "sel")}${F("Event date", "", "ed")}${F("Guests", "Choose…", "gs", "sel")}
+      <div class="f full"><label>Tell us about your ideas</label><div class="in ta" data-t="msg"></div></div><div>${B("Send inquiry", "send", "p")}</div>
+      <div class="thanks" data-t="thanks" hidden>Thank you! We've received your inquiry. Reference IQ-2026-014.</div></div></div>`,
+    [{ t: "type", to: "nm", text: "Priya Sharma" }, { t: "type", to: "ph", text: "+977 980-0000000" }, { t: "type", to: "ml", text: "priya@example.com" }, { t: "sel", to: "et", text: "Wedding" },
+     { t: "type", to: "ed", text: "12 Dec 2026" }, { t: "sel", to: "gs", text: "250–300" }, { t: "type", to: "msg", text: "We'd love a pastel theme with lots of fresh flowers." }, { t: "click", to: "send" }, { t: "show", to: "thanks" }]);
+  add(1, "The confirmation email",
+    "The visitor gets a confirmation email straight away, with their reference number. It comes from the no-reply address. You can switch it off in Settings, Automations.",
+    () => mail("We received your inquiry (IQ-2026-014) — Timeless Ties", "Thank you, Priya!",
+      ["We've received your inquiry and can't wait to hear more about your wedding.", "Someone from our team will contact you shortly to talk through your ideas. If it's urgent, call or WhatsApp us any time."],
+      [["Reference", "IQ-2026-014"], ["Event", "Wedding"], ["Date", "Saturday, 12 December 2026"]], "", ["We received your inquiry", "Weekly offers", "Your receipt"]),
+    [{ t: "hl", to: "det", ms: 2400 }]);
+  add(1, "The inquiry in the admin panel",
+    "In the admin panel, the bell shows a new notification, and the inquiry appears under Clients and Sales, Inquiries. Click it to open everything the client sent.",
+    () => shell("Inquiries", `<h2 class="pt">Inquiries</h2><div class="pd">Website inquiries and booking requests.</div>
+      <div class="card p0"><table class="tb"><thead><tr><th>Ref</th><th>Name</th><th>Event</th><th>Date</th><th>Guests</th><th>Status</th></tr></thead><tbody>
+      <tr class="new" data-t="row"><td>IQ-2026-014</td><td><b>Priya Sharma</b></td><td>Wedding</td><td>12 Dec 2026</td><td>250–300</td><td>${P("New", "gold")}</td></tr>
+      <tr><td>IQ-2026-013</td><td>Sunita Rai</td><td>Engagement</td><td>2 Nov 2026</td><td>100–150</td><td>${P("Quoted", "blue")}</td></tr>
+      <tr><td>IQ-2026-012</td><td>Bikash Thapa</td><td>Bratabandha</td><td>9 Nov 2026</td><td>150–200</td><td>${P("Booked", "green")}</td></tr>
+      <tr><td>IQ-2026-011</td><td>Asha Karki</td><td>Anniversary</td><td>21 Nov 2026</td><td>50–100</td><td>${P("Contacted")}</td></tr></tbody></table></div>`, "", 1),
+    [{ t: "hl", to: "bell" }, { t: "hl", to: "row" }, { t: "click", to: "row" }]);
+
+  /* 3. Quotation */
+  add(2, "Create the quotation from the inquiry",
+    "On the inquiry, click Create quotation. Everything the client gave you is copied in, so you don't type it twice. You can also start a quotation from a lead, a customer, or Quotations, New quotation.",
+    () => shell("Inquiries", `<div class="crumb">Inquiries /</div><div class="hrow"><h2 class="pt">Priya Sharma</h2>${P("New", "gold")}<span class="sp"></span>${B("Create quotation", "createq", "p")}</div>
+      <div class="pd">IQ-2026-014 · received 2 minutes ago</div>
+      <div class="g2"><div class="card" data-t="det"><h4>Event</h4><dl class="dl"><dt>Event type</dt><dd>Wedding</dd><dt>Date</dt><dd>12 Dec 2026</dd><dt>Venue</dt><dd>Hotel Shanker</dd><dt>Guests</dt><dd>250–300</dd><dt>Package</dt><dd>Royal Wedding</dd><dt>Designs picked</dt><dd>Mandap with fresh florals (Rs 85,000)</dd></dl></div>
+      <div class="card"><h4>Contact</h4><dl class="dl"><dt>Phone</dt><dd>+977 980-0000000</dd><dt>Email</dt><dd>priya@example.com</dd><dt>Message</dt><dd>We'd love a pastel theme with lots of fresh flowers.</dd></dl></div></div>`),
+    [{ t: "hl", to: "det", ms: 2000 }, { t: "click", to: "createq" }]);
+  add(2, "Check the event details",
+    "Check the customer, title, event date, venue and guests. Valid until is the last day the client can accept online, and it must be before the event date. The coupon code is optional.",
+    () => shell("Quotations", `<div class="crumb">Quotations /</div><h2 class="pt">New quotation</h2><div class="pd" data-t="pref">Prefilled from inquiry IQ-2026-014.</div>
+      <div class="card"><div class="g2">${F("Customer", "Priya Sharma", "cust", "sel")}${F("Title", "Priya &amp; Anil — wedding reception", "title")}${F("Event type", "Wedding", "etype", "sel")}${F("Event date", "12 Dec 2026", "edate")}
+      ${F("Venue", "Hotel Shanker", "venue")}${F("Guests", "300", "guests")}${F("Valid until", "20 Nov 2026", "valid", "", "The client can accept online until this date.")}${F("Coupon code", "", "coupon", "", "Optional — applied if it gives a bigger discount.")}</div></div>`),
+    [{ t: "hl", to: "pref" }, { t: "hl", to: "cust" }, { t: "hl", to: "title" }, { t: "hl", to: "edate" }, { t: "hl", to: "valid", ms: 2200 }]);
+  add(2, "Add the line items",
+    "Now add what you are charging for. Pick a package and click Add package. Add decor from inventory, so that stock is reserved when it is booked. Click Add line for anything custom, and type the description, quantity, unit and price.",
+    () => shell("Quotations", `<h2 class="pt">New quotation</h2><div class="card">
+      <div class="row" style="gap:8px"><b style="font-size:14px">Line items</b><span class="sp"></span><div class="in sel" style="width:240px" data-t="pkg">No package</div>${B("Add package", "addpkg", "sm")}<div class="in sel" style="width:220px" data-t="inv">Add an inventory item…</div>${B("Add", "addinv", "sm")}</div>
+      <div class="hint" style="margin:6px 0 10px">Lines linked to inventory reserve that stock when the quotation becomes a booking. A package also reserves its contents.</div>
+      <table class="tb"><thead><tr><th style="width:46%">Description</th><th>Qty</th><th>Unit</th><th>Unit price</th><th class="r">Amount</th></tr></thead><tbody>
+      <tr data-t="r1" hidden><td><b>Royal Wedding package</b><div class="sm">1 × stage backdrop, 2 × entrance arch, 40 × table centrepiece</div></td><td>1</td><td>package</td><td>3,50,000</td><td class="r">3,50,000</td></tr>
+      <tr data-t="r2" hidden><td><b>Fairy-light canopy</b><div class="sm gold">Linked to inventory</div></td><td>2</td><td>set</td><td>12,000</td><td class="r">24,000</td></tr>
+      <tr data-t="r3" hidden><td><div class="in" data-t="d3"></div></td><td><div class="in" data-t="q3" style="width:60px"></div></td><td><div class="in" data-t="u3" style="width:80px"></div></td><td><div class="in" data-t="p3" style="width:110px"></div></td><td class="r" data-t="a3">0</td></tr>
+      </tbody></table><div style="margin-top:10px">${B("+ Add line", "addline", "sm")}</div></div>`),
+    [{ t: "sel", to: "pkg", text: "Royal Wedding — NPR 3,50,000" }, { t: "click", to: "addpkg" }, { t: "show", to: "r1" },
+     { t: "sel", to: "inv", text: "Fairy-light canopy" }, { t: "click", to: "addinv" }, { t: "show", to: "r2" },
+     { t: "click", to: "addline" }, { t: "show", to: "r3" }, { t: "type", to: "d3", text: "Mandap with fresh florals" }, { t: "type", to: "q3", text: "1" }, { t: "type", to: "u3", text: "set" }, { t: "type", to: "p3", text: "85,000" }, { t: "type", to: "a3", text: "85,000", noclick: true }]);
+  add(2, "Discount, VAT, advance and terms",
+    "On the right, set a discount in rupees or percent, the VAT rate, and the advance the client must pay to lock the date. The terms come from Settings, and you can change them for this client. Click Create quotation. It is saved as a draft that only staff can see.",
+    () => shell("Quotations", `<h2 class="pt">New quotation</h2><div class="g2" style="grid-template-columns:1fr 360px">
+      <div style="display:flex;flex-direction:column;gap:12px">${F("Notes for the client", "Pastel theme with fresh seasonal flowers.", "notes", "ta")}
+      <div class="f"><label>Terms &amp; conditions</label><div class="in ta" data-t="terms" style="min-height:190px">1. An advance is required to confirm the booking; the date is held only once the advance is received.
+2. The remaining balance is due on or before the event date unless agreed otherwise in writing.
+3. Prices include setup and dismantling within Kathmandu Valley. Venues outside the valley may incur transport charges.
+4. Fresh flowers are seasonal; similar varieties may be substituted while keeping the agreed look and colours.</div><div class="hint">Defaults come from Settings → Quotations.</div></div></div>
+      <div class="card" style="display:flex;flex-direction:column;gap:11px;background:#fbf9f6">
+        <div class="row"><span>Subtotal</span><span class="sp"></span><b>NPR 4,59,000</b></div>
+        <div class="row"><span>Discount</span><span class="sp"></span><div class="in sel" style="width:70px" data-t="dtype">NPR</div><div class="in" style="width:90px" data-t="disc">0</div></div>
+        <div class="row" data-t="dline" hidden style="color:#8a7f76"><span class="sp"></span>− NPR 22,950</div>
+        <div class="row"><span>Tax / VAT %</span><span class="sp"></span><div class="in" style="width:90px" data-t="vat">0</div></div>
+        <div class="row" data-t="vline" hidden style="color:#8a7f76"><span class="sp"></span>+ NPR 56,687</div>
+        <div class="row" style="border-top:1px solid #e7e0d7;padding-top:10px;font-size:16px"><b>Total</b><span class="sp"></span><b data-t="total">NPR 4,59,000</b></div>
+        <div class="row"><span>Advance to confirm (NPR)</span><span class="sp"></span><div class="in" style="width:110px" data-t="adv">0</div></div>
+        <div class="row" style="color:#8a7f76"><span>Balance</span><span class="sp"></span><span data-t="bal">NPR 4,59,000</span></div>
+      </div></div>
+      <div class="foot-bar"><span class="sp" style="flex:1"></span>${B("Cancel", "cx")}${B("Create quotation", "create", "p")}</div>`),
+    [{ t: "sel", to: "dtype", text: "%" }, { t: "type", to: "disc", text: "5" }, { t: "show", to: "dline" }, { t: "type", to: "vat", text: "13" }, { t: "show", to: "vline" },
+     { t: "type", to: "total", text: "NPR 4,92,737", noclick: true }, { t: "type", to: "adv", text: "1,00,000" }, { t: "type", to: "bal", text: "NPR 3,92,737", noclick: true },
+     { t: "hl", to: "terms" }, { t: "click", to: "create" }, { t: "toast", text: "Quotation created" }]);
+
+  /* 4. Send */
+  add(3, "The quotation page",
+    "This is the quotation page. Click Print or PDF to see exactly what the client will see. When it is ready, click Send to client.",
+    () => quoteView({ status: "Draft" }),
+    [{ t: "hl", to: "st-a" }, { t: "hl", to: "print" }, { t: "click", to: "send" }]);
+  add(3, "Send it",
+    "Leave Email the link ticked, and the client gets an email with a private link. Sending freezes this version. Click Mark as sent. The status changes to Sent.",
+    () => quoteView({ status: "Draft", send: true }),
+    [{ t: "hl", to: "emcb" }, { t: "click", to: "marksent" }, { t: "hide", to: "dlg-send" }, { t: "hide", to: "st-a" }, { t: "show", to: "st-b" }, { t: "toast", text: "Sent — the client has been emailed" }]);
+  add(3, "Share on WhatsApp",
+    "Use Share to send the same link on WhatsApp, copy it, or open the client view yourself. If the link ever goes to the wrong person, Reset link makes the old one stop working at once.",
+    () => quoteView({ status: "Sent", menu: true }),
+    [{ t: "click", to: "share" }, { t: "show", to: "menu" }, { t: "hl", to: "m-wa" }, { t: "hl", to: "m-copy" }, { t: "hl", to: "m-open" }, { t: "hl", to: "m-reset" }]);
+  add(3, "The quotation email",
+    "This is the email the client receives. It shows the quotation number, the event, the valid until date and the total. The button opens their private quotation page. No login is needed.",
+    () => mail("Your quotation QT-2026-021 from Timeless Ties", "Your quotation is ready",
+      ["Hi Priya, thank you for considering us for Priya &amp; Anil — wedding reception. We've prepared a quotation based on everything we discussed.", "Open it to review each item, download a PDF, accept it online or ask us for changes."],
+      [["Quotation", "QT-2026-021"], ["Event", "Priya &amp; Anil — wedding reception"], ["Valid until", "Friday, 20 November 2026"], ["Total", "NPR 4,92,737", true]], "View your quotation",
+      ["Your quotation QT-2026-021", "We received your inquiry", "Weekly offers"]),
+    [{ t: "hl", to: "det" }, { t: "hl", to: "cta", ms: 2000 }]);
+
+  /* 5. Client */
+  add(4, "The client accepts online",
+    "On their phone, the client sees every item, the total and the advance, and can download a PDF. To accept, they keep Accept quotation selected, type their full name, tick the terms, and press Accept quotation.",
+    () => `<div class="desk"><div class="phone"><div class="pscreen"><div class="pbar">timelesstieevents.com.np/quote/…</div><div class="pc">
+      <div class="plogo">Timeless Ties</div><div class="ptitle">Quotation QT-2026-021</div><div class="psub">Priya &amp; Anil — wedding reception · 12 Dec 2026</div>
+      <table class="ptb" data-t="items"><tr><td>Royal Wedding package</td><td>3,50,000</td></tr><tr><td>Fairy-light canopy × 2</td><td>24,000</td></tr><tr><td>Mandap with fresh florals</td><td>85,000</td></tr><tr><td>Discount 5% · VAT 13%</td><td>+33,737</td></tr></table>
+      <div class="ptot"><span>Total</span><b>NPR 4,92,737</b></div><div class="padv">Advance to confirm: NPR 1,00,000</div><div class="ppdf" data-t="pdf">Download PDF</div>
+      <div data-t="pform" style="display:flex;flex-direction:column;gap:8px"><div class="pills"><span class="pp on" data-t="pa">Accept quotation</span><span class="pp" data-t="pchg">Request changes</span><span class="pp">Decline</span></div>
+      ${F("Your full name", "", "pname")}${CB("I have read and agree to the terms &amp; conditions in this quotation.", "pagree", false)}${B("Accept quotation", "pacc", "p wide")}</div>
+      <div class="pok" data-t="pok" hidden>Thank you — your quotation is accepted. We'll be in touch shortly about the NPR 1,00,000 advance to confirm your date.</div>
+      </div></div></div><div class="side-note">What the client sees<small>A private link that works without a login. They can also choose Request changes or Decline and write a message.</small></div></div>`,
+    [{ t: "hl", to: "items" }, { t: "hl", to: "pdf" }, { t: "hl", to: "pa" }, { t: "type", to: "pname", text: "Priya Sharma" }, { t: "check", to: "pagree" }, { t: "click", to: "pacc" }, { t: "hide", to: "pform" }, { t: "show", to: "pok", ms: 1200 }]);
+  add(4, "What happens automatically",
+    "The moment the client accepts, the site does the paperwork. A pending booking and its event are created, the stock is reserved, a task is added to confirm the advance, the team is notified, and the client gets a thank-you email. If the client asks for changes instead, edit the quotation and send it again.",
+    () => shell("Notifications", `<h2 class="pt">Notifications</h2><div class="pd">Right after Priya accepted.</div>
+      <div class="card p0"><div class="list">
+      <div class="li" data-t="n1" hidden><span class="ok"></span><div class="t"><b>Priya Sharma accepted QT-2026-021</b><small>High priority · just now</small></div>${P("Quotation", "blue")}</div>
+      <div class="li" data-t="n2" hidden><span class="ok"></span><div class="t"><b>Pending booking BK-2026-009 created</b><small>With its event workspace and inventory reservations for 12 Dec 2026</small></div>${P("Booking", "amber")}</div>
+      <div class="li" data-t="n3" hidden><span class="ok"></span><div class="t"><b>Task: Confirm advance and kick off planning</b><small>High priority · due in 2 days</small></div>${P("Task")}</div>
+      <div class="li" data-t="n4" hidden><span class="ok"></span><div class="t"><b>Email to client: “Thank you — QT-2026-021 accepted”</b><small>Includes the NPR 1,00,000 advance to confirm</small></div>${P("Email", "green")}</div>
+      </div></div>`, "", 2),
+    [{ t: "hl", to: "bell" }, { t: "show", to: "n1", ms: 900 }, { t: "show", to: "n2", ms: 900 }, { t: "show", to: "n3", ms: 900 }, { t: "show", to: "n4", ms: 900 }]);
+
+  /* 6. Booking */
+  add(5, "Record the advance",
+    "When the advance arrives, open the quotation and click Record advance. Check the amount and the date, choose the method, such as eSewa or bank transfer, and type the transaction number. Keep Confirm the booking now ticked, and click Record advance and book.",
+    () => quoteView({ status: "Accepted", adv: true }),
+    [{ t: "click", to: "recadv" }, { t: "show", to: "dlg-adv" }, { t: "hl", to: "amt" }, { t: "sel", to: "meth", text: "eSewa" }, { t: "type", to: "ref", text: "ES-7781230" }, { t: "hl", to: "conf" },
+     { t: "click", to: "savadv" }, { t: "hide", to: "dlg-adv" }, { t: "toast", text: "Advance recorded — booking BK-2026-009 confirmed" }]);
+  add(5, "The booking page",
+    "This is the booking. It shows the total, what has been paid and the balance. The buttons move it along: Start event when you load out, and Mark completed when it is done. Record payment adds later payments and can email a receipt. Send reminder emails the client what they owe. Cancel booking needs a reason and releases the stock.",
+    () => shell("Bookings", `<div class="crumb">Bookings /</div><div class="hrow"><h2 class="pt">BK-2026-009 · Priya &amp; Anil — wedding reception</h2>${P("Confirmed", "green")}</div>
+      <div class="pd">12 Dec 2026 · Hotel Shanker · 300 guests · from QT-2026-021</div>
+      <div class="row" style="gap:8px">${B("Start event (load out)", "start", "p")}${B("Mark completed", "done")}${B("Back to pending", "back")}${B("Cancel booking", "cancel", "danger")}</div>
+      <div class="tabs"><span class="on">Overview</span><span>Payments 1</span><span>Invoices 0</span></div>
+      <div class="g4" data-t="stats"><div class="kpi"><small>Total</small><b>NPR 4,92,737</b><em>contract amount</em></div><div class="kpi"><small>Paid</small><b style="color:#23663f">NPR 1,00,000</b><em>advance · eSewa</em></div><div class="kpi"><small>Balance</small><b style="color:#8a5a0f">NPR 3,92,737</b><em>due 12 Dec 2026</em></div><div class="kpi"><small>Advance</small><b>Paid</b><em>NPR 1,00,000 required</em></div></div>
+      <div class="card"><div class="row" style="gap:8px"><h4 style="margin:0">Payments</h4><span class="sp"></span>${B("Record payment", "recpay", "p")}${B("Send reminder", "remind")}${B("Create invoice", "inv")}</div></div>`),
+    [{ t: "hl", to: "stats", ms: 1800 }, { t: "hl", to: "start" }, { t: "hl", to: "done" }, { t: "hl", to: "recpay" }, { t: "hl", to: "remind" }, { t: "hl", to: "cancel" }]);
+  add(5, "A booking without a quotation",
+    "For a booking without a quotation, go to Bookings, New booking. Choose the customer, then fill in the event, date, venue, total, advance and due dates. The balance due date defaults to the event date.",
+    () => shell("Bookings", `<div class="crumb">Bookings /</div><h2 class="pt">New booking</h2>
+      <div class="card"><div class="g3">${F("Customer", "Choose a customer", "bc", "sel")}${F("Event title", "", "bt")}${F("Event type", "Not set", "be", "sel")}
+      ${F("Event date", "", "bd")}${F("Start time", "", "bs")}${F("End time", "", "bn")}${F("Venue", "", "bv")}${F("Guests", "", "bg")}${F("Package", "None", "bp", "sel")}
+      ${F("Total (NPR)", "", "btot")}${F("Advance (NPR)", "0", "badv")}${F("Advance due", "", "badd")}${F("Balance due", "", "bbal", "", "Defaults to the event date.")}${F("Status", "Pending", "bst", "sel")}</div>
+      <div class="foot-bar" style="margin:16px -16px -16px;padding:12px 16px"><span style="flex:1"></span>${B("Create booking", "bcreate", "p")}</div></div>`),
+    [{ t: "sel", to: "bc", text: "Sunita Rai" }, { t: "type", to: "bt", text: "Rai engagement" }, { t: "type", to: "bd", text: "2 Nov 2026" }, { t: "type", to: "bv", text: "Soaltee Hotel" },
+     { t: "type", to: "btot", text: "2,10,000" }, { t: "type", to: "badv", text: "45,000" }, { t: "type", to: "badd", text: "28 Oct 2026" }, { t: "hl", to: "bbal" }, { t: "click", to: "bcreate" }, { t: "toast", text: "Booking created" }]);
+
+  /* 7. Payments & email */
+  add(6, "Money owed and reminders",
+    "Finance, Payments, Money owed shows every client who still owes money. Reminders go out automatically three days before each due date, and once more if a payment becomes overdue. You can also click Send yourself. The log below shows whether each reminder was sent.",
+    () => shell("Payments", `<h2 class="pt">Payments</h2><div class="tabs"><span>Payments received</span><span class="on">Money owed &amp; reminders 3</span></div>
+      <div class="g4" style="grid-template-columns:repeat(3,1fr)"><div class="kpi"><small>Total owed</small><b>NPR 7,37,737</b><em>3 bookings</em></div><div class="kpi"><small>Overdue</small><b style="color:#a1251a">NPR 45,000</b><em>1 booking</em></div><div class="kpi"><small>Reminders sent this month</small><b>5</b></div></div>
+      <div class="card p0" data-t="owed"><table class="tb"><thead><tr><th>Client</th><th>Next payment</th><th>Due</th><th class="r">Total owed</th><th>Last reminder</th><th></th></tr></thead><tbody>
+      <tr><td><b>Sunita Rai</b><div class="sm">Rai engagement</div></td><td>Advance NPR 45,000</td><td style="color:#a1251a;font-weight:600">20 Oct 2026</td><td class="r">2,10,000</td><td>21 Oct</td><td>${B("Send", "s1", "sm")}</td></tr>
+      <tr><td><b>Bikash Thapa</b><div class="sm">Thapa bratabandha</div></td><td>Balance NPR 1,35,000</td><td>9 Nov 2026</td><td class="r">1,35,000</td><td>—</td><td>${B("Send", "s2", "sm")}</td></tr>
+      <tr><td><b>Priya Sharma</b><div class="sm">Priya &amp; Anil — wedding reception</div></td><td>Balance NPR 3,92,737</td><td>12 Dec 2026</td><td class="r">3,92,737</td><td>—</td><td>${B("Send", "s3", "sm")}</td></tr></tbody></table></div>
+      <div class="card p0" data-t="log"><table class="tb"><thead><tr><th>Reminder log</th><th>To</th><th>Booking</th><th>Status</th></tr></thead><tbody>
+      <tr><td>21 Oct 2026, 6:15 am</td><td>sunita@example.com</td><td>BK-2026-006</td><td>${P("Sent", "green")}</td></tr>
+      <tr><td>17 Oct 2026, 6:15 am</td><td>sunita@example.com</td><td>BK-2026-006</td><td>${P("Sent", "green")}</td></tr>
+      <tr><td>3 Oct 2026, 2:40 pm</td><td>asha@example.com</td><td>BK-2026-004</td><td>${P("Not sent — email off", "amber")}</td></tr></tbody></table></div>`),
+    [{ t: "hl", to: "owed", ms: 1800 }, { t: "click", to: "s1" }, { t: "toast", text: "Payment reminder emailed" }, { t: "hl", to: "log", ms: 1800 }]);
+  add(6, "Every email the site sends",
+    "These are the emails the site sends. To clients: inquiry received, quotation ready, quotation accepted, booking confirmed, payment received, payment reminders, and an optional seven day event reminder. Staff can get a daily follow-up email. Invitations and password resets come from Supabase. All of them come from the no-reply address, so clients are told to call or WhatsApp instead of replying.",
+    () => `<div class="slide" style="padding:0 90px"><div style="width:100%"><div class="tag">How email works</div><h1 style="font-size:54px;margin:8px 0 6px">Every email, and <em>when it goes</em></h1>
+      <table><tr><td>We received your inquiry</td><td>Visitor submits the website form</td></tr><tr><td>Your quotation is ready</td><td>You click Send to client with email ticked</td></tr>
+      <tr><td>Thank you — accepted</td><td>Client accepts the quotation online</td></tr><tr><td>Booking confirmed</td><td>You confirm a booking with email ticked</td></tr>
+      <tr><td>Payment received</td><td>You record a payment with Email a receipt ticked</td></tr><tr><td>Payment reminder</td><td>3 days before a due date, once if overdue, or Send reminder</td></tr>
+      <tr><td>Days to go</td><td>7 days before the event (off until you switch it on)</td></tr><tr><td>Invite · password reset</td><td>Sent by Supabase through Resend</td></tr></table></div></div>`);
+  add(6, "Check that email works",
+    "To check that email is working, open Settings, System. Email delivery must show a green tick. If it does not, emails are only recorded in the outbox and never reach anyone. The outbox card shows how many went out in the last thirty days.",
+    () => shell("Settings", `<h2 class="pt">Settings</h2><div class="tabs"><span>Business</span><span>Quotations &amp; invoices</span><span>Automations</span><span>Lists</span><span class="on">System</span></div>
+      <div class="g2"><div class="card p0"><div class="list"><div class="li" style="padding:10px 16px"><b style="font-size:14px">System health</b></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Database (Supabase Postgres)</b><small>Connected — you're reading live data</small></div></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Privileged server key</b><small>SUPABASE_SERVICE_ROLE_KEY is set (server only)</small></div></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>File storage</b><small>Connected</small></div></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Scheduled automations</b><small>Cron secret set · last sweep 3 hours ago</small></div></div>
+      <div class="li" data-t="emrow"><span class="ok"></span><div class="t"><b>Email delivery</b><small>Sending through Resend from Timeless Ties Events &amp; Decor &lt;noreply@timelesstieevents.com.np&gt;</small></div></div></div></div>
+      <div style="display:flex;flex-direction:column;gap:14px"><div class="card" data-t="outbox"><h4>Email outbox (30 days)</h4><div>42 emails generated · 41 sent</div><div class="hint">Latest: “Payment reminder — NPR 45,000 for Rai engagement” (sent) 3 hours ago</div></div>
+      <div class="card"><h4>Access</h4><div style="font-size:13px">Manage who can sign in and what they can do under Users &amp; Roles.</div></div></div></div>`),
+    [{ t: "hl", to: "emrow", ms: 2400 }, { t: "hl", to: "outbox", ms: 2200 }]);
+  add(6, "Automations",
+    "Settings, Automations lets you switch each rule on or off, such as the payment reminders or the client's event reminder. The daily checks run every morning. Click Run daily checks now to run them straight away.",
+    () => shell("Settings", `<h2 class="pt">Settings</h2><div class="tabs"><span>Business</span><span>Quotations &amp; invoices</span><span class="on">Automations</span><span>Lists</span><span>System</span></div>
+      <div class="g2" style="grid-template-columns:1.5fr 1fr"><div class="card p0"><div class="list"><div class="li"><b style="font-size:14px;flex:1">Automations</b>${B("Run daily checks now", "run", "sm")}</div>
+      <div class="li"><span class="ok"></span><div class="t"><b>New website inquiry</b><small>Notify the team and email the visitor a confirmation</small></div><span class="tog"></span></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Quotation accepted</b><small>Create a pending booking, event and planning task</small></div><span class="tog"></span></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Quotation expiring</b><small>Warn 3 days before; mark expired after</small></div><span class="tog"></span></div>
+      <div class="li" data-t="rem"><span class="ok"></span><div class="t"><b>Payment reminder to clients</b><small>Daily · daysBefore: 3 · overdueReminder: true</small></div><span class="tog"></span></div>
+      <div class="li" data-t="ev"><span class="ok"></span><div class="t"><b>Upcoming event reminder</b><small>Daily · daysBefore: 7 · emailClient: false</small></div><span class="tog"></span></div>
+      <div class="li"><span class="ok"></span><div class="t"><b>Follow-up reminder</b><small>Daily · email: false</small></div><span class="tog"></span></div></div></div>
+      <div class="card p0"><div class="list"><div class="li"><b style="font-size:14px">Recent runs</b></div><div class="li"><div class="t">2 due-soon and 1 overdue reminder(s) emailed<small>payment.reminder · today 6:15 am</small></div></div><div class="li"><div class="t">1 expiring soon, 0 marked expired<small>quote.expiring · today 6:15 am</small></div></div><div class="li"><div class="t">3 event(s) in the next 7 days<small>event.upcoming · today 6:15 am</small></div></div></div></div></div>`),
+    [{ t: "hl", to: "rem" }, { t: "hl", to: "ev" }, { t: "click", to: "run" }, { t: "toast", text: "quote.expiring · payment.overdue · payment.reminder · event.upcoming" }]);
+
+  /* 8. Website */
+  add(7, "The website CMS",
+    "Everything on the website is edited under Website. On the Homepage tab, the arrows change the order of the sections, and the hide button takes a section off the page without deleting it. Click Edit to change a section.",
+    () => shell("Website CMS", `<div class="hrow"><h2 class="pt">Website CMS</h2><span class="sp"></span>${B("View website", "view")}</div><div class="pd">Everything visitors see on timelesstieevents.com.np. Changes go live as soon as you save.</div>
+      <div class="tabs"><span class="on">Homepage</span><span>Pages &amp; forms</span><span>SEO</span><span>Social links</span></div>
+      <div class="card p0"><div class="list">
+      ${[["Hero", "2 days ago"], ["Services", "1 week ago"], ["Featured gallery", "3 days ago"], ["Packages", "2 weeks ago"], ["Testimonials", "1 week ago"], ["How it works", "1 month ago"]].map(([n, w], i) =>
+        `<div class="li"><span class="n">${i + 1}</span><div class="t"><b>${n}</b><small>Edited ${w}</small></div>${P("Published", "green")}<span class="row" style="gap:2px" ${i === 1 ? 'data-t="arrows"' : ""}><span class="btn ghost sm">${ICON.up}</span><span class="btn ghost sm">${ICON.down}</span></span><span class="btn sm" ${i === 1 ? 'data-t="hide"' : ""}>Hide</span><span class="btn sm" ${i === 0 ? 'data-t="edit"' : ""}>Edit</span></div>`).join("")}
+      </div></div>`),
+    [{ t: "hl", to: "arrows" }, { t: "hl", to: "hide" }, { t: "click", to: "edit" }]);
+  add(7, "Edit a section",
+    "Change the words and pick a new photo from the media library. Put stars around a word to show it in the gold italic style. Click Save, and the website updates immediately.",
+    () => shell("Website CMS", `<div class="crumb">Website CMS / Homepage /</div><h2 class="pt">Hero</h2>
+      <div class="g2" style="grid-template-columns:1fr 430px"><div class="card" style="display:flex;flex-direction:column;gap:12px">
+      ${F("Eyebrow", "Kathmandu events &amp; décor", "eye")}${F("Heading", "Décor that feels *timeless*", "head")}${F("Subheading", "Weddings, receptions and celebrations, designed and set up by our team.", "sub", "ta")}${F("Button text", "Plan your event", "cta")}
+      <div class="f"><label>Image</label><div class="row"><div class="tile ph1" style="width:120px;height:70px"></div>${B("Choose from media", "pick", "sm")}</div></div></div>
+      <div><div class="hint" style="margin:0 0 6px">Preview</div><div class="preview"><div class="pv"><small>Kathmandu events &amp; décor</small><div data-t="prev">Décor that feels <em>timeless</em></div><span class="b">Plan your event</span></div></div></div></div>
+      <div class="foot-bar"><span class="warn" data-t="dirty" hidden>Unsaved changes</span><span style="flex:1"></span>${B("Save", "save", "p")}</div>`),
+    [{ t: "type", to: "head", text: "Celebrations styled to feel *timeless*" }, { t: "show", to: "dirty" }, { t: "html", to: "prev", html: "Celebrations styled to feel <em>timeless</em>" },
+     { t: "hl", to: "pick" }, { t: "click", to: "save" }, { t: "hide", to: "dirty" }, { t: "toast", text: "Saved — the website is updated" }]);
+  add(7, "Photos and alt text",
+    "Upload photos in the Media library. They are resized and optimised for you, up to fifteen megabytes each. Always write alt text that describes the photo. It helps Google, and visitors who use screen readers.",
+    () => shell("Website CMS", `<div class="hrow"><h2 class="pt">Media library</h2><span class="sp"></span><div class="in sel" style="width:130px">Website</div>${B("Upload", "up", "p")}</div>
+      <div class="pd">Website photos. Uploads are resized, stripped of location data and converted to WebP automatically.</div>
+      <div class="tiles"><div class="tile ph2" data-t="newtile" hidden><div class="cap">${P("Missing alt", "amber")}<span class="sp"></span><span data-t="tedit">${ICON.pen}</span></div></div>
+      ${["ph1", "ph3", "ph4", "ph5", "ph6", "ph2", "ph4", "ph1", "ph3"].map((c, i) => `<div class="tile ${c}"><div class="cap">Gallery ${i + 1}<span class="sp"></span>${ICON.pen}</div></div>`).join("")}</div>`,
+      `<div class="ov" data-t="dlg" hidden><div class="dlg"><h3>Image details</h3><div class="tile ph2 thumb"></div>${F("Alt text", "", "alt", "ta", "Describe what's in the photo — used by Google and screen readers.")}
+      <div class="g2">${F("Title", "Pastel mandap", "mt")}${F("Tags", "mandap, pastel", "mtag", "", "Add focus:50% 30% to set the crop point.")}</div><div class="foot">${B("Cancel", "mc")}${B("Save", "msave", "p")}</div></div></div>`),
+    [{ t: "click", to: "up" }, { t: "wait", ms: 500 }, { t: "show", to: "newtile" }, { t: "toast", text: "Uploaded" }, { t: "click", to: "tedit" }, { t: "show", to: "dlg" },
+     { t: "type", to: "alt", text: "Pastel mandap with white roses and fairy lights at Hotel Shanker" }, { t: "click", to: "msave" }, { t: "hide", to: "dlg" }, { t: "toast", text: "Saved" }]);
+  add(7, "A new gallery album",
+    "For the gallery, click New album. Fill in the title, category and story, set the status to Published, and tick Feature on the homepage if you want it there. Then open the album and click Upload photos.",
+    () => shell("Gallery", `<div class="hrow"><h2 class="pt">Gallery</h2><span class="sp"></span>${B("New album", "na", "p")}</div><div class="pd">Albums shown on /gallery. Only published albums appear.</div>
+      <div class="tiles" style="grid-template-columns:repeat(4,1fr)">${["ph4", "ph3", "ph6", "ph5"].map((c, i) => `<div class="tile ${c}" style="height:150px"><div class="cap"><b>${["Garden wedding", "Mehendi night", "Bratabandha", "Anniversary dinner"][i]}</b><span class="sp"></span>${P("Published", "green")}</div></div>`).join("")}</div>`,
+      `<div class="ov" data-t="dlg" hidden><div class="dlg" style="width:640px"><h3>New gallery album</h3><div class="g2">${F("Title", "", "gt")}${F("Category", "Weddings", "gc", "sel")}${F("Location", "", "gl")}${F("Event date", "", "gd")}</div>
+      ${F("Story", "", "gstory", "ta")}<div class="g2">${F("Status", "Draft", "gs", "sel")}${F("Order", "0", "go")}</div>${CB("Feature on the homepage", "gf", false)}<div class="foot">${B("Cancel", "gx")}${B("Save", "gsave", "p")}</div></div></div>`),
+    [{ t: "click", to: "na" }, { t: "show", to: "dlg" }, { t: "type", to: "gt", text: "Pastel wedding at Hotel Shanker" }, { t: "type", to: "gl", text: "Kathmandu" }, { t: "type", to: "gd", text: "12 Dec 2026" },
+     { t: "type", to: "gstory", text: "Soft pinks, white roses and a fairy-light canopy for Priya and Anil." }, { t: "sel", to: "gs", text: "Published" }, { t: "check", to: "gf" }, { t: "click", to: "gsave" }, { t: "hide", to: "dlg" }, { t: "toast", text: "Album created — open it and click Upload photos" }]);
+  add(7, "Testimonials",
+    "To add a testimonial, type the client's name, the event and their words. It only appears on the website when the status is Published and you tick that the client agreed to have it published.",
+    () => shell("Testimonials", `<h2 class="pt">Testimonials</h2>`,
+      `<div class="ov" data-t="dlg"><div class="dlg" style="width:640px"><h3>New testimonial</h3><div class="g2">${F("Client name", "", "tn")}${F("Event", "", "te")}</div>${F("Their words", "", "tw", "ta")}
+      <div class="g2">${F("Rating", "No rating", "tr", "sel")}${F("Status", "Draft", "ts", "sel")}</div>${CB("The client agreed to have this published", "tc", false, "Required before it can appear on the website.")}<div class="foot">${B("Cancel", "tx")}${B("Save", "tsave", "p")}</div></div></div>`),
+    [{ t: "type", to: "tn", text: "Priya & Anil" }, { t: "type", to: "te", text: "Wedding reception" }, { t: "type", to: "tw", text: "Everything was more beautiful than we imagined. Our guests are still talking about the mandap." },
+     { t: "sel", to: "tr", text: "★★★★★" }, { t: "sel", to: "ts", text: "Published" }, { t: "check", to: "tc" }, { t: "hl", to: "tc" }, { t: "click", to: "tsave" }, { t: "toast", text: "Testimonial saved" }]);
+  add(7, "That's the whole flow",
+    "That's the whole flow: inquiry, quotation, booking, payment, email and the website. The written manual has every detail and a troubleshooting table. Thank you for watching.",
+    () => `<div class="slide"><div><div class="kick">Recap</div><h1>From inquiry to <em>a paid event</em></h1>
+      <p>Create the quotation from the inquiry · send the private link · record the advance · follow Money owed · keep the website fresh.</p>
+      <div class="steps"><span>Settings › System for email health</span><span>Settings › Automations for reminders</span><span>Website for every page</span></div></div></div>`);
+
+  /* ───────── player ───────── */
+  const $ = s => document.querySelector(s);
+  const stage = $("#stage"), screenEl = $("#screen"), cap = $("#cap"), where = $("#where"), fill = $("#fill"), time = $("#time");
+  const playBtn = $("#play"), bigplay = $("#bigplay"), voiceBtn = $("#voiceBtn"), voiceSel = $("#voiceSel"), rateSel = $("#rateSel");
+  const N = S.length;
+  let idx = 0, playing = false, token = 0, voiceOn = true, rate = 1, voices = [], voice = null;
+  let scale = 1, pos = { x: 640, y: 420 }, sceneStart = 0, sceneEst = 1;
+  const synth = "speechSynthesis" in window ? window.speechSynthesis : null;
+  if (!synth) { voiceOn = false; voiceBtn.disabled = true; voiceBtn.textContent = "No voice"; voiceSel.hidden = true; }
+
+  new ResizeObserver(() => { scale = screenEl.clientWidth / 1280; stage.style.transform = `scale(${scale})`; }).observe(screenEl);
+
+  const T = k => stage.querySelector(`[data-t="${k}"]`);
+  const sleep = (ms, tk) => new Promise((res, rej) => setTimeout(() => (tk === token ? res() : rej("stop")), ms));
+  const est = text => (text.split(/\s+/).length / (2.55 * rate)) * 1000 + 800;
+
+  function center(el) {
+    const r = el.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    return { x: (r.left - s.left + r.width / 2) / scale, y: (r.top - s.top + r.height / 2) / scale };
+  }
+  function cursorTo(p) { const c = $("#cur"); if (c) c.style.transform = `translate(${p.x - 4}px, ${p.y - 3}px)`; pos = p; }
+  function ripple() { const d = document.createElement("div"); d.className = "rip"; d.style.left = pos.x + "px"; d.style.top = pos.y + "px"; stage.appendChild(d); setTimeout(() => d.remove(), 600); }
+  function toast(text) { stage.querySelectorAll(".toast").forEach(t => t.remove()); const d = document.createElement("div"); d.className = "toast"; d.innerHTML = "<i></i>"; d.appendChild(document.createTextNode(text)); stage.appendChild(d); }
+
+  async function step(s, tk) {
+    const el = s.to ? T(s.to) : null;
+    if (s.to && !el) return;
+    const move = async () => { cursorTo(center(el)); await sleep(760, tk); };
+    switch (s.t) {
+      case "move": await move(); break;
+      case "click": await move(); ripple(); el.classList.add("press"); await sleep(200, tk); el.classList.remove("press"); await sleep(260, tk); break;
+      case "check": await move(); ripple(); el.classList.toggle("on"); await sleep(420, tk); break;
+      case "type": {
+        if (!s.noclick) { await move(); ripple(); await sleep(180, tk); }
+        el.textContent = ""; el.classList.add("typing");
+        const d = Math.min(55, 1500 / s.text.length);
+        for (const ch of s.text) { el.textContent += ch; await sleep(d, tk); }
+        el.classList.remove("typing"); await sleep(260, tk); break;
+      }
+      case "sel": await move(); ripple(); el.classList.add("open"); await sleep(480, tk); el.textContent = s.text; el.classList.remove("open"); await sleep(300, tk); break;
+      case "show": el.hidden = false; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); await sleep(s.ms || 480, tk); break;
+      case "hide": el.hidden = true; await sleep(220, tk); break;
+      case "hl": el.classList.add("ring"); await sleep(s.ms || 1400, tk); el.classList.remove("ring"); await sleep(160, tk); break;
+      case "html": el.innerHTML = s.html; await sleep(320, tk); break;
+      case "toast": toast(s.text); await sleep(1700, tk); break;
+      case "wait": await sleep(s.ms, tk); break;
+    }
+  }
+
+  function speak(text, tk) {
+    if (!voiceOn || !synth) return sleep(est(text), tk);
+    synth.cancel();
+    const parts = text.match(/[^.!?]+[.!?]+/g) || [text];
+    return new Promise((res, rej) => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; tk === token ? res() : rej("stop"); };
+      parts.forEach((p, i) => {
+        const u = new SpeechSynthesisUtterance(p.trim());
+        u.rate = rate; if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
+        if (i === parts.length - 1) { u.onend = finish; u.onerror = finish; }
+        synth.speak(u);
+      });
+      setTimeout(finish, est(text) * 1.9 + 5000);
+    });
+  }
+
+  function render(i) {
+    const sc = S[i];
+    stage.innerHTML = sc.html() + `<svg class="cur" id="cur" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2l15 9-6.6 1.4 3.6 7.1-2.7 1.4-3.6-7.2L4 18z" fill="#fff" stroke="#1a1416" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+    const c = $("#cur"); c.style.transition = "none"; cursorTo(pos); void c.offsetWidth; c.style.transition = "";
+    where.textContent = `Chapter ${sc.ch + 1} · ${CHAPTERS[sc.ch]} — ${sc.title}`;
+    cap.textContent = sc.say;
+    time.textContent = `Step ${i + 1} of ${N}`;
+    document.querySelectorAll(".chap").forEach((b, k) => { b.classList.toggle("on", k === sc.ch); if (k === sc.ch) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current"); });
+  }
+
+  async function playScene(i) {
+    token++; const tk = token; idx = i; render(i); syncUI();
+    if (!playing) return;
+    sceneStart = performance.now(); sceneEst = est(S[i].say);
+    try {
+      await Promise.all([speak(S[i].say, tk), (async () => { await sleep(450, tk); for (const s of S[i].steps) await step(s, tk); })()]);
+      await sleep(900, tk);
+    } catch (e) { return; }
+    if (tk !== token) return;
+    if (i < N - 1) playScene(i + 1); else { playing = false; syncUI(); }
+  }
+
+  function syncUI() {
+    playBtn.textContent = playing ? "Pause" : (idx === N - 1 && !playing && sceneStart ? "Replay" : "Play");
+    bigplay.hidden = playing;
+  }
+  function play() { if (idx === N - 1 && sceneStart && !playing) idx = 0; playing = true; playScene(idx); }
+  function pause() { playing = false; token++; if (synth) synth.cancel(); syncUI(); }
+  function go(i) { i = Math.max(0, Math.min(N - 1, i)); if (synth) synth.cancel(); if (playing) playScene(i); else { token++; idx = i; render(i); syncUI(); } }
+
+  playBtn.addEventListener("click", () => (playing ? pause() : play()));
+  bigplay.addEventListener("click", play);
+  $("#prev").addEventListener("click", () => go(idx - 1));
+  $("#next").addEventListener("click", () => go(idx + 1));
+  $("#bar").addEventListener("click", e => { const r = e.currentTarget.getBoundingClientRect(); go(Math.floor(((e.clientX - r.left) / r.width) * N)); });
+  voiceBtn.addEventListener("click", () => { voiceOn = !voiceOn; voiceBtn.textContent = voiceOn ? "Voice on" : "Voice off"; voiceBtn.setAttribute("aria-pressed", String(voiceOn)); if (playing) playScene(idx); else if (synth) synth.cancel(); });
+  rateSel.addEventListener("change", () => { rate = Number(rateSel.value); if (playing) playScene(idx); });
+  voiceSel.addEventListener("change", () => { voice = voices[Number(voiceSel.value)] || null; try { localStorage.setItem("tt-voice", voice ? voice.name : ""); } catch (e) {} if (playing) playScene(idx); });
+  $("#fs").addEventListener("click", async () => {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); else await $("#player").requestFullscreen(); } catch (e) { $("#fs").textContent = "Full screen not available"; }
+  });
+  document.addEventListener("fullscreenchange", () => { $("#fs").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; });
+  document.addEventListener("keydown", e => {
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (["input", "select", "textarea", "button"].includes(tag)) return;
+    if (e.code === "Space") { e.preventDefault(); playing ? pause() : play(); }
+    else if (e.key === "ArrowRight") go(idx + 1);
+    else if (e.key === "ArrowLeft") go(idx - 1);
+  });
+
+  function loadVoices() {
+    if (!synth) return;
+    const all = synth.getVoices().filter(v => /^en/i.test(v.lang));
+    if (!all.length) return;
+    const score = v => (/natural|online/i.test(v.name) ? 4 : 0) + (/aria|jenny|sonia|libby|google uk english female|samantha|zira/i.test(v.name) ? 2 : 0) + (/en-(GB|IN)/i.test(v.lang) ? 1 : 0);
+    voices = all.sort((a, b) => score(b) - score(a));
+    let saved = ""; try { saved = localStorage.getItem("tt-voice") || ""; } catch (e) {}
+    voiceSel.innerHTML = voices.map((v, i) => `<option value="${i}">${v.name.replace(/^Microsoft |\s*\(.*$/g, "").slice(0, 28)}</option>`).join("");
+    const k = Math.max(0, voices.findIndex(v => v.name === saved));
+    voiceSel.value = String(k); voice = voices[k];
+  }
+  if (synth) { loadVoices(); synth.addEventListener ? synth.addEventListener("voiceschanged", loadVoices) : (synth.onvoiceschanged = loadVoices); }
+
+  const counts = CHAPTERS.map((_, c) => S.filter(s => s.ch === c).length);
+  $("#chapters").innerHTML = CHAPTERS.map((c, i) => `<button class="chap" data-c="${i}"><b>${String(i + 1).padStart(2, "0")}</b><span>${c}<small>${counts[i]} step${counts[i] === 1 ? "" : "s"}</small></span></button>`).join("");
+  document.querySelectorAll(".chap").forEach(b => b.addEventListener("click", () => go(S.findIndex(s => s.ch === Number(b.dataset.c)))));
+
+  (function tick() {
+    const within = playing ? Math.min(0.97, (performance.now() - sceneStart) / sceneEst) : 0;
+    fill.style.width = ((idx + within) / N) * 100 + "%";
+    requestAnimationFrame(tick);
+  })();
+
+  render(0); syncUI();
+})();
+</script>
+</body>
+</html>
