@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { CalendarDays, FileText, PartyPopper, Wallet } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDate, fmtDateTime, npr, num, todayISO } from "@/lib/format";
+import { fmtDate, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
 import { first, isUuid, listParams } from "@/lib/list";
 import { balanceOf, PAYMENT_METHODS } from "@/server/finance";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
@@ -151,7 +151,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                       <tr key={l.id}>
                         <Td>{l.description}</Td>
                         <Td className="text-right tabular-nums">
-                          {num(l.quantity)} {l.unit}
+                          {qty(l.quantity)} {l.unit}
                         </Td>
                         <Td className="text-right tabular-nums">{npr(l.unitPrice)}</Td>
                         <Td className="text-right tabular-nums">{npr(l.amount)}</Td>

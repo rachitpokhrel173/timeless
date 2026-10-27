@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Printer } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
-import { fmtDate, fmtDateTime, npr, num, todayISO } from "@/lib/format";
+import { fmtDate, fmtDateTime, npr, todayISO, qty } from "@/lib/format";
 import { isUuid } from "@/lib/list";
 import { PAYMENT_METHODS } from "@/server/finance";
 import { INVOICE_STATUS, label, StatusBadge } from "@/components/admin/status";
@@ -92,7 +92,7 @@ export default async function InvoicePage({ params }: PageProps<"/admin/invoices
               {items.map((l) => (
                 <tr key={l.id}>
                   <Td>{l.description}</Td>
-                  <Td className="text-right tabular-nums">{num(l.quantity)}</Td>
+                  <Td className="text-right tabular-nums">{qty(l.quantity)}</Td>
                   <Td className="text-right tabular-nums">{npr(l.unitPrice)}</Td>
                   <Td className="text-right tabular-nums">{npr(l.amount)}</Td>
                 </tr>

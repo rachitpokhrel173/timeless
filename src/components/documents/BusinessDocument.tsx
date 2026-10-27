@@ -3,7 +3,7 @@
  * styles, so "Print → Save as PDF" in any browser produces a clean A4 PDF.
  */
 import type { ReactNode } from "react";
-import { fmtDateLong, npr, num } from "@/lib/format";
+import { fmtDateLong, npr, qty } from "@/lib/format";
 import type { SiteSettings } from "@/types";
 
 export type DocLine = { description: string; details?: string | null; quantity: number; unit?: string | null; unitPrice: number; amount: number };
@@ -101,7 +101,7 @@ export function BusinessDocument({
                 {l.details && <span className="block text-xs text-neutral-500">{l.details}</span>}
               </td>
               <td className="py-2.5 pr-2 text-right whitespace-nowrap tabular-nums">
-                {num(l.quantity)} {l.unit}
+                {qty(l.quantity)} {l.unit}
               </td>
               <td className="py-2.5 pr-2 text-right whitespace-nowrap tabular-nums">{npr(l.unitPrice)}</td>
               <td className="py-2.5 text-right whitespace-nowrap tabular-nums">{npr(l.amount)}</td>

@@ -5,6 +5,9 @@ const nf = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
 /** NPR 4,85,000 (South Asian grouping, as used in Nepal). */
 export const npr = (amount: number | null | undefined) => `NPR ${nf.format(Math.round(amount ?? 0))}`;
 export const num = (n: number | null | undefined) => nf.format(n ?? 0);
+/** Line quantities can be fractional (2.5 days) — never round them for display. */
+const qf = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+export const qty = (n: number | null | undefined) => qf.format(n ?? 0);
 
 /** Compact money for KPI tiles: NPR 4.85L, NPR 1.2Cr. */
 export function nprCompact(amount: number) {

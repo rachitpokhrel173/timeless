@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { getSiteSettings } from "@/lib/content";
-import { fmtDate, fmtDateLong, fmtDateTime, npr, num, todayISO } from "@/lib/format";
+import { fmtDate, fmtDateLong, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
 import { first, isUuid } from "@/lib/list";
 import { quoteImages } from "@/server/documents";
 import { PAYMENT_METHODS } from "@/server/finance";
@@ -162,7 +162,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
                       )}
                     </Td>
                     <Td className="text-right tabular-nums">
-                      {num(l.quantity)} {l.unit}
+                      {qty(l.quantity)} {l.unit}
                     </Td>
                     <Td className="text-right tabular-nums">{npr(l.unitPrice)}</Td>
                     <Td className="text-right font-medium tabular-nums">{npr(l.amount)}</Td>
