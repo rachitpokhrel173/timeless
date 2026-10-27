@@ -123,7 +123,8 @@ export function BusinessDocument({
       </dl>
 
       {images && images.length > 0 && (
-        <section className="mt-8">
+        // Own page when printed, so the heading never sits alone at the foot of page one
+        <section className="mt-8 print:mt-0 print:break-before-page">
           <p className="mb-3 text-[11px] font-semibold tracking-wider text-[#7a5c26] uppercase">Reference &amp; inspiration</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {images.map((img) => (
