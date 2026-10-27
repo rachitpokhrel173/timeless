@@ -4,9 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ImagePlus, LoaderCircle, X } from "lucide-react";
 import { useToast } from "@/components/admin/interactive";
-import { removeQuoteImage, uploadQuoteImages } from "../upload-actions";
+import { removeCustomerImage, removeQuoteImage, uploadCustomerImages, uploadQuoteImages } from "../upload-actions";
 
 const LIMIT = 12;
+const TARGETS = {
+  quotation: { field: "quotationId", limit: LIMIT, upload: uploadQuoteImages, remove: removeQuoteImage, title: "Reference Images", blurb: "Design mockups, venue photos, or inspiration to attach to this quotation." },
+  customer: { field: "customerId", limit: 30, upload: uploadCustomerImages, remove: removeCustomerImage, title: "Photos & references", blurb: "Venue photos, inspiration, or anything the customer has sent." },
+};
 const TYPES = ["image/png", "image/jpeg", "image/webp"];
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -86,26 +90,33 @@ export function PendingImages({ files, onChange }: { files: File[]; onChange: (f
   );
 }
 
-/** Design mockups, venue photos or inspiration attached to a quotation (shown on the client's copy). */
-export default function ReferenceImages({ quotationId, images, canEdit }: { quotationId: string; images: { id: string; src: string; alt: string }[]; canEdit: boolean }) {
+/** Images attached to a quotation (design mockups, shown on the client's copy) or to a customer's record. */
+export default function ReferenceImages({
+  quotationId,
+  customerId,
+  images,
+  canEdit,
+}: { images: { id: string; src: string; alt: string }[]; canEdit: boolean } & ({ quotationId: string; customerId?: never } | { customerId: string; quotationId?: never })) {
+  const ownerId = (quotationId ?? customerId)!;
+  const target = TARGETS[quotationId ? "quotation" : "customer"];
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
   const [removing, setRemoving] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
-  const room = LIMIT - images.length;
+  const room = target.limit - images.length;
 
   const upload = (files: File[]) => {
     const bad = files.find((f) => !TYPES.includes(f.type) || f.size > MAX_BYTES);
     if (bad) return toast("error", `“${bad.name}” must be a PNG, JPG or WEBP image up to 5MB.`);
-    if (files.length > room) return toast("error", `You can add ${room} more image${room === 1 ? "" : "s"} (${LIMIT} max).`);
+    if (files.length > room) return toast("error", `You can add ${room} more image${room === 1 ? "" : "s"} (${target.limit} max).`);
     const form = new FormData();
-    form.set("quotationId", quotationId);
+    form.set(target.field, ownerId);
     for (const f of files) form.append("file", f);
     start(async () => {
       let r;
       try {
-        r = await uploadQuoteImages(form);
+        r = await target.upload(form);
       } catch {
         r = { ok: false as const, error: "The upload failed — check your connection and try again." };
       }
@@ -119,7 +130,7 @@ export default function ReferenceImages({ quotationId, images, canEdit }: { quot
   const remove = (mediaId: string) => {
     setRemoving(mediaId);
     start(async () => {
-      const r = await removeQuoteImage(quotationId, mediaId).catch(() => ({ ok: false as const, error: "Couldn't remove that image." }));
+      const r = await target.remove(ownerId, mediaId).catch(() => ({ ok: false as const, error: "Couldn't remove that image." }));
       setRemoving(null);
       if (r.ok) router.refresh();
       else toast("error", r.error);
@@ -128,8 +139,8 @@ export default function ReferenceImages({ quotationId, images, canEdit }: { quot
 
   return (
     <section>
-      <h2 className="text-base font-semibold">Reference Images</h2>
-      <p className="text-[13px] text-a-muted">Design mockups, venue photos, or inspiration to attach to this quotation.</p>
+      <h2 className="text-base font-semibold">{target.title}</h2>
+      <p className="text-[13px] text-a-muted">{target.blurb}</p>
       <div className="mt-3 flex flex-wrap gap-3">
         {images.map((img) => (
           <div key={img.id} className="group relative size-24 overflow-hidden rounded-xl border border-a-border">
@@ -163,7 +174,7 @@ export default function ReferenceImages({ quotationId, images, canEdit }: { quot
       </div>
       {canEdit && (
         <>
-          <p className="mt-3 text-xs text-a-muted">PNG, JPG, or WEBP — up to 5MB each, {LIMIT} images max.</p>
+          <p className="mt-3 text-xs text-a-muted">PNG, JPG, or WEBP — up to 5MB each, {target.limit} images max.</p>
           <input
             ref={inputRef}
             type="file"

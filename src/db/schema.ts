@@ -269,6 +269,10 @@ export const customers = pgTable(
       .unique()
       .references(() => authUsers.id, { onDelete: "set null" }),
     tags: textArray("tags"),
+    /** Venue photos, inspiration and references (media ids, private event-media bucket). */
+    referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    /** Extra services the customer has asked for — Panche Baja, Pasni décor, … */
+    requestedServices: textArray("requested_services"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     archivedAt: ts("archived_at"),

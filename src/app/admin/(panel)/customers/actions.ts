@@ -132,3 +132,13 @@ export const revokePortal = adminAction("customers.update", z.object({ id: zs.uu
   const c = await one<{ name: string }>(adminDb.from(tbl(schema.customers)).update({ auth_user_id: null }).eq("id", id).select("name"));
   await audit(user, "portal_revoke", "customer", id, `Removed client-portal access for ${c.name}`);
 });
+
+export const setRequestedServices = adminAction(
+  "customers.update",
+  z.object({ id: zs.uuid(), services: z.array(z.string().trim().min(1).max(120)).max(50) }),
+  async ({ id, services }, user) => {
+    const unique = [...new Map(services.map((s) => [s.toLowerCase(), s])).values()];
+    const c = await one<{ name: string }>(customers().update({ requested_services: unique }).eq("id", id).select("name"));
+    await audit(user, "update", "customer", id, `Updated requested services for ${c.name}`);
+  },
+);

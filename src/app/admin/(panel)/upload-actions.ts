@@ -116,6 +116,7 @@ export async function uploadMedia(form: FormData) {
 }
 
 const QUOTE_IMAGE_LIMIT = 12;
+const CUSTOMER_IMAGE_LIMIT = 30;
 const QUOTE_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /** Reference & inspiration images on a quotation (private event-media bucket, shown via signed links). */
@@ -160,5 +161,46 @@ export async function removeQuoteImage(quotationId: string, mediaId: string): Pr
     if (error instanceof UserError) return { ok: false, error: error.message };
     console.error("[quote image remove]", error);
     return { ok: false, error: "Couldn't remove that image." };
+  }
+}
+
+/** Venue photos, inspiration and references on a customer (private event-media bucket, shown via signed links). */
+export async function uploadCustomerImages(form: FormData) {
+  return upload("customers.update", form, async (files, user) => {
+    const customerId = uuid(form.get("customerId"));
+    if (!customerId) throw new UserError("Customer not found.");
+    const customer = await maybe<{ name: string; ids: string[] }>(db.from(tbl(schema.customers)).select("name,ids:reference_media_ids").eq("id", customerId).is("deleted_at", null));
+    if (!customer) throw new UserError("Customer not found.");
+    if (customer.ids.length + files.length > CUSTOMER_IMAGE_LIMIT) throw new UserError(`Up to ${CUSTOMER_IMAGE_LIMIT} photos per customer — remove some first.`);
+    for (const f of files) {
+      if (!QUOTE_IMAGE_TYPES.includes(f.type)) throw new UserError(`“${f.name}” isn't a PNG, JPG or WEBP image.`);
+      if (f.size > 5 * 1024 * 1024) throw new UserError(`“${f.name}” is over 5 MB.`);
+    }
+    const ids: string[] = [];
+    for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: `customers/${customerId}`, uploadedBy: user.id, imagesOnly: true })).id);
+    await exec(db.from(tbl(schema.customers)).update({ reference_media_ids: [...customer.ids, ...ids] }).eq("id", customerId));
+    await audit(user, "upload", "customer", customerId, `Added ${ids.length} photo(s) for ${customer.name}`);
+    return { count: ids.length };
+  });
+}
+
+export async function removeCustomerImage(customerId: string, mediaId: string): Promise<ActionResult<undefined>> {
+  const user = await getCurrentUser();
+  if (!user?.permissions.has("customers.update")) return { ok: false, error: "You don't have permission to do that." };
+  if (!uuid(customerId) || !uuid(mediaId)) return { ok: false, error: "Photo not found." };
+  try {
+    await withUser(async () => {
+      const customer = await one<{ name: string; ids: string[] }>(db.from(tbl(schema.customers)).select("name,ids:reference_media_ids").eq("id", customerId));
+      if (!customer.ids.includes(mediaId)) throw new UserError("Photo not found.");
+      await exec(db.from(tbl(schema.customers)).update({ reference_media_ids: customer.ids.filter((i) => i !== mediaId) }).eq("id", customerId));
+      const m = await maybe<{ bucket: string; path: string }>(db.from(tbl(schema.media)).update({ deleted_at: new Date().toISOString() }).eq("id", mediaId).select("bucket,path"));
+      if (m) await deleteStoredFile(m.bucket, m.path);
+      await audit(user, "update", "customer", customerId, `Removed a photo for ${customer.name}`);
+    });
+    return { ok: true, data: undefined };
+  } catch (error) {
+    if (error instanceof UserError) return { ok: false, error: error.message };
+    console.error("[customer image remove]", error);
+    return { ok: false, error: "Couldn't remove that photo." };
   }
 }

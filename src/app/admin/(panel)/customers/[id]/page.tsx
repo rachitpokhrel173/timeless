@@ -5,6 +5,8 @@ import { Archive, ArchiveRestore, FilePlus2, FileText, KeyRound, Trash2, X } fro
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr } from "@/lib/format";
+import { getCatalogueMeta, getInquiryOptions } from "@/lib/content";
+import { quoteImages } from "@/server/documents";
 import { sourceOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
 import ActivityTimeline, { type TimelineEntry } from "@/components/admin/ActivityTimeline";
@@ -15,6 +17,8 @@ import { ArchivedBadge, BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, LEAD_STAGE
 import { Badge, Card, DetailList, EmptyState, Kpi, LinkButton, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import { deleteContact, deleteCustomer, inviteToPortal, revokePortal, setCustomerArchived } from "../actions";
 import { ContactButton, EditCustomerButton } from "../CustomerForm";
+import RequestedServices from "../RequestedServices";
+import ReferenceImages from "../../quotations/ReferenceImages";
 
 export const metadata: Metadata = { title: "Customer" };
 
@@ -26,7 +30,7 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
   if (!customer) notFound();
   const can = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);
 
-  const [sources, contacts, leads, inquiries, quotes, bookings, invoices, payments, documents, logs] = await Promise.all([
+  const [sources, contacts, leads, inquiries, quotes, bookings, invoices, payments, documents, logs, images, inquiryOptions, catalogueMeta] = await Promise.all([
     sourceOptions(),
     many<Row<typeof schema.customerContacts>>(adminDb.from(tbl(schema.customerContacts)).select(cols(schema.customerContacts)).eq("customer_id", id)),
     many<Row<typeof schema.leads>>(adminDb.from(tbl(schema.leads)).select(cols(schema.leads)).eq("customer_id", id).is("deleted_at", null).order("created_at", { ascending: false })),
@@ -54,7 +58,11 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
     many<Row<typeof schema.activityLogs>>(
       adminDb.from(tbl(schema.activityLogs)).select(cols(schema.activityLogs)).eq("entity", "customer").eq("entity_id", id).order("created_at", { ascending: false }).limit(20),
     ),
+    quoteImages(customer.referenceMediaIds),
+    getInquiryOptions(),
+    getCatalogueMeta(),
   ]);
+  const serviceSuggestions = [...new Set([...inquiryOptions.services, ...catalogueMeta.offerings])];
   const leadIds = leads.map((l) => l.id);
   const activities = leadIds.length
     ? (
@@ -192,6 +200,10 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
             </Card>
           )}
 
+          <Card>
+            <ReferenceImages customerId={customer.id} images={images} canEdit={can("customers.update")} />
+          </Card>
+
           {(can("invoices.view") || can("payments.view")) && (
             <Card title="Invoices & payments" bodyClassName="p-0">
               {invoices.length === 0 && payments.length === 0 ? (
@@ -245,6 +257,10 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
                 ["Tags", customer.tags.join(", ") || "—"],
               ]}
             />
+          </Card>
+
+          <Card title="Requested services" description="Extras they've asked for — use them when building the quotation.">
+            <RequestedServices customerId={customer.id} services={customer.requestedServices} suggestions={serviceSuggestions} canEdit={can("customers.update")} />
           </Card>
 
           <Card title="Contacts" actions={can("customers.update") && <ContactButton customerId={customer.id} />}>
