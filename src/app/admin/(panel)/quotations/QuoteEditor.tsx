@@ -5,8 +5,9 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Package, Plus, Trash2 } from "lucide-react";
 import { npr } from "@/lib/format";
 import { lineAmount, quoteTotals } from "@/lib/quote-math";
-import { ActionForm, Button, inputClass, SelectField, TextArea, TextField, type Option } from "@/components/admin/interactive";
+import { ActionForm, Button, inputClass, SelectField, TextArea, TextField, useToast, type Option } from "@/components/admin/interactive";
 import { saveQuote } from "./actions";
+import { PendingImages, uploadPendingImages } from "./ReferenceImages";
 
 export type QuoteLine = { description: string; details?: string | null; quantity: number; unit?: string | null; unitPrice: number; inventoryItemId?: string | null };
 
@@ -63,6 +64,8 @@ export default function QuoteEditor({
   const [depositAmount, setDepositAmount] = useState(values.depositAmount ?? 0);
   const [packageId, setPackageId] = useState(values.packageId ?? "");
   const [stockPick, setStockPick] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const toast = useToast();
   const totals = useMemo(() => quoteTotals({ items, discountType, discountValue, taxRate, depositAmount }), [items, discountType, discountValue, taxRate, depositAmount]);
   const editing = !!values.id;
 
@@ -110,8 +113,15 @@ export default function QuoteEditor({
       submitLabel={editing ? "Save quotation" : "Create quotation"}
       success={editing ? "Quotation saved" : "Quotation created"}
       onCancel={() => router.back()}
-      onSuccess={(d) => {
-        if (d && typeof d === "object" && "id" in d) router.push(`/admin/quotations/${(d as { id: string }).id}`);
+      onSuccess={async (d) => {
+        if (!(d && typeof d === "object" && "id" in d)) return;
+        const id = (d as { id: string }).id;
+        // New quotations have no id until saved, so their reference images upload now
+        if (!editing && images.length) {
+          const error = await uploadPendingImages(id, images);
+          if (error) toast("error", `Quotation created, but the images didn't upload: ${error}`);
+        }
+        router.push(`/admin/quotations/${id}`);
       }}
       footerClassName="sticky bottom-0 -mx-4 border-t border-a-border bg-a-surface px-4 py-3"
     >
@@ -249,6 +259,8 @@ export default function QuoteEditor({
           <Row label="Balance" value={npr(totals.balance)} muted />
         </div>
       </section>
+
+      {!editing && <PendingImages files={images} onChange={setImages} />}
     </ActionForm>
   );
 }
