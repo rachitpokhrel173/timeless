@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarCheck, FilePlus2, Paperclip } from "lucide-react";
 import { adminDb, cols, exec, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
+import { getCatalogue } from "@/lib/content";
 import { fmtDate, fmtDateTime, npr } from "@/lib/format";
 import { eventTypeName, eventTypeOptions, sourceOptions, userOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
@@ -58,6 +60,15 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
   ]);
   // Attachments live in the private bucket; links are short-lived and only made for permitted staff
   const attachments = can("documents.view") || can("leads.view") ? await Promise.all(inquiry.attachments.map(async (path) => ({ path, url: await signedUrl("private-documents", path, 600).catch(() => null) }))) : [];
+  // Designs are saved as "Section: Title (price)" — match them back to the catalogue for their photos
+  const catalogue = inquiry.designs.length ? await getCatalogue() : [];
+  const designs = inquiry.designs.map((line) => {
+    const [, section = "", title = line, price = ""] = line.match(/^(.*?): (.*) \((.*)\)$/) ?? [];
+    const item = catalogue.find((s) => s.name === section)?.items.find((i) => i.title === title);
+    const flat = price.match(/^Rs ([\d,]+)$/);
+    return { line, section, title, price, item, amount: flat ? Number(flat[1].replace(/,/g, "")) : undefined };
+  });
+  const designsTotal = designs.reduce((sum, d) => sum + (d.amount ?? 0), 0);
   const eventName = eventTypeName(types, inquiry.eventType);
   const firstName = inquiry.name.split(" ")[0];
 
@@ -99,18 +110,39 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
                 ["Date", inquiry.eventDate ? fmtDate(inquiry.eventDate) : "Not decided"],
                 ["Venue", inquiry.venue],
                 ["Guests", inquiry.guestCount],
-                ["Budget", inquiry.budget],
+                ["Budget", inquiry.budget ?? (designsTotal > 0 ? `Not given · picked designs ≈ ${npr(designsTotal)}` : null)],
                 ["Package", pkg[0]?.name],
-                ["Services", inquiry.services.join(", ") || "—"],
+                ["Services", inquiry.services.join(", ") || (designs.length ? `Décor — ${[...new Set(designs.map((d) => d.section))].join(", ")}` : "—")],
                 ["Theme / style", inquiry.theme],
               ]}
             />
-            {inquiry.designs.length > 0 && (
+            {designs.length > 0 && (
               <div className="mt-4">
-                <p className="text-xs font-medium tracking-wide text-a-muted uppercase">Designs picked from the catalogue</p>
-                <ul className="mt-1 list-disc pl-5 text-[13px]">
-                  {inquiry.designs.map((d) => (
-                    <li key={d}>{d}</li>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-xs font-medium tracking-wide text-a-muted uppercase">Designs picked from the catalogue</p>
+                  {designsTotal > 0 && (
+                    <p className="text-[13px] text-a-muted">
+                      Approx. <span className="font-semibold text-a-text">{npr(designsTotal)}</span>
+                      {designs.some((d) => d.amount === undefined) && " + measured items"}
+                    </p>
+                  )}
+                </div>
+                <ul className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {designs.map((d) => (
+                    <li key={d.line} className="overflow-hidden rounded-lg ring-1 ring-a-border">
+                      {d.item ? (
+                        <a href={d.item.image.src} target="_blank" rel="noreferrer" className="block bg-a-subtle" title="Open full image">
+                          <Image src={d.item.image.src} alt={d.item.image.alt} width={d.item.image.width} height={d.item.image.height} sizes="(min-width: 1024px) 360px, 90vw" className="aspect-[4/3] w-full object-cover" />
+                        </a>
+                      ) : (
+                        <div className="grid aspect-[4/3] place-items-center bg-a-subtle text-xs text-a-muted">No longer in the catalogue</div>
+                      )}
+                      <div className="p-3">
+                        <p className="text-[11px] tracking-wide text-a-muted uppercase">{d.section}</p>
+                        <p className="text-[13px] font-medium">{d.title}</p>
+                        <p className="mt-0.5 text-[13px] font-semibold">{d.price}</p>
+                      </div>
+                    </li>
                   ))}
                 </ul>
               </div>
