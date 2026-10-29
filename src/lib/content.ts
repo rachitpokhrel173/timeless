@@ -274,7 +274,7 @@ export const getCatalogue = cached(
           .filter((i) => i.image),
       }));
     }),
-  "catalogue",
+  "catalogue-v2", // v2: drop the copy cached before the stage setups were added straight to the database
 );
 
 export const getPriceLists = cached(
