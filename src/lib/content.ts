@@ -274,7 +274,7 @@ export const getCatalogue = cached(
           .filter((i) => i.image),
       }));
     }),
-  "catalogue-v2", // v2: drop the copy cached before the stage setups were added straight to the database
+  "catalogue-v3", // bumped when catalogue rows are changed straight in the database, which skips refreshSite()
 );
 
 export const getPriceLists = cached(
