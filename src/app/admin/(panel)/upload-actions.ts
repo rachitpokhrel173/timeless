@@ -204,3 +204,25 @@ export async function removeCustomerImage(customerId: string, mediaId: string): 
     return { ok: false, error: "Couldn't remove that photo." };
   }
 }
+
+const PROOF_LIMIT = 10;
+
+/** Photos of finished work on a task (private event-media bucket) — by the person it's assigned to, or a planner. */
+export async function uploadTaskProof(form: FormData) {
+  return upload(["events.update", "tasks.update"], form, async (files, user) => {
+    const taskId = uuid(form.get("taskId"));
+    if (!taskId) throw new UserError("Choose a task.");
+    const task = await maybe<{ title: string; eventId: string | null; ids: string[]; userId: string | null; staffId: string | null }>(
+      db.from(tbl(schema.eventTasks)).select("title,eventId:event_id,ids:proof_media_ids,userId:assignee_user_id,staffId:assignee_staff_id").eq("id", taskId),
+    );
+    if (!task) throw new UserError("Task not found.");
+    if (!user.permissions.has("events.update") && task.userId !== user.id && (!user.staffId || task.staffId !== user.staffId)) throw new UserError("You can only add photos to your own tasks.");
+    if (task.ids.length + files.length > PROOF_LIMIT) throw new UserError(`Up to ${PROOF_LIMIT} photos per task.`);
+    for (const f of files) if (!QUOTE_IMAGE_TYPES.includes(f.type)) throw new UserError(`“${f.name}” isn't a PNG, JPG or WEBP image.`);
+    const ids: string[] = [];
+    for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: task.eventId ? `events/${task.eventId}/work` : "tasks", uploadedBy: user.id, imagesOnly: true })).id);
+    await exec(db.from(tbl(schema.eventTasks)).update({ proof_media_ids: [...task.ids, ...ids] }).eq("id", taskId));
+    await audit(user, "upload", "task", taskId, `Added ${ids.length} photo(s) to “${task.title}”`);
+    return { count: ids.length };
+  });
+}

@@ -1,9 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { db, exec, maybe, one, schema, tbl, type Row } from "@/db";
+import { afterCommit, db, exec, maybe, one, schema, tbl, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { onEventCreated } from "@/server/automation";
 import { sendEmail } from "@/server/email";
 import { notify } from "@/server/notifications";
 import { sendPaymentReminderNow } from "@/server/payment-reminders";
@@ -46,6 +47,7 @@ const bookingFields = z.object({
 export const createBookingAction = adminAction("bookings.create", bookingFields, async (input, user) => {
   const result = await createBooking(db, input, user);
   await audit(user, "create", "booking", result.booking.id, `Created booking ${result.booking.number}`);
+  afterCommit(() => onEventCreated(result.event.id, user.id));
   await notify({
     type: "booking.created",
     title: `New booking ${result.booking.number}`,

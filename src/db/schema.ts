@@ -847,12 +847,27 @@ export const eventTasks = pgTable(
     priority: priority("priority").notNull().default("MEDIUM"),
     status: taskStatus("status").notNull().default("TODO"),
     position: integer("position").notNull().default(0),
+    /** Work-plan tasks: who does it (matched to the event team's roles) and the day relative to the event (-1 = day before). */
+    teamRole: text("team_role"),
+    workDay: integer("work_day"),
+    startedAt: ts("started_at"),
     completedAt: ts("completed_at"),
+    completedBy: uuid("completed_by").references(() => profiles.id, { onDelete: "set null" }),
+    /** What the team reported when finishing, with proof photos (media ids, private event-media bucket). */
+    completionNote: text("completion_note"),
+    proofMediaIds: uuid("proof_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    blockedReason: text("blocked_reason"),
     createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("tasks_event_idx").on(t.eventId), index("tasks_staff_idx").on(t.assigneeStaffId), index("tasks_user_idx").on(t.assigneeUserId), index("tasks_due_idx").on(t.status, t.dueAt)],
+  (t) => [
+    index("tasks_event_idx").on(t.eventId),
+    index("tasks_staff_idx").on(t.assigneeStaffId),
+    index("tasks_user_idx").on(t.assigneeUserId),
+    index("tasks_due_idx").on(t.status, t.dueAt),
+    index("tasks_work_day_idx").on(t.eventId, t.workDay),
+  ],
 );
 
 export const checklistTemplates = pgTable("checklist_templates", {

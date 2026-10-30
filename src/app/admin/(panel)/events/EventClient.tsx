@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, PackageCheck, Pencil, Plus, Send, Trash2, Undo2, UserPlus } from "lucide-react";
+import { CheckCircle2, ClipboardList, PackageCheck, Pencil, Plus, Send, Trash2, Undo2, UserPlus } from "lucide-react";
+import { TEAM_ROLES } from "@/lib/defaults";
 import { ActionButton, ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, useToast, type Option } from "@/components/admin/interactive";
 import { deleteDocument } from "../upload-actions";
-import { addChecklist, deleteTask, saveTask, setTaskStatus } from "../tasks/actions";
+import { addChecklist, addWorkPlan, deleteTask, saveTask, setTaskStatus } from "../tasks/actions";
 import {
   addEventNote,
   assignStaff,
@@ -105,6 +106,7 @@ export type TaskValues = {
   priority?: string;
   status?: string;
   checklist?: string | null;
+  teamRole?: string | null;
 };
 
 export function TaskButton({ eventId, values, staff, users, events, compact }: { eventId?: string | null; values?: TaskValues; staff: Option[]; users: Option[]; events?: Option[]; compact?: boolean }) {
@@ -125,6 +127,7 @@ export function TaskButton({ eventId, values, staff, users, events, compact }: {
             <SelectField label="Team member" name="assigneeStaffId" options={staff} placeholder="Unassigned" defaultValue={values?.assigneeStaffId ?? ""} />
             <SelectField label="Admin user" name="assigneeUserId" options={users} placeholder="—" defaultValue={values?.assigneeUserId ?? ""} hint="Gets a notification." />
             <TextField label="Due" name="dueAt" type="datetime-local" defaultValue={localInput(values?.dueAt)} />
+            <TextField label="Team role" name="teamRole" defaultValue={values?.teamRole ?? ""} list="team-roles" placeholder="Decorator, Crew…" hint="Given to whoever joins the team in this role." />
             <SelectField label="Priority" name="priority" options={PRIORITIES} defaultValue={values?.priority ?? "MEDIUM"} />
             <SelectField label="Status" name="status" options={TASK_STATUSES} defaultValue={values?.status ?? "TODO"} />
             <SelectField
@@ -139,6 +142,11 @@ export function TaskButton({ eventId, values, staff, users, events, compact }: {
             />
             <TextArea label="Details" name="description" rows={3} defaultValue={values?.description ?? ""} wrapClassName="sm:col-span-2" />
           </div>
+          <datalist id="team-roles">
+            {TEAM_ROLES.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
         </ActionForm>
       )}
     </DialogButton>
@@ -186,6 +194,29 @@ export function DeleteTaskButton({ id }: { id: string }) {
   );
 }
 
+export function WorkPlanButton({ eventId, plans }: { eventId: string; plans: Option[] }) {
+  if (!plans.length) return null;
+  return (
+    <DialogButton label="Add work plan" icon={ClipboardList} size="sm" title="Add a work plan" description="Dated tasks for the team — set up in Settings → Work plans. Steps already on the event are skipped.">
+      {(close) => (
+        <ActionForm
+          action={addWorkPlan}
+          extra={{ eventId }}
+          submitLabel="Add tasks"
+          success={(d) => {
+            const r = d as { added: number; assigned: number };
+            return `${r.added} tasks added, ${r.assigned} assigned`;
+          }}
+          onSuccess={close}
+          onCancel={close}
+        >
+          <SelectField label="Work plan" name="planId" options={plans} required />
+        </ActionForm>
+      )}
+    </DialogButton>
+  );
+}
+
 export function ChecklistButton({ eventId, templates }: { eventId: string; templates: Option[] }) {
   if (!templates.length) return null;
   return (
@@ -220,7 +251,12 @@ export function AssignStaffButton({ eventId, staff }: { eventId: string; staff: 
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <SelectField label="Team member" name="staffId" options={staff} required wrapClassName="sm:col-span-2" />
-            <TextField label="Role at this event" name="role" placeholder="Lead decorator, lighting…" />
+            <TextField label="Role at this event" name="role" placeholder="Lead decorator, lighting…" list="event-team-roles" hint="Work-plan tasks for this role go to them. Blank = their usual role." />
+            <datalist id="event-team-roles">
+              {TEAM_ROLES.map((r) => (
+                <option key={r} value={r} />
+              ))}
+            </datalist>
             <TextField label="Days" name="days" type="number" min={0.5} step={0.5} defaultValue={1} hint="Used for staff cost." />
             <TextArea label="Notes" name="notes" rows={2} wrapClassName="sm:col-span-2" />
           </div>

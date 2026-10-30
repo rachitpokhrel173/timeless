@@ -11,6 +11,7 @@ import { eventProfits, vendorPaid, vendorPaymentStatus } from "@/server/finance"
 import { availabilityForEvent } from "@/server/inventory";
 import { eventTypeName, eventTypeOptions, staffOptions, userOptions, vendorOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
+import { dayLabel, getWorkPlans, proofPhotos } from "@/server/work";
 import UploadButton from "@/components/admin/Upload";
 import { BOOKING_STATUS, DESIGN_STATUS, EVENT_STATUS, PAY_STATUS, PRIORITY, StatusBadge, TASK_STATUS, VENDOR_STATUS, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
@@ -34,6 +35,7 @@ import {
   TimelineButton,
   TimelineDone,
   VendorAssignmentButton,
+  WorkPlanButton,
 } from "../EventClient";
 
 export const metadata: Metadata = { title: "Event" };
@@ -223,14 +225,16 @@ async function Overview({
 }
 
 async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: boolean; canStatus: boolean }) {
-  const [tasks, staff, users, templates] = await Promise.all([
-    many<Row<typeof schema.eventTasks> & { s: { name: string } | null; u: { fullName: string } | null }>(
-      adminDb.from(tbl(schema.eventTasks)).select(`${cols(schema.eventTasks)},s:staff(name),u:profiles!assignee_user_id(fullName:full_name)`).eq("event_id", eventId).order("position").order("due_at", { nullsFirst: false }),
+  const [tasks, staff, users, templates, plans] = await Promise.all([
+    many<Row<typeof schema.eventTasks> & { s: { name: string } | null; u: { fullName: string } | null; by: { fullName: string } | null }>(
+      adminDb.from(tbl(schema.eventTasks)).select(`${cols(schema.eventTasks)},s:staff(name),u:profiles!assignee_user_id(fullName:full_name),by:profiles!completed_by(fullName:full_name)`).eq("event_id", eventId).order("position").order("due_at", { nullsFirst: false }),
     ),
     staffOptions(),
     userOptions(),
     many<{ value: string; label: string }>(adminDb.from(tbl(schema.checklistTemplates)).select("value:id,label:name").order("name")),
+    getWorkPlans(),
   ]);
+  const photos = await proofPhotos(tasks.flatMap((t) => t.proofMediaIds));
   const groups = [
     { key: "PRE", title: "Pre-event checklist" },
     { key: null, title: "Tasks" },
@@ -242,10 +246,11 @@ async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: b
       {plan && (
         <div className="flex flex-wrap gap-2">
           <TaskButton eventId={eventId} staff={staff} users={users} />
+          <WorkPlanButton eventId={eventId} plans={plans.map((p) => ({ value: p.id, label: `${p.name} (${p.steps.length} steps)` }))} />
           <ChecklistButton eventId={eventId} templates={templates} />
         </div>
       )}
-      {tasks.length === 0 && <EmptyState title="No tasks yet">Add tasks or a ready-made checklist so nothing is forgotten.</EmptyState>}
+      {tasks.length === 0 && <EmptyState title="No tasks yet">Add a work plan for the team’s dated tasks, or a ready-made checklist, so nothing is forgotten.</EmptyState>}
       {groups.map((g) => {
         const list = tasks.filter((t) => t.checklist === g.key);
         if (!list.length) return null;
@@ -253,7 +258,8 @@ async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: b
         return (
           <Card key={g.title} title={g.title} description={`${done} of ${list.length} done`} bodyClassName="p-0">
             <ul className="divide-y divide-a-border">
-              {list.map(({ s, u, ...t }) => {
+              {list.map(({ s, u, by, ...t }) => {
+                const pics = t.proofMediaIds.map((m) => photos.get(m)).filter((x): x is { src: string; alt: string } => !!x);
                 const late = t.dueAt && t.dueAt.getTime() < now && t.status !== "COMPLETED";
                 return (
                   <li key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
@@ -263,7 +269,22 @@ async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: b
                       <p className="text-xs text-a-muted">
                         {[s?.name, u?.fullName].filter(Boolean).join(" · ") || "Unassigned"}
                         {t.dueAt && <span className={late ? " font-medium text-a-danger" : undefined}> · due {fmtDateTime(t.dueAt)}</span>}
+                        {t.teamRole && ` · ${t.teamRole}`}
+                        {t.workDay != null && ` · ${dayLabel(t.workDay)}`}
+                        {t.status === "COMPLETED" && by && ` · done by ${by.fullName}${t.completedAt ? ` ${fmtDateTime(t.completedAt)}` : ""}`}
                       </p>
+                      {t.status === "BLOCKED" && t.blockedReason && <p className="mt-1 text-xs font-medium text-a-danger">Blocked: {t.blockedReason}</p>}
+                      {t.completionNote && <p className="mt-1 text-xs text-a-muted">“{t.completionNote}”</p>}
+                      {pics.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {pics.map((x) => (
+                            <a key={x.src} href={x.src} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed links */}
+                              <img src={x.src} alt={x.alt} className="size-12 rounded border border-a-border object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     {t.priority !== "MEDIUM" && <StatusBadge map={PRIORITY} value={t.priority} />}
                     {canStatus ? <TaskStatusSelect id={t.id} status={t.status} /> : <StatusBadge map={TASK_STATUS} value={t.status} />}

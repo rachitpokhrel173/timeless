@@ -6,8 +6,9 @@ import { fmtDateTime, isoDaysFromNow, relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { serviceRoleConfigured } from "@/lib/supabase/admin";
 import { ensureRules } from "@/server/automation";
-import { mediaOptions } from "@/server/lookups";
+import { eventTypeName, eventTypeOptions, mediaOptions } from "@/server/lookups";
 import { storageHealth } from "@/server/storage";
+import { dayLabel, getWorkPlans } from "@/server/work";
 import { quoteSettings } from "../quotations/editor-data";
 import { Badge, Card, Notice, PageHeader, Tabs } from "@/components/admin/ui";
 import {
@@ -23,6 +24,7 @@ import {
   SourceButton,
   StageButton,
 } from "./SettingsClient";
+import { DeleteWorkPlanButton, WorkPlanButton } from "./WorkPlanEditor";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -30,6 +32,7 @@ const TABS = [
   { key: "business", label: "Business" },
   { key: "sales", label: "Quotations & invoices" },
   { key: "automations", label: "Automations" },
+  { key: "work", label: "Work plans" },
   { key: "lists", label: "Lists" },
   { key: "system", label: "System" },
 ] as const;
@@ -48,6 +51,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
       {tab === "business" && <Business />}
       {tab === "sales" && <Sales />}
       {tab === "automations" && <Automations />}
+      {tab === "work" && <WorkPlans />}
       {tab === "lists" && <Lists />}
       {tab === "system" && <System />}
     </>
@@ -120,6 +124,56 @@ async function Automations() {
                 <p className="text-xs text-a-muted">
                   {r.ruleKey} · {fmtDateTime(r.createdAt)}
                 </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+async function WorkPlans() {
+  const [plans, types] = await Promise.all([getWorkPlans(), eventTypeOptions()]);
+  return (
+    <div className="space-y-4">
+      <Notice title="How work plans work">
+        When a booking creates an event, the plan for its type is added as dated tasks (the <strong>Work plan for new events</strong> automation). Each step goes to the event team member
+        with the same role — now, or as soon as someone with that role joins the team — and shows up on their <strong>My work</strong> page. A plan with no event types is used for every type
+        without its own plan.
+      </Notice>
+      <Card title="Work plans" actions={<WorkPlanButton eventTypes={types} />} bodyClassName="p-0">
+        {plans.length === 0 ? (
+          <p className="p-4 text-[13px] text-a-muted">No work plans — new events won&apos;t get tasks automatically.</p>
+        ) : (
+          <ul className="divide-y divide-a-border">
+            {plans.map((p) => (
+              <li key={p.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{p.name}</p>
+                    <p className="text-xs text-a-muted">
+                      {p.eventTypes.length ? p.eventTypes.map((t) => eventTypeName(types, t)).join(", ") : "Every event type"} · {p.steps.length} steps
+                    </p>
+                  </div>
+                  <span className="flex">
+                    <WorkPlanButton plan={p} eventTypes={types} />
+                    <DeleteWorkPlanButton id={p.id} name={p.name} />
+                  </span>
+                </div>
+                <ol className="mt-2 grid gap-x-6 gap-y-1 text-[13px] sm:grid-cols-2">
+                  {p.steps.map((s, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="w-32 shrink-0 text-xs text-a-muted">
+                        {dayLabel(s.day)}, {s.time}
+                      </span>
+                      <span>
+                        {s.title}
+                        {s.role && <span className="text-xs text-a-muted"> · {s.role}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               </li>
             ))}
           </ul>

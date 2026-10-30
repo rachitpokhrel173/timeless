@@ -99,14 +99,16 @@ export function NotificationSettingsForm({ values }: { values: { emailNewInquiry
 }
 
 export function AutomationRow({ rule }: { rule: { key: string; name: string; enabled: boolean; config: Record<string, number | boolean | string> } }) {
-  const flag = Object.entries(rule.config).find(([, v]) => typeof v === "boolean");
+  const flags = Object.entries(rule.config).filter(([, v]) => typeof v === "boolean");
   return (
     <DialogButton label={<span className="sr-only">Configure {rule.name}</span>} icon={Pencil} size="icon-sm" variant="ghost" title={rule.name}>
       {(close) => (
         <ActionForm action={saveAutomationRule} extra={{ key: rule.key }} success="Automation saved" onSuccess={close} onCancel={close}>
           <CheckboxField name="enabled" label="Enabled" defaultChecked={rule.enabled} />
           {"daysBefore" in rule.config && <TextField label="Days before" name="daysBefore" type="number" min={0} defaultValue={Number(rule.config.daysBefore)} />}
-          {flag && <CheckboxField name="flag" label={flag[0].replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase())} defaultChecked={!!flag[1]} />}
+          {flags.map(([k, v]) => (
+            <CheckboxField key={k} name={`flag:${k}`} label={k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase())} defaultChecked={!!v} />
+          ))}
         </ActionForm>
       )}
     </DialogButton>

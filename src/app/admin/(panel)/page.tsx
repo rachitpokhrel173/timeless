@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
@@ -20,6 +21,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/admin">) {
   const user = await requirePage("dashboard.view");
+  // Field team (no planning or sales access) start on their own schedule
+  if (user.staffId && user.permissions.has("tasks.update") && !(["events.update", "leads.view", "bookings.view", "invoices.view"] as const).some((p) => user.permissions.has(p))) redirect("/admin/my-work");
   const sp = await searchParams;
   const range = resolveRange(sp);
   const has = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);

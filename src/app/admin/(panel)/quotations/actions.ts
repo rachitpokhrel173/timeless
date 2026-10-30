@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { cols, db, exec, maybe, one, schema, tbl, type Row } from "@/db";
+import { afterCommit, cols, db, exec, maybe, one, schema, tbl, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { onEventCreated } from "@/server/automation";
 import { ensureCustomerForLead } from "@/server/crm";
 import { sendEmail } from "@/server/email";
 import { notify } from "@/server/notifications";
@@ -99,6 +100,8 @@ export const convertQuote = adminAction("quotations.approve", z.object({ id: zs.
   if (!result.existed) {
     const b = await one<{ number: string }>(db.from(tbl(schema.bookings)).select("number").eq("id", result.booking.id));
     await audit(user, "convert", "quotation", id, `Converted quotation to booking ${b.number}`, { bookingId: result.booking.id });
+    const eventId = result.event?.id;
+    if (eventId) afterCommit(() => onEventCreated(eventId, user.id));
     if (result.shortages)
       await notify({
         type: "inventory.shortage",
@@ -135,6 +138,8 @@ export const recordAdvance = adminAction(
 
     const booked = await bookingFromQuotation(db, id, user, "PENDING");
     if (!booked.existed) await audit(user, "convert", "quotation", id, `Booked ${q.number} on receiving the advance`, { bookingId: booked.booking.id });
+    const eventId = booked.event?.id;
+    if (eventId) afterCommit(() => onEventCreated(eventId, user.id));
     const r = await recordPayment(db, { bookingId: booked.booking.id, ...payment, notes: payment.notes ?? `Advance for ${q.number}` }, user);
     let confirmed = r.autoConfirmed || r.booking.status === "CONFIRMED";
     if (confirm && !confirmed && r.booking.status === "PENDING") {

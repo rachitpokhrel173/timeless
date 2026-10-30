@@ -8,7 +8,7 @@ import { Button, useToast } from "./interactive";
 import type { ButtonSize, ButtonVariant } from "./ui";
 
 /** Downscale big photos before upload (keeps requests small; the server optimises again). */
-async function shrink(file: File): Promise<File> {
+export async function shrink(file: File): Promise<File> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 3_000_000) return file;
   try {
     const bitmap = await createImageBitmap(file);

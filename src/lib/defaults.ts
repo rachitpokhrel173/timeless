@@ -11,7 +11,10 @@ export type RuleKey =
   | "task.overdue"
   | "followup.due"
   | "vendor.payment_due"
-  | "staff.conflict";
+  | "staff.conflict"
+  | "event.workplan"
+  | "task.progress"
+  | "task.digest";
 
 export const DEFAULT_RULES: { key: RuleKey; name: string; trigger: string; description: string; config: Record<string, number | boolean> }[] = [
   {
@@ -91,6 +94,56 @@ export const DEFAULT_RULES: { key: RuleKey; name: string; trigger: string; descr
     trigger: "When someone is assigned to an event",
     description: "Warn when a team member is assigned to events whose setup windows overlap.",
     config: {},
+  },
+  {
+    key: "event.workplan",
+    name: "Work plan for new events",
+    trigger: "When a booking creates an event, and when someone joins the event team",
+    description:
+      "Add the matching work plan (Settings → Work plans) to the event as dated tasks — pack, set up, decorate, dismantle — and hand each task to the team member whose role matches it. The team gets a notification for their work.",
+    config: { autoAssign: true },
+  },
+  {
+    key: "task.progress",
+    name: "Work progress",
+    trigger: "When the team starts, finishes or gets stuck on a task",
+    description:
+      "Tell the planners who finished what (and who is blocked). The first work-plan task started moves a confirmed booking to In progress; when every task is done the event is marked Completed.",
+    config: { autoStart: true, autoComplete: true },
+  },
+  {
+    key: "task.digest",
+    name: "Morning work summary",
+    trigger: "Daily — every morning",
+    description: "Send each team member a summary of today's events and tasks, plus anything overdue.",
+    config: {},
+  },
+];
+
+export const TEAM_ROLES = ["Lead decorator", "Decorator", "Florist", "Lighting", "Crew", "Driver", "Store keeper", "Planner"];
+
+export type WorkStep = { day: number; time: string; title: string; role: string | null; priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT"; details: string | null };
+export type WorkPlan = { id: string; name: string; eventTypes: string[]; steps: WorkStep[] };
+
+/** Used until a work plan is saved in Settings → Work plans. Days are relative to the event day (0). */
+export const DEFAULT_WORK_PLANS: WorkPlan[] = [
+  {
+    id: "standard",
+    name: "Standard decoration",
+    eventTypes: [],
+    steps: [
+      { day: -3, time: "11:00", title: "Confirm final design, colours and item list with the client", role: "Planner", priority: "HIGH", details: null },
+      { day: -2, time: "11:00", title: "Order fresh flowers and confirm vendors", role: "Planner", priority: "MEDIUM", details: null },
+      { day: -1, time: "10:00", title: "Check and clean décor items from the store", role: "Store keeper", priority: "MEDIUM", details: null },
+      { day: -1, time: "15:00", title: "Pack décor and load the vehicle", role: "Crew", priority: "HIGH", details: "Tick items off the event day sheet while loading." },
+      { day: 0, time: "07:00", title: "Unload at the venue and set up structures", role: "Crew", priority: "HIGH", details: null },
+      { day: 0, time: "09:00", title: "Stage and backdrop decoration", role: "Lead decorator", priority: "URGENT", details: null },
+      { day: 0, time: "11:00", title: "Flowers, entrance and table décor", role: "Decorator", priority: "HIGH", details: null },
+      { day: 0, time: "13:00", title: "Lighting setup and test", role: "Lighting", priority: "HIGH", details: null },
+      { day: 0, time: "15:30", title: "Final walkthrough and photos before guests arrive", role: "Lead decorator", priority: "URGENT", details: "Upload photos of the finished décor." },
+      { day: 1, time: "09:00", title: "Dismantle and pack everything", role: "Crew", priority: "HIGH", details: null },
+      { day: 1, time: "14:00", title: "Return items to the store and report damage or losses", role: "Store keeper", priority: "MEDIUM", details: null },
+    ],
   },
 ];
 

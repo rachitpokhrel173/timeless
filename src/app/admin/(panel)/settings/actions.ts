@@ -4,8 +4,10 @@ import { z } from "zod";
 import { db, exec, maybe, many, schema, tbl, vals } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import type { WorkPlan } from "@/lib/defaults";
 import { runScheduledAutomations } from "@/server/automation";
 import { refreshSite } from "@/server/revalidate";
+import { getWorkPlans, WORK_PLANS_KEY } from "@/server/work";
 
 async function putSetting(key: string, value: unknown, isPublic: boolean, userId: string) {
   await exec(db.from(tbl(schema.siteSettings)).upsert({ key, value, is_public: isPublic, updated_by: userId }, { onConflict: "key" }));
@@ -131,14 +133,14 @@ export const saveNotificationSettings = adminAction("settings.manage", z.object(
 
 export const saveAutomationRule = adminAction(
   "settings.manage",
-  z.object({ key: z.string().min(1).max(60), enabled: z.boolean(), daysBefore: z.coerce.number().int().min(0).max(60).optional(), flag: z.boolean().optional() }),
-  async ({ key, enabled, daysBefore, flag }, user) => {
+  // On/off options arrive as "flag:<configKey>" checkboxes
+  z.object({ key: z.string().min(1).max(60), enabled: z.boolean(), daysBefore: z.coerce.number().int().min(0).max(60).optional() }).catchall(z.unknown()),
+  async ({ key, enabled, daysBefore, ...rest }, user) => {
     const rule = await maybe<{ name: string; config: Record<string, number | boolean | string> }>(db.from(tbl(schema.automationRules)).select("name,config").eq("key", key));
     if (!rule) throw new UserError("Automation not found.");
     const config = { ...rule.config };
     if ("daysBefore" in config && daysBefore !== undefined) config.daysBefore = daysBefore;
-    const flagKey = Object.keys(config).find((k) => typeof config[k] === "boolean");
-    if (flagKey && flag !== undefined) config[flagKey] = flag;
+    for (const k of Object.keys(config)) if (typeof config[k] === "boolean" && typeof rest[`flag:${k}`] === "boolean") config[k] = rest[`flag:${k}`] as boolean;
     await exec(db.from(tbl(schema.automationRules)).update({ enabled, config }).eq("key", key));
     await audit(user, "settings", "automation", key, `${enabled ? "Enabled" : "Disabled"} automation “${rule.name}”`);
   },
@@ -209,4 +211,43 @@ export const deleteChecklist = adminAction("settings.manage", z.object({ id: zs.
 export const saveStageName = adminAction("settings.manage", z.object({ key: z.string().min(1).max(30), name: zs.required("Name", 40) }), async ({ key, name }, user) => {
   await exec(db.from(tbl(schema.salesPipelineStages)).update({ name }).eq("key", key));
   await audit(user, "settings", "pipeline_stage", key, `Renamed pipeline stage to ${name}`);
+});
+
+/* ───────── Work plans (stored in site_settings) ───────── */
+
+const workStep = z.object({
+  day: z.coerce.number().int("Whole days only.").min(-30).max(30),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Enter a time like 09:00."),
+  title: zs.required("Task", 200),
+  role: zs.optional(60),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
+  details: zs.optional(1000),
+});
+
+export const saveWorkPlan = adminAction(
+  "settings.manage",
+  z.object({
+    id: z.string().trim().max(60).optional().nullable(),
+    name: zs.required("Name", 80),
+    eventTypes: z.array(z.string().trim().max(60)).max(40).default([]),
+    steps: z.array(workStep).min(1, "Add at least one step.").max(60),
+  }),
+  async ({ id, ...input }, user) => {
+    const plans = await getWorkPlans();
+    const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "plan";
+    const planId = id && plans.some((p) => p.id === id) ? id : `${slug}-${Date.now().toString(36)}`;
+    const plan: WorkPlan = { id: planId, ...input, steps: [...input.steps].sort((a, b) => a.day - b.day || a.time.localeCompare(b.time)) };
+    const next = plans.some((p) => p.id === planId) ? plans.map((p) => (p.id === planId ? plan : p)) : [...plans, plan];
+    await putSetting(WORK_PLANS_KEY, { plans: next }, false, user.id);
+    await audit(user, "settings", "work_plan", null, `${id ? "Updated" : "Added"} work plan ${input.name} (${input.steps.length} steps)`);
+    return { id: planId };
+  },
+);
+
+export const deleteWorkPlan = adminAction("settings.manage", z.object({ id: z.string().trim().min(1).max(60) }), async ({ id }, user) => {
+  const plans = await getWorkPlans();
+  const plan = plans.find((p) => p.id === id);
+  if (!plan) throw new UserError("Work plan not found.");
+  await putSetting(WORK_PLANS_KEY, { plans: plans.filter((p) => p.id !== id) }, false, user.id);
+  await audit(user, "settings", "work_plan", null, `Deleted work plan ${plan.name}`);
 });

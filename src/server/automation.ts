@@ -7,7 +7,8 @@ import { vendorPaid } from "./finance";
 import { checkLowStock } from "./inventory";
 import { notify } from "./notifications";
 import { runPaymentReminders } from "./payment-reminders";
-import { bookingFromQuotation } from "./sales";
+import { bookingFromQuotation, setBookingStatus } from "./sales";
+import { applyWorkPlan, assignRoleTasks, eventInfo, notifyWork, usersForStaff } from "./work";
 
 /*
  * Rule-based automations (System → Automations switches each on/off and tunes it).
@@ -110,6 +111,7 @@ export async function onQuoteAccepted(quotationId: string) {
             }),
           ),
         );
+        await onEventCreated(result.event.id);
       }
       href = `/admin/bookings/${result.booking.id}`;
       summary += " — pending booking, event and planning task created";
@@ -164,7 +166,38 @@ export async function staffConflicts(staffId: string, eventId: string) {
   return rows.map((r) => r.e);
 }
 
+/** New event workspace → its work plan as dated tasks. */
+export async function onEventCreated(eventId: string, actorId: string | null = null) {
+  const r = await rule("event.workplan");
+  if (!r) return null;
+  try {
+    const result = await applyWorkPlan(eventId, { actorId, autoAssign: r.config.autoAssign !== false });
+    if (result) await logRun("event.workplan", `“${result.plan}” added ${result.added} task(s), ${result.assigned} assigned`);
+    return result;
+  } catch (error) {
+    await logRun("event.workplan", `Work plan not added (${error instanceof Error ? error.message : "error"})`, false);
+    return null;
+  }
+}
+
 export async function onStaffAssigned(staffId: string, eventId: string) {
+  const workplan = await rule("event.workplan");
+  const event = await eventInfo(eventId);
+  if (event) {
+    const given = workplan && workplan.config.autoAssign !== false ? await assignRoleTasks(eventId, staffId) : 0;
+    const userId = (await usersForStaff([staffId])).get(staffId);
+    if (given) await notifyWork(event, new Map([[staffId, given]]));
+    else if (userId)
+      await notify({
+        type: "event.team",
+        title: `You're on the team for ${event.title}`,
+        body: `Event on ${fmtDate(event.eventDate)}.`,
+        href: "/admin/my-work",
+        userId,
+        entityType: "event",
+        entityId: eventId,
+      });
+  }
   const conflicts = await staffConflicts(staffId, eventId);
   if (!conflicts.length) return conflicts;
   if (await rule("staff.conflict")) {
@@ -181,6 +214,88 @@ export async function onStaffAssigned(staffId: string, eventId: string) {
     await logRun("staff.conflict", `${person?.name} overlaps ${conflicts.length} event(s)`);
   }
   return conflicts;
+}
+
+/**
+ * The team moved a task along: tell the planners, start the event when the first work-plan task
+ * starts, and complete it when nothing is left open.
+ */
+export async function onTaskProgress(taskId: string, status: string, actor: { id: string; name: string; planner: boolean }) {
+  const r = await rule("task.progress");
+  if (!r) return;
+  const task = await maybe<{ title: string; workDay: number | null; blockedReason: string | null; eventId: string | null }>(
+    adminDb.from(tbl(schema.eventTasks)).select("title,workDay:work_day,blockedReason:blocked_reason,eventId:event_id").eq("id", taskId),
+  );
+  if (!task) return;
+  const event = task.eventId
+    ? await maybe<{ id: string; title: string; status: string; b: { id: string; number: string; status: string } | null }>(
+        adminDb.from(tbl(schema.events)).select("id,title,status,b:bookings(id,number,status)").eq("id", task.eventId),
+      )
+    : null;
+  const href = event ? `/admin/events/${event.id}?tab=tasks` : "/admin/tasks";
+  const notes: string[] = [];
+
+  if (status === "BLOCKED")
+    await notify({
+      type: "task.blocked",
+      title: `${actor.name} is stuck on “${task.title}”`,
+      body: [event?.title, task.blockedReason].filter(Boolean).join(" — "),
+      href,
+      priority: "URGENT",
+      permission: "events.update",
+    });
+  else if (status === "COMPLETED" && !actor.planner)
+    await notify({ type: "task.completed", title: `${actor.name} finished “${task.title}”`, body: event?.title, href, permission: "events.update", entityType: "task", entityId: taskId });
+
+  if (event && r.config.autoStart !== false && ["IN_PROGRESS", "COMPLETED"].includes(status) && task.workDay != null && ["PLANNING", "READY"].includes(event.status)) {
+    if (!event.b) await exec(adminDb.from(tbl(schema.events)).update({ status: "IN_PROGRESS" }).eq("id", event.id));
+    else if (event.b.status === "CONFIRMED") {
+      try {
+        await setBookingStatus(adminDb, event.b.id, "IN_PROGRESS", actor);
+      } catch (error) {
+        notes.push(`couldn't start ${event.b.number} (${error instanceof Error ? error.message : "error"})`);
+      }
+    } else if (event.b.status === "PENDING")
+      await notify({
+        type: "work.unconfirmed",
+        title: `Work has started on ${event.title}`,
+        body: `${event.b.number} is still pending — confirm the advance.`,
+        href: `/admin/bookings/${event.b.id}`,
+        priority: "HIGH",
+        permission: "bookings.update",
+        dedupeKey: `work-unconfirmed:${event.id}`,
+      });
+    notes.push(`${event.title} started`);
+  }
+
+  if (event && r.config.autoComplete !== false && status === "COMPLETED" && !["COMPLETED", "CANCELLED"].includes(event.status)) {
+    const left = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).neq("status", "COMPLETED").limit(1));
+    const planned = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).not("work_day", "is", null).limit(1));
+    if (!left.length && planned.length) {
+      let done = true;
+      if (!event.b) await exec(adminDb.from(tbl(schema.events)).update({ status: "COMPLETED" }).eq("id", event.id));
+      else if (["CONFIRMED", "IN_PROGRESS"].includes(event.b.status)) {
+        try {
+          await setBookingStatus(adminDb, event.b.id, "COMPLETED", actor);
+        } catch (error) {
+          done = false;
+          notes.push(`couldn't complete ${event.b.number} (${error instanceof Error ? error.message : "error"})`);
+        }
+      } else done = false;
+      await notify({
+        type: "work.done",
+        title: `All work done for ${event.title}`,
+        body: done ? "Marked completed. Record returned items and collect any balance." : "Every task is done, but the booking isn't confirmed — review it.",
+        href: event.b ? `/admin/bookings/${event.b.id}` : `/admin/events/${event.id}`,
+        priority: "HIGH",
+        permission: "events.update",
+        dedupeKey: `work-done:${event.id}`,
+      });
+      notes.push(`${event.title} ${done ? "completed" : "all tasks done"}`);
+    }
+  }
+  if (notes.length || ["BLOCKED", "COMPLETED"].includes(status))
+    await logRun("task.progress", `${actor.name}: “${task.title}” → ${status.toLowerCase().replace("_", " ")}${notes.length ? ` — ${notes.join(", ")}` : ""}`, !notes.some((n) => n.startsWith("couldn't")));
 }
 
 /* ───────── Daily sweep ───────── */
@@ -374,6 +489,53 @@ export async function runScheduledAutomations() {
     }
     await logRun("task.overdue", `${tasks.length} overdue task(s)`);
     results.push("task.overdue");
+  }
+
+  // Morning summary for each team member: today's events and tasks, plus overdue ones
+  if (await rule("task.digest")) {
+    const dayStart = new Date(`${today}T00:00:00+05:45`);
+    const dayEnd = new Date(`${todayISO(1)}T00:00:00+05:45`).toISOString();
+    const [due, onTeam] = await Promise.all([
+      all<{ id: string; dueAt: string; userId: string | null; staffId: string | null }>(() =>
+        adminDb
+          .from(tbl(schema.eventTasks))
+          .select("id,dueAt:due_at,userId:assignee_user_id,staffId:assignee_staff_id")
+          .neq("status", "COMPLETED")
+          .lt("due_at", dayEnd)
+          .or("assignee_user_id.not.is.null,assignee_staff_id.not.is.null")
+          .order("id"),
+      ),
+      many<{ staffId: string; e: { title: string } }>(
+        adminDb.from(tbl(schema.staffAssignments)).select("staffId:staff_id,e:events!inner(title)").eq("e.event_date", today).neq("e.status", "CANCELLED"),
+      ),
+    ]);
+    const users = await usersForStaff([...due.map((t) => t.staffId), ...onTeam.map((a) => a.staffId)].filter((x): x is string => !!x));
+    const per = new Map<string, { today: number; overdue: number; events: string[] }>();
+    const entry = (userId: string) => per.get(userId) ?? per.set(userId, { today: 0, overdue: 0, events: [] }).get(userId)!;
+    for (const t of due) {
+      const userId = t.userId ?? (t.staffId ? users.get(t.staffId) : undefined);
+      if (!userId) continue;
+      if (new Date(t.dueAt) < dayStart) entry(userId).overdue++;
+      else entry(userId).today++;
+    }
+    for (const a of onTeam) {
+      const userId = users.get(a.staffId);
+      if (userId) entry(userId).events.push(a.e.title);
+    }
+    for (const [userId, d] of per) {
+      const parts = [d.today && `${d.today} task${d.today === 1 ? "" : "s"} today`, d.overdue && `${d.overdue} overdue`].filter(Boolean);
+      await notify({
+        type: "task.digest",
+        title: parts.length ? `Your work: ${parts.join(", ")}` : "You have an event today",
+        body: d.events.length ? `Today: ${d.events.join(", ")}` : undefined,
+        href: "/admin/my-work",
+        priority: d.overdue ? "HIGH" : "MEDIUM",
+        userId,
+        dedupeKey: `digest:${userId}:${today}`,
+      });
+    }
+    await logRun("task.digest", `Morning summary sent to ${per.size} team member(s)`);
+    results.push("task.digest");
   }
 
   // Follow-ups: mark overdue, remind today's
