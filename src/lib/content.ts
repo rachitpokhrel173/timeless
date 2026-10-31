@@ -239,7 +239,7 @@ export const getGalleryItems = cached(
         })
         .filter((g): g is GalleryItem => !!g.image);
     }),
-  "gallery",
+  "gallery-v2", // bumped when gallery rows are changed straight in the database, which skips refreshSite()
 );
 
 export const getCatalogue = cached(
