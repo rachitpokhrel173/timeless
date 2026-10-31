@@ -199,14 +199,11 @@ export const getGalleryItems = cached(
     asAnon(async (conn) => {
       let query = conn.from(tbl(schema.galleryAlbums)).select(`${cols(schema.galleryAlbums)},${media("cover", "cover_id")}`);
       if (featured !== undefined) query = query.eq("featured", featured);
-      // Sample albums are visible (and labelled) in development only
-      if (!showPlaceholders) query = query.eq("placeholder", false);
-      const albums = await many<Row<typeof schema.galleryAlbums> & { cover: Media | null }>(
-        query
-          .order("position")
-          .order("created_at")
-          .limit(limit ?? 500),
-      );
+      let albums = await many<Row<typeof schema.galleryAlbums> & { cover: Media | null }>(query.order("position").order("created_at").limit(500));
+      // Sample albums always show in development. In production they're hidden as soon as a real
+      // album exists, and until then they stand in so the gallery is never empty.
+      if (!showPlaceholders && albums.some((a) => !a.placeholder)) albums = albums.filter((a) => !a.placeholder);
+      if (limit !== undefined) albums = albums.slice(0, limit);
       if (!albums.length) return [];
       const photos = await many<{ albumId: string; image: Media }>(
         conn
