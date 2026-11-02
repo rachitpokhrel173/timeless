@@ -1,10 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { cols, db, exec, many, maybe, one, schema, tbl, vals, type Row } from "@/db";
+import { cols, db, exec, many, maybe, one, rpc, schema, tbl, vals, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
-import { findCustomer, logLeadActivity } from "@/server/crm";
+import { matchCustomer, logLeadActivity } from "@/server/crm";
 import { notify } from "@/server/notifications";
 import { nextNumber } from "@/server/numbering";
 
@@ -74,8 +74,10 @@ export const createInquiryAction = adminAction(
     assignedTo: zs.optUuid(),
   }),
   async (input, user) => {
-    let customer = await findCustomer(db, input.phone, input.email);
-    if (!customer) {
+    const match = await matchCustomer(db, input.name, input.phone, input.email);
+    let customer = match.kind === "MATCHED" ? match.customer : null;
+    const review = match.kind === "REVIEW" ? match.candidate : null;
+    if (!customer && !review) {
       customer = await one<Row<typeof schema.customers>>(
         db
           .from(tbl(schema.customers))
@@ -85,7 +87,7 @@ export const createInquiryAction = adminAction(
     }
     const leadValues = vals(schema.leads, {
         number: await nextNumber("LD", db),
-        customerId: customer.id,
+        customerId: customer?.id ?? null,
         name: input.name,
         phone: input.phone,
         email: input.email,
@@ -101,11 +103,67 @@ export const createInquiryAction = adminAction(
     const lead = await one<{ id: string }>(leads().insert(leadValues).select("id"));
     const inquiry = await one<{ id: string; number: string }>(
       inquiries()
-        .insert(vals(schema.inquiries, { ...input, number: await nextNumber("IQ", db), leadId: lead.id, customerId: customer.id, assignedTo: input.assignedTo ?? user.id, readAt: new Date() }))
+        .insert(
+          vals(schema.inquiries, {
+            ...input,
+            number: await nextNumber("IQ", db),
+            leadId: lead.id,
+            customerId: customer?.id ?? null,
+            customerMatch: match.kind === "MATCHED" ? "MATCHED" : review ? "REVIEW" : "CREATED",
+            possibleCustomerId: review?.id ?? null,
+            convertedAt: customer ? new Date() : null,
+            convertedBy: customer ? user.id : null,
+            assignedTo: input.assignedTo ?? user.id,
+            readAt: new Date(),
+          }),
+        )
         .select("id,number"),
     );
     await logLeadActivity(db, lead.id, "SYSTEM", `Inquiry ${inquiry.number} recorded by ${user.name}`, user.id);
     await audit(user, "create", "inquiry", inquiry.id, `Recorded inquiry ${inquiry.number} for ${input.name}`);
-    return { id: inquiry.id };
+    return { id: inquiry.id, review: review ? review.name : null };
+  },
+);
+
+/**
+ * Inquiry → customer in one transaction (link_inquiry_customer): link the existing customer
+ * staff confirmed, or create a new one from the inquiry. Refuses to re-link a converted inquiry.
+ */
+export const linkInquiryCustomer = adminAction(
+  ["leads.update", "customers.create"],
+  z.object({ id: zs.uuid(), customerId: zs.optUuid() }),
+  async ({ id, customerId }, user) => {
+    if (!customerId && !user.permissions.has("customers.create")) throw new UserError("You don't have permission to create customers.");
+    const r = await rpc<{ customerId: string; created: boolean; existed: boolean }>(db, "link_inquiry_customer", { p_inquiry: id, p_customer: customerId });
+    if (!r.existed) await audit(user, r.created ? "create" : "update", "inquiry", id, r.created ? "Created a new customer from the inquiry" : "Linked the inquiry to an existing customer", { customerId: r.customerId });
+    return r;
+  },
+);
+
+/** Lead → inquiry (a call or walk-in on an existing lead). Pressing twice doesn't duplicate it. */
+export const createInquiryFromLead = adminAction(
+  "leads.create",
+  z.object({
+    leadId: zs.uuid(),
+    eventType: zs.optional(60),
+    eventDate: zs.date(),
+    venue: zs.optional(200),
+    guestCount: zs.optional(40),
+    budget: zs.optional(60),
+    message: zs.optional(3000),
+  }),
+  async (input, user) => {
+    const r = await rpc<{ inquiryId: string; number: string; existed: boolean }>(db, "create_inquiry_from_lead", {
+      p_lead: input.leadId,
+      p_event_type: input.eventType,
+      p_event_date: input.eventDate,
+      p_venue: input.venue,
+      p_guest_count: input.guestCount,
+      p_budget: input.budget,
+      p_message: input.message,
+      p_phone: null,
+    });
+    if (!r.existed) await audit(user, "create", "inquiry", r.inquiryId, `Created inquiry ${r.number} from a lead`, { leadId: input.leadId });
+    return { id: r.inquiryId, number: r.number, existed: r.existed };
   },
 );

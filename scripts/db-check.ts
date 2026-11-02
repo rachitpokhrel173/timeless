@@ -25,6 +25,11 @@ const NOISE = [
   /POLICY/,
   /ALTER COLUMN "\w+" SET DEFAULT/, // array/numeric default formatting
   /CONSTRAINT "\w{63,}"/, // FK names Postgres truncated to 63 chars
+  // Expression index: drizzle quotes identifiers that Postgres stores unquoted, so it always
+  // "differs". Its behaviour is covered by scripts/test-phase1.ts (one selected design per area).
+  /INDEX "design_selected_unique"/,
+  // Phase 4 finance views (SQL only — read through src/server/finance.ts); covered by scripts/test-phase4.ts
+  /VIEW "public"\."(payment_ledger|booking_finance|customer_finance)"/,
 ];
 const drift = statements.filter((s) => !NOISE.some((re) => re.test(s)));
 

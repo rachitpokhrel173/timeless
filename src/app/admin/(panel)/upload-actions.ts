@@ -87,10 +87,18 @@ export async function uploadDesignFiles(form: FormData) {
     if (!designId) throw new UserError("Choose a design.");
     const design = await maybe<Row<typeof schema.designApprovals>>(db.from(tbl(schema.designApprovals)).select(cols(schema.designApprovals)).eq("id", designId));
     if (!design) throw new UserError("Design not found.");
+    // A proposed design is a record of what the client saw: changes go into a new revision
+    const reference = form.get("kind") === "reference";
+    if (design.status !== "DRAFT") throw new UserError("This design has already been proposed — create a revision to add files.");
     const ids: string[] = [];
     for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: `events/${design.eventId}`, uploadedBy: user.id, imagesOnly: false })).id);
-    await exec(db.from(tbl(schema.designApprovals)).update({ media_ids: [...design.mediaIds, ...ids] }).eq("id", designId));
-    await audit(user, "upload", "event", design.eventId, `Added ${ids.length} file(s) to design “${design.title}”`);
+    await exec(
+      db
+        .from(tbl(schema.designApprovals))
+        .update(reference ? { reference_media_ids: [...design.referenceMediaIds, ...ids] } : { media_ids: [...design.mediaIds, ...ids] })
+        .eq("id", designId),
+    );
+    await audit(user, "upload", "event", design.eventId, `Added ${ids.length} ${reference ? "reference photo(s)" : "file(s)"} to design “${design.title}”`);
     return { count: ids.length };
   });
 }

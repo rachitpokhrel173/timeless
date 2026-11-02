@@ -12,6 +12,8 @@ import { availabilityForEvent } from "@/server/inventory";
 import { eventTypeName, eventTypeOptions, staffOptions, userOptions, vendorOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
 import { dayLabel, getWorkPlans, proofPhotos } from "@/server/work";
+import { isClosedTask, isHeld, taskLabel } from "@/lib/task-status";
+import { ActivityFeed, bookingContext, CompletionCard, FinanceTab, RelatedRecords, RequirementsTab, serviceOptions, ServicesTab, WorkOrdersTab } from "./workspace";
 import UploadButton from "@/components/admin/Upload";
 import { BOOKING_STATUS, DESIGN_STATUS, EVENT_STATUS, PAY_STATUS, PRIORITY, StatusBadge, TASK_STATUS, VENDOR_STATUS, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
@@ -40,7 +42,7 @@ import {
 
 export const metadata: Metadata = { title: "Event" };
 
-const TABS = ["overview", "tasks", "team", "vendors", "inventory", "timeline", "designs", "documents", "profit"] as const;
+const TABS = ["overview", "requirements", "services", "designs", "work-orders", "tasks", "team", "vendors", "inventory", "timeline", "documents", "finance"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function EventPage({ params, searchParams }: PageProps<"/admin/events/[id]">) {
@@ -56,21 +58,29 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
   >(adminDb.from(tbl(schema.events)).select(`${cols(schema.events)},customer:customers(id,name,phone),booking:bookings(id,number,status,totalAmount:total_amount,amountPaid:amount_paid)`).eq("id", id));
   if (!event) notFound();
   const can = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);
-  const tab: Tab = (TABS as readonly string[]).includes(str("tab") ?? "") ? (str("tab") as Tab) : "overview";
+  const asked = str("tab") === "profit" ? "finance" : (str("tab") ?? "");
+  const tab: Tab = (TABS as readonly string[]).includes(asked) ? (asked as Tab) : "overview";
   const closed = ["COMPLETED", "CANCELLED"].includes(event.status);
   const plan = can("events.update") && !closed;
   const base = `/admin/events/${id}`;
 
-  const [types, counts] = await Promise.all([
+  const [types, counts, booking, managers, staffList] = await Promise.all([
     eventTypeOptions(),
     Promise.all([
       many<{ status: string }>(adminDb.from(tbl(schema.eventTasks)).select("status").eq("event_id", id)),
+      many<{ status: string }>(adminDb.from(tbl(schema.workOrders)).select("status").eq("event_id", id)),
       many<{ id: string }>(adminDb.from(tbl(schema.staffAssignments)).select("id").eq("event_id", id)),
       many<{ id: string }>(adminDb.from(tbl(schema.vendorAssignments)).select("id").eq("event_id", id).neq("status", "CANCELLED")),
     ]),
+    bookingContext(event.bookingId),
+    userOptions(),
+    staffOptions(),
   ]);
-  const [taskRows, teamRows, vendorRows] = counts;
-  const openTasks = taskRows.filter((t) => t.status !== "COMPLETED").length;
+  const [allTasks, orderRows, teamRows, vendorRows] = counts;
+  const taskRows = allTasks.filter((t) => t.status !== "CANCELLED");
+  const openTasks = taskRows.filter((t) => !isClosedTask(t.status)).length;
+  const liveOrders = orderRows.filter((o) => o.status !== "CANCELLED");
+  const openOrders = liveOrders.filter((o) => o.status !== "DONE").length;
   const days = Math.round((new Date(`${event.eventDate}T00:00:00+05:45`).getTime() - serverNow()) / 86_400_000);
 
   return (
@@ -100,7 +110,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
             <LinkButton href={`/admin/print/event/${id}`} icon={Printer} target="_blank">
               Day sheet
             </LinkButton>
-            {plan && <EditEventButton values={event} eventTypes={types} />}
+            {plan && <EditEventButton values={event} eventTypes={types} managers={managers} />}
           </>
         }
       />
@@ -109,26 +119,62 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
         active={tab}
         items={[
           { key: "overview", label: "Overview", href: base },
+          { key: "requirements", label: "Requirements", href: `${base}?tab=requirements` },
+          { key: "services", label: "Services", href: `${base}?tab=services` },
+          { key: "designs", label: "Designs", href: `${base}?tab=designs` },
+          { key: "work-orders", label: "Work orders", href: `${base}?tab=work-orders`, count: openOrders },
           { key: "tasks", label: "Tasks", href: `${base}?tab=tasks`, count: openTasks },
           { key: "team", label: "Team", href: `${base}?tab=team`, count: teamRows.length },
           ...(can("vendors.view") ? [{ key: "vendors", label: "Vendors", href: `${base}?tab=vendors`, count: vendorRows.length }] : []),
           ...(can("inventory.view") ? [{ key: "inventory", label: "Inventory", href: `${base}?tab=inventory` }] : []),
-          { key: "timeline", label: "Run sheet", href: `${base}?tab=timeline` },
-          { key: "designs", label: "Designs", href: `${base}?tab=designs` },
+          { key: "timeline", label: "Timeline", href: `${base}?tab=timeline` },
           ...(can("documents.view") ? [{ key: "documents", label: "Documents", href: `${base}?tab=documents` }] : []),
-          ...(can("expenses.view") ? [{ key: "profit", label: "Profit", href: `${base}?tab=profit` }] : []),
+          ...(can("payments.view") || can("expenses.view") ? [{ key: "finance", label: "Finance", href: `${base}?tab=finance` }] : []),
         ]}
       />
 
-      {tab === "overview" && <Overview event={event} types={types} openTasks={openTasks} totalTasks={taskRows.length} team={teamRows.length} canMoney={can("payments.view")} canEdit={can("events.update")} />}
+      {tab === "overview" && (
+        <Overview
+          event={event}
+          types={types}
+          openTasks={openTasks}
+          totalTasks={taskRows.length}
+          openOrders={openOrders}
+          totalOrders={liveOrders.length}
+          team={teamRows.length}
+          canMoney={can("payments.view")}
+          canEdit={can("events.update")}
+          canComplete={can("events.complete")}
+          booking={booking}
+          managers={managers}
+        />
+      )}
+      {tab === "requirements" && <RequirementsTab event={event} inquiryId={booking?.inquiryId ?? null} />}
+      {tab === "services" && <ServicesTab bookingId={event.bookingId} canEdit={plan} money={can("payments.view")} />}
+      {tab === "work-orders" && <WorkOrdersTab eventId={id} bookingId={event.bookingId} plan={plan} canStatus={!closed && (can("events.update") || can("tasks.update"))} staff={staffList} />}
       {tab === "tasks" && <TasksTab eventId={id} plan={plan} canStatus={can("events.update") || can("tasks.update")} />}
       {tab === "team" && <TeamTab eventId={id} plan={plan} />}
       {tab === "vendors" && can("vendors.view") && <VendorsTab eventId={id} manage={can("vendors.manage") && !closed} money={can("expenses.view")} />}
       {tab === "inventory" && can("inventory.view") && <InventoryTab eventId={id} adjust={(can("inventory.adjust") || can("bookings.update")) && event.status !== "CANCELLED"} />}
-      {tab === "timeline" && <TimelineTab eventId={id} date={event.eventDate} plan={plan} />}
-      {tab === "designs" && <DesignsTab eventId={id} plan={plan} />}
-      {tab === "documents" && can("documents.view") && <DocumentsTab eventId={id} customerId={event.customerId} manage={can("documents.manage")} />}
-      {tab === "profit" && can("expenses.view") && <ProfitTab eventId={id} />}
+      {tab === "timeline" && (
+        <div className="space-y-4">
+          <TimelineTab eventId={id} date={event.eventDate} plan={plan} />
+          <ActivityFeed eventId={id} booking={booking} />
+        </div>
+      )}
+      {tab === "designs" && <DesignsTab eventId={id} plan={plan} bookingId={event.bookingId} />}
+      {tab === "documents" && can("documents.view") && (
+        <div className="space-y-4">
+          <DocumentsTab eventId={id} customerId={event.customerId} manage={can("documents.manage")} />
+          {can("bookings.view") && <RelatedRecords booking={booking} />}
+        </div>
+      )}
+      {tab === "finance" && (can("payments.view") || can("expenses.view")) && (
+        <div className="space-y-4">
+          <FinanceTab booking={booking} canPayments={can("payments.view")} />
+          {can("expenses.view") && <ProfitTab eventId={id} />}
+        </div>
+      )}
     </>
   );
 }
@@ -140,32 +186,50 @@ async function Overview({
   types,
   openTasks,
   totalTasks,
+  openOrders,
+  totalOrders,
   team,
   canMoney,
   canEdit,
+  canComplete,
+  booking,
+  managers,
 }: {
   event: Row<typeof schema.events> & { customer: { id: string; name: string; phone: string | null } | null; booking: { id: string; number: string; status: string; totalAmount: number; amountPaid: number } | null };
   types: { value: string; label: string }[];
   openTasks: number;
   totalTasks: number;
+  openOrders: number;
+  totalOrders: number;
   team: number;
   canMoney: boolean;
   canEdit: boolean;
+  canComplete: boolean;
+  booking: Awaited<ReturnType<typeof bookingContext>>;
+  managers: { value: string; label: string }[];
 }) {
   const notes = await many<Row<typeof schema.eventNotes> & { p: { fullName: string } | null }>(
     adminDb.from(tbl(schema.eventNotes)).select(`${cols(schema.eventNotes)},p:profiles(fullName:full_name)`).eq("event_id", event.id).order("created_at", { ascending: false }).limit(30),
   );
   const balance = event.booking ? Math.max(0, event.booking.totalAmount - event.booking.amountPaid) : 0;
+  const manager = managers.find((m) => m.value === event.managerId)?.label ?? null;
+  const completedBy = event.completedBy ? (managers.find((m) => m.value === event.completedBy)?.label ?? null) : null;
+  const quote = booking?.quotationId ? await maybe<{ id: string; number: string }>(adminDb.from(tbl(schema.quotations)).select("id,number").eq("id", booking.quotationId)) : null;
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MiniStat label="Work orders open" value={`${openOrders} / ${totalOrders}`} href={`/admin/events/${event.id}?tab=work-orders`} />
           <MiniStat label="Tasks open" value={`${openTasks} / ${totalTasks}`} href={`/admin/events/${event.id}?tab=tasks`} />
           <MiniStat label="Team assigned" value={String(team)} href={`/admin/events/${event.id}?tab=team`} />
-          {canMoney && event.booking && <MiniStat label="Balance due" value={npr(balance)} href={`/admin/bookings/${event.booking.id}?tab=payments`} />}
+          {canMoney && event.booking && <MiniStat label="Balance due" value={npr(balance)} href={`/admin/events/${event.id}?tab=finance`} />}
         </div>
-        {totalTasks > 0 && <ProgressBar value={totalTasks - openTasks} max={totalTasks} label="Tasks complete" tone="success" />}
-        <Card title="Requirements">{event.requirements ? <p className="whitespace-pre-line">{event.requirements}</p> : <p className="text-[13px] text-a-muted">No requirements recorded.</p>}</Card>
+        {totalOrders + totalTasks > 0 && <ProgressBar value={totalOrders - openOrders + totalTasks - openTasks} max={totalOrders + totalTasks} label="Work complete (work orders and tasks)" tone="success" />}
+        <CompletionCard event={{ ...event, completedAt: event.completedAt, by: completedBy }} bookingStatus={event.booking?.status ?? null} balance={balance} canComplete={canComplete} />
+        <Card title="Confirmed requirements" actions={<Link href={`/admin/events/${event.id}?tab=requirements`} className="text-[13px] hover:underline">Original inquiry</Link>}>
+          {event.requirements ? <p className="whitespace-pre-line">{event.requirements}</p> : <p className="text-[13px] text-a-muted">No requirements recorded.</p>}
+          {event.specialInstructions && <p className="mt-3 whitespace-pre-line rounded-md bg-a-subtle p-3 text-[13px]">{event.specialInstructions}</p>}
+        </Card>
         <Card title="Event notes" description="Private team notes about this event.">
           {canEdit && (
             <div className="mb-4">
@@ -194,6 +258,7 @@ async function Overview({
           <DetailList
             columns={1}
             items={[
+              ["Manager", manager],
               ["Type", eventTypeName(types, event.eventType)],
               ["Date", fmtDate(event.eventDate)],
               ["Time", event.startTime ? `${event.startTime.slice(0, 5)}${event.endTime ? ` – ${event.endTime.slice(0, 5)}` : ""}` : null],
@@ -201,6 +266,8 @@ async function Overview({
               ["Venue", event.venue],
               ["Address", event.venueAddress],
               ["Guests", event.guestCount ? num(event.guestCount) : null],
+              ["Theme", event.theme],
+              ["Style", event.style],
               ["Colour theme", event.colorTheme],
             ]}
           />
@@ -212,7 +279,10 @@ async function Overview({
               items={[
                 ["Name", <Link key="n" href={`/admin/customers/${event.customer.id}`} className="hover:underline">{event.customer.name}</Link>],
                 ["Phone", event.customer.phone],
-                ["Booking", event.booking ? <span key="b" className="flex items-center gap-2">{event.booking.number} <StatusBadge map={BOOKING_STATUS} value={event.booking.status} /></span> : null],
+                ["Booking", event.booking ? <span key="b" className="flex items-center gap-2"><Link href={`/admin/bookings/${event.booking.id}`} className="hover:underline">{event.booking.number}</Link> <StatusBadge map={BOOKING_STATUS} value={event.booking.status} /></span> : null],
+                ["Quotation", quote ? <Link key="q" href={`/admin/quotations/${quote.id}`} className="hover:underline">{quote.number}</Link> : null],
+                ["Payment", canMoney && event.booking ? <StatusBadge key="p" map={PAY_STATUS} value={event.booking.amountPaid >= event.booking.totalAmount ? "PAID" : event.booking.amountPaid > 0 ? "PARTIAL" : "PENDING"} /> : null],
+                ["Budget", canMoney && event.booking ? npr(event.booking.totalAmount) : null],
               ]}
             />
           ) : (
@@ -226,8 +296,8 @@ async function Overview({
 
 async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: boolean; canStatus: boolean }) {
   const [tasks, staff, users, templates, plans] = await Promise.all([
-    many<Row<typeof schema.eventTasks> & { s: { name: string } | null; u: { fullName: string } | null; by: { fullName: string } | null }>(
-      adminDb.from(tbl(schema.eventTasks)).select(`${cols(schema.eventTasks)},s:staff(name),u:profiles!assignee_user_id(fullName:full_name),by:profiles!completed_by(fullName:full_name)`).eq("event_id", eventId).order("position").order("due_at", { nullsFirst: false }),
+    many<Row<typeof schema.eventTasks> & { s: { name: string } | null; u: { fullName: string } | null; by: { fullName: string } | null; wo: { title: string } | null }>(
+      adminDb.from(tbl(schema.eventTasks)).select(`${cols(schema.eventTasks)},s:staff(name),u:profiles!assignee_user_id(fullName:full_name),by:profiles!completed_by(fullName:full_name),wo:work_orders(title)`).eq("event_id", eventId).order("position").order("due_at", { nullsFirst: false }),
     ),
     staffOptions(),
     userOptions(),
@@ -252,28 +322,31 @@ async function TasksTab({ eventId, plan, canStatus }: { eventId: string; plan: b
       )}
       {tasks.length === 0 && <EmptyState title="No tasks yet">Add a work plan for the team’s dated tasks, or a ready-made checklist, so nothing is forgotten.</EmptyState>}
       {groups.map((g) => {
-        const list = tasks.filter((t) => t.checklist === g.key);
+        // Tasks of the same work order sit together
+        const list = tasks.filter((t) => t.checklist === g.key).sort((a, b) => (a.wo?.title ?? "\uffff").localeCompare(b.wo?.title ?? "\uffff"));
         if (!list.length) return null;
-        const done = list.filter((t) => t.status === "COMPLETED").length;
+        const live = list.filter((t) => t.status !== "CANCELLED");
+        const done = live.filter((t) => t.status === "COMPLETED").length;
         return (
-          <Card key={g.title} title={g.title} description={`${done} of ${list.length} done`} bodyClassName="p-0">
+          <Card key={g.title} title={g.title} description={`${done} of ${live.length} done`} bodyClassName="p-0">
             <ul className="divide-y divide-a-border">
-              {list.map(({ s, u, by, ...t }) => {
+              {list.map(({ s, u, by, wo, ...t }) => {
                 const pics = t.proofMediaIds.map((m) => photos.get(m)).filter((x): x is { src: string; alt: string } => !!x);
-                const late = t.dueAt && t.dueAt.getTime() < now && t.status !== "COMPLETED";
+                const late = t.dueAt && t.dueAt.getTime() < now && !isClosedTask(t.status);
                 return (
                   <li key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                     {canStatus && <TaskCheck id={t.id} done={t.status === "COMPLETED"} title={t.title} />}
                     <div className="min-w-0 flex-1">
-                      <p className={t.status === "COMPLETED" ? "text-a-muted line-through" : "font-medium"}>{t.title}</p>
+                      <p className={isClosedTask(t.status) ? "text-a-muted line-through" : "font-medium"}>{t.title}</p>
+                      {wo && <p className="text-xs text-a-accent">Work order: {wo.title}</p>}
                       <p className="text-xs text-a-muted">
-                        {[s?.name, u?.fullName].filter(Boolean).join(" · ") || "Unassigned"}
+                        {[s?.name, u?.fullName].filter(Boolean).join(" · ") || taskLabel("TODO", false)}
                         {t.dueAt && <span className={late ? " font-medium text-a-danger" : undefined}> · due {fmtDateTime(t.dueAt)}</span>}
                         {t.teamRole && ` · ${t.teamRole}`}
                         {t.workDay != null && ` · ${dayLabel(t.workDay)}`}
                         {t.status === "COMPLETED" && by && ` · done by ${by.fullName}${t.completedAt ? ` ${fmtDateTime(t.completedAt)}` : ""}`}
                       </p>
-                      {t.status === "BLOCKED" && t.blockedReason && <p className="mt-1 text-xs font-medium text-a-danger">Blocked: {t.blockedReason}</p>}
+                      {isHeld(t.status) && t.blockedReason && <p className="mt-1 text-xs font-medium text-a-danger">{taskLabel(t.status)}: {t.blockedReason}</p>}
                       {t.completionNote && <p className="mt-1 text-xs text-a-muted">“{t.completionNote}”</p>}
                       {pics.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -429,7 +502,8 @@ async function InventoryTab({ eventId, adjust }: { eventId: string; adjust: bool
             <thead>
               <tr>
                 <Th>Item</Th>
-                <Th className="text-right">Qty</Th>
+                <Th className="text-right">Required</Th>
+                <Th className="text-right">Reserved</Th>
                 <Th>Status</Th>
                 <Th>Returned</Th>
                 <Th />
@@ -444,13 +518,17 @@ async function InventoryTab({ eventId, adjust }: { eventId: string; adjust: bool
                     </Link>
                     <span className="block text-xs text-a-muted">{l.item.sku}</span>
                   </Td>
+                  <Td className={`text-right tabular-nums ${l.required != null && l.required > l.quantity && ["RESERVED", "CHECKED_OUT"].includes(l.status) ? "font-medium text-a-danger" : ""}`}>
+                    {l.required ?? l.quantity}
+                  </Td>
                   <Td className="text-right tabular-nums">
                     {l.quantity} {l.item.unit}
+                    {l.required != null && l.required > l.quantity && ["RESERVED", "CHECKED_OUT"].includes(l.status) && <span className="block text-xs text-a-danger">{l.required - l.quantity} short</span>}
                   </Td>
                   <Td>
                     <Badge tone={l.status === "CHECKED_OUT" ? "info" : l.status === "RESERVED" ? "accent" : "neutral"}>{label(l.status)}</Badge>
                   </Td>
-                  <Td className="text-xs">{l.status === "RETURNED" ? `${l.returnedDamaged} damaged · ${l.returnedLost} lost · ${l.used} used` : "—"}</Td>
+                  <Td className="text-xs">{l.status === "RETURNED" ? `${Math.max(0, l.quantity - l.returnedDamaged - l.returnedLost - l.used)} back · ${l.returnedDamaged} damaged · ${l.returnedLost} lost · ${l.used} used` : "—"}</Td>
                   <Td className="text-right">{adjust && ["RESERVED", "CHECKED_OUT"].includes(l.status) && <ReturnButton id={l.id} name={l.item.name} quantity={l.quantity} consumable={l.item.consumable} />}</Td>
                 </tr>
               ))}
@@ -498,58 +576,127 @@ async function TimelineTab({ eventId, date, plan }: { eventId: string; date: str
   );
 }
 
-async function DesignsTab({ eventId, plan }: { eventId: string; plan: boolean }) {
-  const designs = await many<Row<typeof schema.designApprovals>>(adminDb.from(tbl(schema.designApprovals)).select(cols(schema.designApprovals)).eq("event_id", eventId).order("created_at", { ascending: false }));
-  const mediaIds = designs.flatMap((d) => d.mediaIds);
+async function DesignsTab({ eventId, plan, bookingId }: { eventId: string; plan: boolean; bookingId: string | null }) {
+  const [designs, history, services] = await Promise.all([
+    many<Row<typeof schema.designApprovals> & { bi: { description: string } | null }>(
+      adminDb.from(tbl(schema.designApprovals)).select(`${cols(schema.designApprovals)},bi:booking_items(description)`).eq("event_id", eventId).order("version", { ascending: false }).order("created_at", { ascending: false }),
+    ),
+    many<{ designId: string; toStatus: string; note: string | null; channel: string | null; createdAt: string; p: { fullName: string } | null }>(
+      adminDb.from(tbl(schema.designApprovalHistory)).select("designId:design_id,toStatus:to_status,note,channel,createdAt:created_at,p:profiles(fullName:full_name)").eq("event_id", eventId).order("created_at"),
+    ),
+    serviceOptions(bookingId),
+  ]);
+  const mediaIds = designs.flatMap((d) => [...d.mediaIds, ...d.referenceMediaIds]);
   const media = mediaIds.length ? await many<{ id: string; bucket: string; path: string; filename: string; mime: string }>(adminDb.from(tbl(schema.media)).select("id,bucket,path,filename,mime").in("id", mediaIds)) : [];
   const links = new Map(await Promise.all(media.map(async (m) => [m.id, { ...m, url: await signedUrl(m.bucket, m.path, 1800).catch(() => null) }] as const)));
+  // Group by what the design is for: a service, or a named area
+  const areaOf = (d: (typeof designs)[number]) => d.bi?.description ?? (d.area?.trim() || "General");
+  const areas = [...new Set(designs.map(areaOf))];
+  const gallery = (ids: string[]) => (
+    <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {ids.map((mid) => {
+        const m = links.get(mid);
+        if (!m) return null;
+        return m.mime.startsWith("image/") && m.url ? (
+          <a key={mid} href={m.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-a-border">
+            {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL from private storage */}
+            <img src={m.url} alt={m.filename} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+          </a>
+        ) : (
+          <a key={mid} href={m.url ?? "#"} target="_blank" rel="noreferrer" className="flex aspect-[4/3] items-center justify-center gap-1 rounded-md border border-a-border p-2 text-center text-xs hover:bg-a-hover">
+            <FileText className="size-4" aria-hidden /> {m.filename}
+          </a>
+        );
+      })}
+    </div>
+  );
   return (
-    <div className="space-y-4">
-      {plan && <DesignButton eventId={eventId} />}
-      {designs.length === 0 && <EmptyState title="No designs yet">Share mood boards and stage concepts here and record the client&rsquo;s approval.</EmptyState>}
-      {designs.map((d) => (
-        <Card
-          key={d.id}
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              {d.title} <Badge icon={false}>v{d.version}</Badge> <StatusBadge map={DESIGN_STATUS} value={d.status} />
-            </span>
-          }
-          description={d.sentAt ? `Sent ${fmtDateTime(d.sentAt)}${d.respondedAt ? ` · answered ${fmtDateTime(d.respondedAt)}` : ""}` : "Not sent yet"}
-          actions={plan && <DesignButton eventId={eventId} values={d} />}
-        >
-          {d.description && <p className="mb-3 whitespace-pre-line">{d.description}</p>}
-          {d.clientResponse && (
-            <div className="mb-3">
-              <Notice tone={d.status === "APPROVED" ? "success" : "warning"} title="Client response">
-                “{d.clientResponse}”
-              </Notice>
-            </div>
-          )}
-          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {d.mediaIds.map((mid) => {
-              const m = links.get(mid);
-              if (!m) return null;
-              return m.mime.startsWith("image/") && m.url ? (
-                <a key={mid} href={m.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-md border border-a-border">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed URL from private storage */}
-                  <img src={m.url} alt={m.filename} className="aspect-[4/3] w-full object-cover" loading="lazy" />
-                </a>
-              ) : (
-                <a key={mid} href={m.url ?? "#"} target="_blank" rel="noreferrer" className="flex aspect-[4/3] items-center justify-center gap-1 rounded-md border border-a-border p-2 text-center text-xs hover:bg-a-hover">
-                  <FileText className="size-4" aria-hidden /> {m.filename}
-                </a>
+    <div className="space-y-6">
+      {plan && <DesignButton eventId={eventId} services={services} />}
+      {designs.length === 0 && <EmptyState title="No designs yet">Add design options per area (stage, entrance…), propose them to the client and record which one was approved.</EmptyState>}
+      {areas.map((area) => {
+        const list = designs.filter((d) => areaOf(d) === area);
+        const selected = list.find((d) => d.isSelected);
+        return (
+          <section key={area} className="space-y-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              {area}
+              {selected ? <Badge tone="success">Selected: {selected.optionLabel ? `Option ${selected.optionLabel}` : selected.title} v{selected.version}</Badge> : <Badge>No option approved yet</Badge>}
+            </h2>
+            {list.map((d) => {
+              const h = history.filter((x) => x.designId === d.id);
+              return (
+                <Card
+                  key={d.id}
+                  title={
+                    <span className="flex flex-wrap items-center gap-2">
+                      {d.optionLabel && <Badge icon={false}>Option {d.optionLabel}</Badge>}
+                      {d.title} <Badge icon={false}>v{d.version}</Badge> <StatusBadge map={DESIGN_STATUS} value={d.status} />
+                      {d.isSelected && <Badge tone="success">Selected</Badge>}
+                    </span>
+                  }
+                  description={d.sentAt ? `Proposed ${fmtDateTime(d.sentAt)}${d.respondedAt ? ` · answered ${fmtDateTime(d.respondedAt)}` : ""}` : "Draft — not proposed yet"}
+                  actions={plan && d.status === "DRAFT" && <DesignButton eventId={eventId} values={d} services={services} />}
+                >
+                  {d.description && <p className="mb-3 whitespace-pre-line">{d.description}</p>}
+                  <DetailList
+                    columns={2}
+                    items={[
+                      ["Colour palette", d.colorPalette],
+                      ["Flowers", d.flowers],
+                      ["Stage layout", d.stageLayout],
+                      ["Venue layout", d.venueLayout],
+                      ["Notes", d.notes],
+                    ]}
+                  />
+                  {d.clientResponse && (
+                    <div className="my-3">
+                      <Notice tone={d.status === "APPROVED" ? "success" : "warning"} title={`Client response${d.decisionChannel ? ` (${label(d.decisionChannel)})` : ""}`}>
+                        “{d.clientResponse}”
+                      </Notice>
+                    </div>
+                  )}
+                  {gallery(d.mediaIds)}
+                  {d.referenceMediaIds.length > 0 && (
+                    <>
+                      <p className="mb-1 text-xs font-medium text-a-muted uppercase">Reference photos</p>
+                      {gallery(d.referenceMediaIds)}
+                    </>
+                  )}
+                  {plan && (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {d.status === "DRAFT" ? (
+                        <span className="flex flex-wrap gap-2">
+                          <UploadButton action={uploadDesignFiles} fields={{ designId: d.id }} label="Add design files" size="sm" accept="image/*,application/pdf" success="Files added" />
+                          <UploadButton action={uploadDesignFiles} fields={{ designId: d.id, kind: "reference" }} label="Add reference photos" size="sm" accept="image/*" success="Reference photos added" />
+                        </span>
+                      ) : (
+                        <span />
+                      )}
+                      <DesignStatusButtons id={d.id} status={d.status} hasFiles={d.mediaIds.length > 0} />
+                    </div>
+                  )}
+                  {h.length > 0 && (
+                    <details className="mt-3 text-xs text-a-muted">
+                      <summary className="cursor-pointer">History ({h.length})</summary>
+                      <ul className="mt-2 space-y-1">
+                        {h.map((x, i) => (
+                          <li key={i}>
+                            {fmtDateTime(x.createdAt)} · {DESIGN_STATUS[x.toStatus]?.label ?? x.toStatus}
+                            {x.channel && ` via ${label(x.channel)}`}
+                            {x.p && ` · ${x.p.fullName}`}
+                            {x.note && ` — “${x.note}”`}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </Card>
               );
             })}
-          </div>
-          {plan && (
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <UploadButton action={uploadDesignFiles} fields={{ designId: d.id }} label="Add files" size="sm" accept="image/*,application/pdf" success="Files added" />
-              <DesignStatusButtons id={d.id} status={d.status} />
-            </div>
-          )}
-        </Card>
-      ))}
+          </section>
+        );
+      })}
     </div>
   );
 }

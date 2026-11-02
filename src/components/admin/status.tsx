@@ -65,8 +65,11 @@ export const TASK_STATUS: Record<string, StatusDef> = {
   TODO: { label: "Assigned", tone: "neutral", icon: CircleDot },
   ACCEPTED: { label: "Accepted", tone: "gold", icon: CircleCheck },
   IN_PROGRESS: { label: "In progress", tone: "info", icon: Clock },
+  WAITING_MATERIALS: { label: "Waiting for materials", tone: "warning", icon: Hourglass },
+  REVIEW: { label: "Review required", tone: "accent", icon: Eye },
   BLOCKED: { label: "On hold", tone: "danger", icon: Ban },
   COMPLETED: { label: "Completed", tone: "success", icon: CheckCircle2 },
+  CANCELLED: { label: "Cancelled", tone: "neutral", icon: XCircle },
 };
 
 export const PRIORITY: Record<string, StatusDef> = {
@@ -100,10 +103,27 @@ export const PAY_STATUS: Record<string, StatusDef> = {
 
 export const DESIGN_STATUS: Record<string, StatusDef> = {
   DRAFT: { label: "Draft", tone: "neutral", icon: FileEdit },
-  SENT: { label: "Sent to client", tone: "info", icon: Send },
-  VIEWED: { label: "Viewed", tone: "accent", icon: Eye },
+  SENT: { label: "Proposed", tone: "info", icon: Send },
+  VIEWED: { label: "Under review", tone: "accent", icon: Eye },
   APPROVED: { label: "Approved", tone: "success", icon: CheckCircle2 },
-  REVISION_REQUESTED: { label: "Revision requested", tone: "danger", icon: FileEdit },
+  REVISION_REQUESTED: { label: "Revision requested", tone: "warning", icon: FileEdit },
+  REJECTED: { label: "Rejected", tone: "danger", icon: XCircle },
+};
+
+export const WORK_ORDER_STATUS: Record<string, StatusDef> = {
+  OPEN: { label: "Open", tone: "neutral", icon: CircleDot },
+  IN_PROGRESS: { label: "In progress", tone: "info", icon: Clock },
+  ON_HOLD: { label: "On hold", tone: "danger", icon: Ban },
+  DONE: { label: "Done", tone: "success", icon: CheckCircle2 },
+  CANCELLED: { label: "Cancelled", tone: "neutral", icon: XCircle },
+};
+
+export const SERVICE_STATUS: Record<string, StatusDef> = {
+  PLANNED: { label: "Planned", tone: "neutral", icon: CircleDot },
+  IN_PROGRESS: { label: "In progress", tone: "info", icon: Clock },
+  READY: { label: "Ready", tone: "gold", icon: CircleCheck },
+  DONE: { label: "Done", tone: "success", icon: CheckCircle2 },
+  CANCELLED: { label: "Cancelled", tone: "neutral", icon: XCircle },
 };
 
 /** Vendor categories (vendor_category enum) with display labels. */

@@ -33,6 +33,7 @@ export const PERMISSIONS = {
   "events.create": { group: "Events", label: "Create events" },
   "events.update": { group: "Events", label: "Plan events: team, vendors, timeline, designs" },
   "events.delete": { group: "Events", label: "Delete events" },
+  "events.complete": { group: "Events", label: "Complete & close events" },
   "tasks.update": { group: "Events", label: "Update tasks assigned to the team" },
 
   "inventory.view": { group: "Inventory", label: "View inventory" },

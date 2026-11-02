@@ -58,8 +58,8 @@ export const activityType = pgEnum("activity_type", ["NOTE", "CALL", "WHATSAPP",
 export const quotationStatus = pgEnum("quotation_status", ["DRAFT", "SENT", "VIEWED", "ACCEPTED", "REJECTED", "EXPIRED"]);
 export const bookingStatus = pgEnum("booking_status", ["PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
 export const eventStatus = pgEnum("event_status", ["PLANNING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
-/** TODO = "Assigned", BLOCKED = "On hold" in the app. ACCEPTED added by 00017. */
-export const taskStatus = pgEnum("task_status", ["TODO", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
+/** Labels live in src/lib/task-status.ts. ACCEPTED added by 00017; WAITING_MATERIALS, REVIEW, CANCELLED by 00019. */
+export const taskStatus = pgEnum("task_status", ["TODO", "ACCEPTED", "IN_PROGRESS", "WAITING_MATERIALS", "REVIEW", "COMPLETED", "BLOCKED", "CANCELLED"]);
 export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "CARD", "ONLINE", "CHEQUE", "OTHER"]);
 export const invoiceStatus = pgEnum("invoice_status", ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"]);
 export const movementType = pgEnum("movement_type", [
@@ -83,7 +83,8 @@ export const vendorCategory = pgEnum("vendor_category", ["FLORIST", "PHOTOGRAPHE
 export const vendorAssignmentStatus = pgEnum("vendor_assignment_status", ["REQUESTED", "CONFIRMED", "COMPLETED", "CANCELLED"]);
 export const availabilityStatus = pgEnum("availability_status", ["AVAILABLE", "UNAVAILABLE", "LEAVE"]);
 export const documentKind = pgEnum("document_kind", ["QUOTATION", "CONTRACT", "INVOICE", "RECEIPT", "EVENT_BRIEF", "DESIGN", "CLIENT_UPLOAD", "EXPENSE_RECEIPT", "OTHER"]);
-export const designStatus = pgEnum("design_status", ["DRAFT", "SENT", "VIEWED", "APPROVED", "REVISION_REQUESTED"]);
+/** SENT = "Proposed", VIEWED = "Under review" in the app. REJECTED added by 00019. */
+export const designStatus = pgEnum("design_status", ["DRAFT", "SENT", "VIEWED", "APPROVED", "REVISION_REQUESTED", "REJECTED"]);
 
 /* ───────────────────────── Auth, RBAC, audit ───────────────────────── */
 
@@ -346,6 +347,8 @@ export const leads = pgTable(
     /** Kanban order within a stage. */
     position: integer("position").notNull().default(0),
     lostReason: text("lost_reason"),
+    /** What the customer is asking for (carried into inquiries created from the lead). */
+    requirements: text("requirements"),
     lastContactAt: ts("last_contact_at"),
     nextFollowupAt: ts("next_followup_at"),
     createdAt: createdAt(),
@@ -402,11 +405,27 @@ export const inquiries = pgTable(
     ipHash: text("ip_hash"),
     spam: boolean("spam").notNull().default(false),
     readAt: ts("read_at"),
+    /**
+     * How the customer was attached: MATCHED (website form, verified match), CREATED (new customer),
+     * LINKED (staff linked an existing one), REVIEW (possible duplicate — staff decide; see
+     * possibleCustomerId). Null for inquiries from before Phase 1.
+     */
+    customerMatch: text("customer_match", { enum: ["MATCHED", "CREATED", "LINKED", "REVIEW"] }),
+    possibleCustomerId: uuid("possible_customer_id").references((): AnyPgColumn => customers.id, { onDelete: "set null" }),
+    convertedAt: ts("converted_at"),
+    convertedBy: uuid("converted_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     archivedAt: ts("archived_at"),
   },
-  (t) => [index("inquiries_created_idx").on(t.createdAt), index("inquiries_status_idx").on(t.status), index("inquiries_lead_idx").on(t.leadId), index("inquiries_customer_idx").on(t.customerId)],
+  (t) => [
+    index("inquiries_created_idx").on(t.createdAt),
+    index("inquiries_status_idx").on(t.status),
+    index("inquiries_lead_idx").on(t.leadId),
+    index("inquiries_customer_idx").on(t.customerId),
+    index("inquiries_review_idx").on(t.customerMatch).where(sql`${t.customerMatch} = 'REVIEW'`),
+    check("inquiries_customer_match_check", sql`${t.customerMatch} is null or ${t.customerMatch} in ('MATCHED', 'CREATED', 'LINKED', 'REVIEW')`),
+  ],
 );
 
 export const followups = pgTable(
@@ -796,8 +815,19 @@ export const bookingItems = pgTable(
     unitPrice: money("unit_price"),
     amount: money("amount"),
     inventoryItemId: uuid("inventory_item_id").references(() => inventoryItems.id, { onDelete: "set null" }),
+    /** The accepted quotation line this service came from. */
+    quotationItemId: uuid("quotation_item_id").references(() => quotationItems.id, { onDelete: "set null" }),
+    details: text("details"),
+    specifications: text("specifications"),
+    /** Operational progress of the service (not money). */
+    status: text("status", { enum: ["PLANNED", "IN_PROGRESS", "READY", "DONE", "CANCELLED"] }).notNull().default("PLANNED"),
   },
-  (t) => [index("booking_items_booking_idx").on(t.bookingId)],
+  (t) => [
+    index("booking_items_booking_idx").on(t.bookingId),
+    index("booking_items_quote_item_idx").on(t.quotationItemId),
+    uniqueIndex("booking_items_quote_item_unique").on(t.bookingId, t.quotationItemId).where(sql`${t.quotationItemId} is not null`),
+    check("booking_items_status_check", sql`${t.status} in ('PLANNED', 'IN_PROGRESS', 'READY', 'DONE', 'CANCELLED')`),
+  ],
 );
 
 /** The operational workspace of a booking. Date/venue live here; money lives on the booking. */
@@ -825,11 +855,22 @@ export const events = pgTable(
     colorTheme: text("color_theme"),
     /** Estimated cost entered while planning, compared with actual cost for profitability. */
     estimatedCost: money("estimated_cost"),
+    /** The event manager responsible for this event. */
+    managerId: uuid("manager_id").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
+    /** Confirmed décor direction (the customer's original wishes stay on the inquiry). */
+    theme: text("theme"),
+    style: text("style"),
+    specialInstructions: text("special_instructions"),
+    completedAt: ts("completed_at"),
+    completedBy: uuid("completed_by").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
+    completionNotes: text("completion_notes"),
+    /** Completion photos (media ids, private event-media bucket). */
+    completionMediaIds: uuid("completion_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     archivedAt: ts("archived_at"),
   },
-  (t) => [index("events_date_idx").on(t.eventDate), index("events_window_idx").on(t.startAt, t.endAt), index("events_customer_idx").on(t.customerId)],
+  (t) => [index("events_date_idx").on(t.eventDate), index("events_window_idx").on(t.startAt, t.endAt), index("events_customer_idx").on(t.customerId), index("events_manager_idx").on(t.managerId)],
 );
 
 export const eventTasks = pgTable(
@@ -864,12 +905,15 @@ export const eventTasks = pgTable(
     staffInstructions: text("staff_instructions"),
     /** Reference / inspiration images for the team (media ids, private event-media bucket). */
     referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    /** The work order this task belongs to (null for tasks outside work orders). */
+    workOrderId: uuid("work_order_id").references((): AnyPgColumn => workOrders.id, { onDelete: "set null" }),
     createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     index("tasks_event_idx").on(t.eventId),
+    index("tasks_work_order_idx").on(t.workOrderId),
     index("tasks_staff_idx").on(t.assigneeStaffId),
     index("tasks_user_idx").on(t.assigneeUserId),
     index("tasks_due_idx").on(t.status, t.dueAt),
@@ -1061,6 +1105,8 @@ export const inventoryReservationItems = pgTable(
     returnedLost: integer("returned_lost").notNull().default(0),
     /** Consumables used up at the event. */
     used: integer("used").notNull().default(0),
+    /** Units the event needs (null = same as quantity). Quantity can be lower when stock is short. */
+    required: integer("required"),
     notes: text("notes"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -1072,6 +1118,7 @@ export const inventoryReservationItems = pgTable(
       "reservation_items_quantity_check",
       sql`${t.quantity} >= 0 and ${t.returnedDamaged} >= 0 and ${t.returnedLost} >= 0 and ${t.used} >= 0 and ${t.returnedDamaged} + ${t.returnedLost} + ${t.used} <= ${t.quantity}`,
     ),
+    check("reservation_items_required_check", sql`${t.required} is null or ${t.required} >= 0`),
   ],
 );
 
@@ -1111,11 +1158,153 @@ export const designApprovals = pgTable(
     sentAt: ts("sent_at"),
     viewedAt: ts("viewed_at"),
     respondedAt: ts("responded_at"),
+    /** Option A / B / C… for the same area. */
+    optionLabel: text("option_label"),
+    /** What the design is for when not tied to a service ("Stage", "Entrance"). */
+    area: text("area"),
+    bookingItemId: uuid("booking_item_id").references(() => bookingItems.id, { onDelete: "set null" }),
+    /** The version this one revises (earlier versions are kept unchanged). */
+    parentId: uuid("parent_id").references((): AnyPgColumn => designApprovals.id, { onDelete: "set null" }),
+    /** The approved option for its area — set by the database when the design is approved. */
+    isSelected: boolean("is_selected").notNull().default(false),
+    colorPalette: text("color_palette"),
+    flowers: text("flowers"),
+    stageLayout: text("stage_layout"),
+    venueLayout: text("venue_layout"),
+    notes: text("notes"),
+    /** Inspiration / reference photos (media ids, private event-media bucket). */
+    referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    /** How the latest decision reached us: WHATSAPP, PHONE, IN_PERSON, EMAIL, PORTAL… */
+    decisionChannel: text("decision_channel"),
+    approvedAt: ts("approved_at"),
+    approvedBy: uuid("approved_by").references(() => profiles.id, { onDelete: "set null" }),
     createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("designs_event_idx").on(t.eventId)],
+  (t) => [
+    index("designs_event_idx").on(t.eventId),
+    index("designs_parent_idx").on(t.parentId),
+    uniqueIndex("design_selected_unique").on(t.eventId, sql`COALESCE((${t.bookingItemId})::text, lower(btrim(COALESCE(${t.area}, ''::text))))`).where(sql`${t.isSelected}`),
+    check("design_approvals_selected_check", sql`not ${t.isSelected} or ${t.status} = 'APPROVED'`),
+  ],
+);
+
+/** Append-only record of every design status change (written only by a database trigger). */
+export const designApprovalHistory = pgTable(
+  "design_approval_history",
+  {
+    id: id(),
+    designId: uuid("design_id")
+      .notNull()
+      .references(() => designApprovals.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    fromStatus: designStatus("from_status"),
+    toStatus: designStatus("to_status").notNull(),
+    note: text("note"),
+    channel: text("channel"),
+    actorId: uuid("actor_id").references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("design_history_design_idx").on(t.designId, t.createdAt), index("design_history_event_idx").on(t.eventId, t.createdAt)],
+);
+
+/** Operational work for one confirmed service (or ad-hoc work) on an event; tasks hang off it. */
+export const workOrders = pgTable(
+  "work_orders",
+  {
+    id: id(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    bookingItemId: uuid("booking_item_id").references(() => bookingItems.id, { onDelete: "set null" }),
+    designId: uuid("design_id").references(() => designApprovals.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    instructions: text("instructions"),
+    requiredMaterials: text("required_materials"),
+    teamRole: text("team_role"),
+    assignedStaffId: uuid("assigned_staff_id").references(() => staff.id, { onDelete: "set null" }),
+    startDate: date("start_date"),
+    dueAt: ts("due_at"),
+    priority: priority("priority").notNull().default("MEDIUM"),
+    status: text("status", { enum: ["OPEN", "IN_PROGRESS", "ON_HOLD", "DONE", "CANCELLED"] }).notNull().default("OPEN"),
+    referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    position: integer("position").notNull().default(0),
+    completedAt: ts("completed_at"),
+    completedBy: uuid("completed_by").references(() => profiles.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index("work_orders_event_idx").on(t.eventId, t.position),
+    index("work_orders_item_idx").on(t.bookingItemId),
+    index("work_orders_staff_idx").on(t.assignedStaffId),
+    check("work_orders_status_check", sql`${t.status} in ('OPEN', 'IN_PROGRESS', 'ON_HOLD', 'DONE', 'CANCELLED')`),
+    check("work_orders_title_check", sql`length(btrim(${t.title})) > 0`),
+  ],
+);
+
+/** Progress notes and status changes on a work order (status changes written by a trigger). */
+export const workOrderUpdates = pgTable(
+  "work_order_updates",
+  {
+    id: id(),
+    workOrderId: uuid("work_order_id")
+      .notNull()
+      .references(() => workOrders.id, { onDelete: "cascade" }),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    body: text("body"),
+    actorId: uuid("actor_id").references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("work_order_updates_wo_idx").on(t.workOrderId, t.createdAt),
+    check("work_order_updates_content_check", sql`${t.toStatus} is not null or length(btrim(coalesce(${t.body}, ''))) > 0`),
+  ],
+);
+
+/** Checklist on a task: planners write it, the team ticks it. */
+export const eventTaskChecklistItems = pgTable(
+  "event_task_checklist_items",
+  {
+    id: id(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => eventTasks.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    position: integer("position").notNull().default(0),
+    doneAt: ts("done_at"),
+    doneBy: uuid("done_by").references(() => profiles.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("task_checklist_task_idx").on(t.taskId, t.position), check("event_task_checklist_items_label_check", sql`length(btrim(${t.label})) > 0`)],
+);
+
+/** Conversation on a task between planners and the team on it. Never edited; soft-deleted by the author. */
+export const eventTaskComments = pgTable(
+  "event_task_comments",
+  {
+    id: id(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => eventTasks.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    /** Photos (media ids, private event-media bucket). */
+    mediaIds: uuid("media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    authorId: uuid("author_id")
+      .default(sql`auth.uid()`)
+      .references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [index("task_comments_task_idx").on(t.taskId, t.createdAt), check("event_task_comments_body_check", sql`length(btrim(${t.body})) > 0`)],
 );
 
 /* ───────────────────────────── Finance ───────────────────────────── */

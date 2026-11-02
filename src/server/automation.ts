@@ -100,7 +100,7 @@ export async function onQuoteAccepted(quotationId: string) {
   if (r && r.config.createBooking !== false) {
     try {
       const result = await bookingFromQuotation(adminDb, quotationId, null, "PENDING");
-      if (result.event) {
+      if (result.event && !result.existed) {
         await exec(
           adminDb.from(tbl(schema.eventTasks)).insert(
             vals(schema.eventTasks, {
@@ -235,10 +235,10 @@ export async function onTaskProgress(taskId: string, status: string, actor: { id
   const href = event ? `/admin/events/${event.id}?tab=tasks` : "/admin/tasks";
   const notes: string[] = [];
 
-  if (status === "BLOCKED")
+  if (status === "BLOCKED" || status === "WAITING_MATERIALS")
     await notify({
       type: "task.blocked",
-      title: `${actor.name} is stuck on “${task.title}”`,
+      title: status === "BLOCKED" ? `${actor.name} is stuck on “${task.title}”` : `${actor.name} is waiting for materials on “${task.title}”`,
       body: [event?.title, task.blockedReason].filter(Boolean).join(" — "),
       href,
       priority: "URGENT",
@@ -268,34 +268,27 @@ export async function onTaskProgress(taskId: string, status: string, actor: { id
     notes.push(`${event.title} started`);
   }
 
+  // When the last task is done the event is ready to close. Closing itself goes through the
+  // completion checklist on the event workspace (complete_event): it also checks work orders and
+  // inventory, so it is never done automatically here.
   if (event && r.config.autoComplete !== false && status === "COMPLETED" && !["COMPLETED", "CANCELLED"].includes(event.status)) {
-    const left = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).neq("status", "COMPLETED").limit(1));
+    const left = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).not("status", "in", "(COMPLETED,CANCELLED)").limit(1));
     const planned = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).not("work_day", "is", null).limit(1));
     if (!left.length && planned.length) {
-      let done = true;
-      if (!event.b) await exec(adminDb.from(tbl(schema.events)).update({ status: "COMPLETED" }).eq("id", event.id));
-      else if (["CONFIRMED", "IN_PROGRESS"].includes(event.b.status)) {
-        try {
-          await setBookingStatus(adminDb, event.b.id, "COMPLETED", actor);
-        } catch (error) {
-          done = false;
-          notes.push(`couldn't complete ${event.b.number} (${error instanceof Error ? error.message : "error"})`);
-        }
-      } else done = false;
       await notify({
         type: "work.done",
         title: `All work done for ${event.title}`,
-        body: done ? "Marked completed. Record returned items and collect any balance." : "Every task is done, but the booking isn't confirmed — review it.",
-        href: event.b ? `/admin/bookings/${event.b.id}` : `/admin/events/${event.id}`,
+        body: "Every task is finished. Record returned items, then complete the event from its workspace.",
+        href: `/admin/events/${event.id}?tab=overview`,
         priority: "HIGH",
         permission: "events.update",
         dedupeKey: `work-done:${event.id}`,
       });
-      notes.push(`${event.title} ${done ? "completed" : "all tasks done"}`);
+      notes.push(`${event.title}: all tasks done`);
     }
   }
-  if (notes.length || ["BLOCKED", "COMPLETED"].includes(status))
-    await logRun("task.progress", `${actor.name}: “${task.title}” → ${status.toLowerCase().replace("_", " ")}${notes.length ? ` — ${notes.join(", ")}` : ""}`, !notes.some((n) => n.startsWith("couldn't")));
+  if (notes.length || ["BLOCKED", "WAITING_MATERIALS", "COMPLETED"].includes(status))
+    await logRun("task.progress", `${actor.name}: “${task.title}” → ${status.toLowerCase().replaceAll("_", " ")}${notes.length ? ` — ${notes.join(", ")}` : ""}`, !notes.some((n) => n.startsWith("couldn't")));
 }
 
 /* ───────── Daily sweep ───────── */

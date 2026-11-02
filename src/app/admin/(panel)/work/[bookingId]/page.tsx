@@ -13,6 +13,7 @@ import { proofPhotos } from "@/server/work";
 import { BOOKING_STATUS, PRIORITY, QUOTE_STATUS, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Avatar, Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar } from "@/components/admin/ui";
 import { AssignButton, DeleteWorkTaskButton, DuplicateTaskButton, InternalNotesButton, PlannerStatusSelect, ReferenceUpload, RemoveReferenceButton, TaskFormButton } from "../WorkClient";
+import { isHeld, TASK_STATUSES } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Work plan" };
 
@@ -82,7 +83,7 @@ export default async function BookingWorkPage({ params }: PageProps<"/admin/work
   const now = serverNow();
   const overdue = tasks.filter((t) => t.status !== "COMPLETED" && t.dueAt && t.dueAt.getTime() < now).length;
   const unassigned = tasks.filter((t) => !(assignees.get(t.id)?.length) && !t.assigneeUserId).length;
-  const counts = (["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED"] as const).map((s) => [s, tasks.filter((t) => t.status === s).length] as const);
+  const counts = TASK_STATUSES.map((s) => [s, tasks.filter((t) => t.status === s).length] as const);
 
   return (
     <>
@@ -314,7 +315,7 @@ function TaskCard({
                   )}
                   <span className="font-medium">{p.s.name}</span>
                   <StatusBadge map={TASK_STATUS} value={p.status} />
-                  {p.status === "BLOCKED" && p.holdReason && <span className="text-a-danger">{p.holdReason}</span>}
+                  {isHeld(p.status) && p.holdReason && <span className="text-a-danger">{p.holdReason}</span>}
                   {p.status === "COMPLETED" && p.completionNote && <span className="text-a-muted">“{p.completionNote}”</span>}
                 </li>
               ))}

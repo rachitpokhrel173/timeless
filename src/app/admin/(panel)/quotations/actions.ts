@@ -138,7 +138,7 @@ export const recordAdvance = adminAction(
 
     const booked = await bookingFromQuotation(db, id, user, "PENDING");
     if (!booked.existed) await audit(user, "convert", "quotation", id, `Booked ${q.number} on receiving the advance`, { bookingId: booked.booking.id });
-    const eventId = booked.event?.id;
+    const eventId = booked.existed ? undefined : booked.event?.id;
     if (eventId) afterCommit(() => onEventCreated(eventId, user.id));
     const r = await recordPayment(db, { bookingId: booked.booking.id, ...payment, notes: payment.notes ?? `Advance for ${q.number}` }, user);
     let confirmed = r.autoConfirmed || r.booking.status === "CONFIRMED";

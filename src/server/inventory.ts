@@ -1,5 +1,5 @@
 import "server-only";
-import { adminDb, all, cols, exec, many, maybe, one, schema, tbl, vals, type DB, type Row } from "@/db";
+import { adminDb, all, cols, exec, many, maybe, one, rpc, schema, tbl, vals, type DB, type Row } from "@/db";
 import { UserError } from "@/lib/actions";
 import { notify } from "./notifications";
 
@@ -115,92 +115,36 @@ export async function availabilityForEvent(eventId: string) {
   }));
 }
 
-async function reservationHeader(conn: Conn, eventId: string) {
-  const existing = await getHeader(conn, eventId);
-  if (existing) {
-    if (existing.status !== "ACTIVE") await exec(conn.from(rh).update({ status: "ACTIVE" }).eq("id", existing.id));
-    return existing.id;
-  }
-  const event = await maybe<{ bookingId: string | null }>(conn.from(tbl(schema.events)).select("bookingId:booking_id").eq("id", eventId));
-  const row = await one<{ id: string }>(
-    conn
-      .from(rh)
-      .insert(
-        vals(schema.inventoryReservations, {
-          eventId,
-          bookingId: event?.bookingId,
-        }),
-      )
-      .select("id"),
-  );
-  return row.id;
-}
-
 const movement = (conn: Conn, values: Partial<Row<typeof schema.inventoryMovements>>) =>
   exec(conn.from(tbl(schema.inventoryMovements)).insert(vals(schema.inventoryMovements, values)));
 
+export type Shortage = { itemId: string; name: string; required: number; available: number };
+export const describeShortages = (list: Shortage[]) => list.map((x) => `${x.name}: ${x.available} available, ${x.required} needed`).join("; ");
+
 /**
- * Set reservations for an event (absolute quantities; 0 releases). Checks availability for
- * overlapping events and throws one readable error listing every shortage.
+ * Set reservations for an event (absolute quantities; 0 releases) in one database transaction
+ * (reserve_event_inventory): each item is locked while it is checked, so two events can never
+ * both take the last units.
+ *   strict (default)  nothing is reserved when anything is short — throws one readable error
+ *   partial           reserve what is free, remember the full requirement, return the shortages
  */
-export async function setReservations(conn: Conn, eventId: string, lines: { itemId: string; quantity: number }[], actor: Actor, reference?: string) {
-  const merged = new Map<string, number>();
-  for (const l of lines) merged.set(l.itemId, (merged.get(l.itemId) ?? 0) + Math.max(0, Math.round(l.quantity)));
-  if (!merged.size) return;
-  const ids = [...merged.keys()].sort();
-
-  const event = await getEvent(conn, eventId);
-  if (!event) throw new UserError("Event not found.");
-  if (event.status === "CANCELLED") throw new UserError("This event is cancelled.");
-
-  const items = await itemsByIds(conn, ids);
-  const held = await overlappingReserved(conn, ids, event.startAt, event.endAt, eventId);
-  const shortages: string[] = [];
-  for (const item of items) {
-    const want = merged.get(item.id)!;
-    const free = usable(item) - (held.get(item.id) ?? 0);
-    if (want > free) shortages.push(`${item.name}: ${Math.max(0, free)} available, ${want} needed`);
-  }
-  if (shortages.length) throw new UserError(`Not enough stock for this date — ${shortages.join("; ")}.`);
-
-  const reservationId = await reservationHeader(conn, eventId);
-  const existing = await many<ReservationItem>(conn.from(ri).select(cols(schema.inventoryReservationItems)).eq("reservation_id", reservationId).in("item_id", ids));
-  for (const item of items) {
-    const want = merged.get(item.id)!;
-    const current = existing.find((x) => x.itemId === item.id);
-    const before = current && ACTIVE.includes(current.status as (typeof ACTIVE)[number]) ? current.quantity : 0;
-    if (want === before) continue;
-    if (current?.status === "CHECKED_OUT" && want < before) throw new UserError(`${item.name} is already out at the event — record a return instead.`);
-    if (current) {
-      await exec(
-        conn
-          .from(ri)
-          .update({
-            quantity: want,
-            status: want === 0 ? "RELEASED" : current.status === "CHECKED_OUT" ? "CHECKED_OUT" : "RESERVED",
-          })
-          .eq("id", current.id),
-      );
-    } else if (want > 0) {
-      await exec(
-        conn.from(ri).insert(
-          vals(schema.inventoryReservationItems, {
-            reservationId,
-            itemId: item.id,
-            quantity: want,
-          }),
-        ),
-      );
-    }
-    await movement(conn, {
-      itemId: item.id,
-      type: want > before ? "RESERVATION" : "RELEASE",
-      quantity: Math.abs(want - before),
-      eventId,
-      reference: reference ?? event.title,
-      userId: actor?.id,
-    });
-  }
+export async function setReservations(
+  conn: Conn,
+  eventId: string,
+  lines: { itemId: string; quantity: number }[],
+  _actor: Actor,
+  reference?: string,
+  { partial = false }: { partial?: boolean } = {},
+): Promise<Shortage[]> {
+  if (!lines.length) return [];
+  const result = await rpc<{ ok: boolean; shortages: Shortage[] }>(conn, "reserve_event_inventory", {
+    p_event: eventId,
+    p_lines: lines.map((l) => ({ item_id: l.itemId, quantity: Math.max(0, Math.round(l.quantity)) })),
+    p_reference: reference ?? null,
+    p_partial: partial,
+  });
+  if (!result.ok) throw new UserError(`Not enough stock for this date — ${describeShortages(result.shortages)}.`);
+  return result.shortages ?? [];
 }
 
 /** Release everything still reserved for an event (cancellation). */

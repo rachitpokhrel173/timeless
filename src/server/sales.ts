@@ -1,11 +1,11 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import { adminDb, cols, exec, likeEscape, many, maybe, one, schema, tbl, vals, type DB, type Row, type Tx } from "@/db";
+import { adminDb, cols, exec, likeEscape, many, maybe, one, rpc, schema, tbl, vals, type DB, type Row, type Tx } from "@/db";
 import { UserError } from "@/lib/actions";
 import { todayISO } from "@/lib/format";
 import { couponDiscount, depositShare, quoteTotals } from "@/lib/quote-math";
 import { advanceLead, logLeadActivity } from "./crm";
-import { checkOutEvent, packageRequirements, releaseEvent, setReservations } from "./inventory";
+import { checkOutEvent, describeShortages, packageRequirements, releaseEvent, setReservations } from "./inventory";
 import { nextNumber } from "./numbering";
 
 type Actor = { id: string; name: string } | null;
@@ -569,16 +569,7 @@ export async function createBooking(conn: Conn, input: BookingInput, actor: Acto
         itemId: it.inventoryItemId,
         quantity: Math.ceil(it.quantity),
       });
-  let shortages: string | null = null;
-  if (needs.length) {
-    try {
-      // Shortages are found before anything is reserved, so the booking stands without them
-      await setReservations(conn, event.id, needs, actor, booking.number);
-    } catch (error) {
-      if (error instanceof UserError) shortages = error.message;
-      else throw error;
-    }
-  }
+  const shortages = await reserveForBooking(conn, event.id, booking.number, input.packageId ?? null, input.items ?? [], actor);
   return { booking, event, shortages };
 }
 
@@ -589,72 +580,63 @@ async function countCouponUse(conn: Conn, couponId: string | null) {
   if (coupon) await exec(conn.from(tbl(schema.coupons)).update({ used_count: coupon.usedCount + 1 }).eq("id", couponId));
 }
 
-/** Accepted (or, by staff, approved) quotation → booking + booked items + event + reservations. */
+/**
+ * Inventory for a new booking: package contents + booked lines linked to stock. Reserves what is
+ * free (partial) so the booking always stands; anything short is returned as one readable
+ * message so the team can be warned. The full requirement is kept on each reservation line.
+ */
+async function reserveForBooking(
+  conn: Conn,
+  eventId: string,
+  reference: string,
+  packageId: string | null,
+  items: { inventoryItemId?: string | null; quantity: number }[],
+  actor: Actor,
+): Promise<string | null> {
+  const needs: { itemId: string; quantity: number }[] = [];
+  if (packageId) needs.push(...(await packageRequirements(conn, packageId)));
+  for (const it of items) if (it.inventoryItemId) needs.push({ itemId: it.inventoryItemId, quantity: Math.ceil(it.quantity) });
+  if (!needs.length) return null;
+  const short = await setReservations(conn, eventId, needs, actor, reference, { partial: true });
+  return short.length ? `Not enough stock for this date — ${describeShortages(short)}.` : null;
+}
+
+type Converted = {
+  bookingId: string;
+  eventId: string | null;
+  bookingNumber?: string;
+  existed: boolean;
+  acceptedNow?: boolean;
+  leadId?: string | null;
+  packageId?: string | null;
+  quotationNumber?: string;
+};
+
+/**
+ * Accepted (or, by staff, approved) quotation → booking + confirmed services + event workspace.
+ * The core runs as one database transaction (convert_quotation_to_booking): a repeated or
+ * concurrent conversion returns the booking the first one made instead of a duplicate. Lead
+ * stage and inventory follow; neither can duplicate anything.
+ */
 export async function bookingFromQuotation(conn: Conn, quotationId: string, actor: Actor, status: "PENDING" | "CONFIRMED" = "PENDING") {
-  const quote = await getQuote(conn, quotationId);
-  if (!quote) throw new UserError("Quotation not found.");
-  const existing = await maybe<{ id: string }>(conn.from(tbl(schema.bookings)).select("id").eq("quotation_id", quotationId).limit(1));
-  if (existing)
-    return {
-      booking: { id: existing.id },
-      event: null,
-      shortages: null,
-      existed: true as const,
-    };
-  if (!quote.eventDate) throw new UserError("Add the event date to the quotation before converting it.");
-  if (quote.status === "REJECTED" || quote.status === "EXPIRED") throw new UserError(`A ${quote.status.toLowerCase()} quotation can't be booked.`);
-  if (quote.status !== "ACCEPTED") {
-    await exec(
-      conn
-        .from(qt)
-        .update(
-          vals(q, {
-            status: "ACCEPTED",
-            acceptedAt: new Date(),
-            acceptedName: actor ? `${STAFF_APPROVED}${actor.name}` : null,
-          }),
-        )
-        .eq("id", quotationId),
-    );
-    await quoteActivity(conn, {
-      quotationId,
-      action: "ACCEPTED",
-      name: actor ? `${actor.name} (staff)` : null,
-      message: "Approved by staff when converted to a booking",
-    });
-    await countCouponUse(conn, quote.couponId);
-  }
-  const items = await quoteItems(conn, quotationId);
-  const result = await createBooking(
-    conn,
-    {
-      customerId: quote.customerId,
-      title: quote.title,
-      eventType: quote.eventType,
-      eventDate: quote.eventDate,
-      venue: quote.venue,
-      guestCount: quote.guestCount,
-      packageId: quote.packageId,
-      totalAmount: quote.total,
-      depositAmount: quote.depositAmount,
-      depositDueDate: todayISO(7) < quote.eventDate ? todayISO(7) : quote.eventDate,
-      balanceDueDate: quote.eventDate,
-      status,
-      quotationId: quote.id,
-      leadId: quote.leadId,
-      inquiryId: quote.inquiryId,
-      // Booked items copy the quoted lines (discount and tax live on the totals)
-      items: items.map((it) => ({
-        description: it.description,
-        quantity: it.quantity,
-        unit: it.unit,
-        unitPrice: it.unitPrice,
-        inventoryItemId: it.inventoryItemId,
-      })),
-    },
-    actor,
+  const r = await rpc<Converted>(conn, "convert_quotation_to_booking", { p_quotation: quotationId, p_status: status, p_staff_name: actor?.name ?? null });
+  if (r.existed) return { booking: { id: r.bookingId }, event: r.eventId ? { id: r.eventId } : null, shortages: null, existed: true as const };
+
+  const number = r.bookingNumber ?? "";
+  await advanceLead(conn, r.leadId ?? null, "CONFIRMED", actor, `Booking ${number} created from ${r.quotationNumber ?? "a quotation"}`);
+  if (r.leadId) await logLeadActivity(conn, r.leadId, "BOOKING", `Booking ${number} created from ${r.quotationNumber ?? "a quotation"}`, actor?.id, { bookingId: r.bookingId });
+
+  const items = await many<{ inventoryItemId: string | null; quantity: number }>(
+    conn.from(tbl(schema.bookingItems)).select("inventoryItemId:inventory_item_id,quantity").eq("booking_id", r.bookingId),
   );
-  return { ...result, existed: false as const };
+  const shortages = r.eventId ? await reserveForBooking(conn, r.eventId, number, r.packageId ?? null, items, actor) : null;
+  return {
+    booking: { id: r.bookingId, number },
+    event: r.eventId ? { id: r.eventId } : null,
+    shortages,
+    acceptedNow: !!r.acceptedNow,
+    existed: false as const,
+  };
 }
 
 const BOOKING_FLOW: Record<string, string[]> = {

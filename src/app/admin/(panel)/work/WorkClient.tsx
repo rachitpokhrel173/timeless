@@ -6,6 +6,7 @@ import { ActionForm, Button, ConfirmButton, DialogButton, inputClass, SelectFiel
 import UploadButton from "@/components/admin/Upload";
 import { Avatar } from "@/components/admin/ui";
 import { cn } from "@/lib/utils";
+import { taskOptions, type TaskStatus } from "@/lib/task-status";
 import type { PickerStaff } from "@/server/assignments";
 import { setTaskStatus } from "../tasks/actions";
 import { removeTaskReference, uploadTaskReference } from "../upload-actions";
@@ -17,13 +18,7 @@ const PRIORITIES: Option[] = [
   { value: "HIGH", label: "High" },
   { value: "URGENT", label: "Urgent" },
 ];
-const STATUSES: Option[] = [
-  { value: "TODO", label: "Assigned" },
-  { value: "ACCEPTED", label: "Accepted" },
-  { value: "IN_PROGRESS", label: "In progress" },
-  { value: "BLOCKED", label: "On hold" },
-  { value: "COMPLETED", label: "Completed" },
-];
+const STATUSES: Option[] = taskOptions();
 
 /** Date → value for <input type="datetime-local"> in Nepal time. */
 const localInput = (d: Date | string | null | undefined) => (d ? new Date(new Date(d).getTime() + 345 * 60_000).toISOString().slice(0, 16) : "");
@@ -184,7 +179,7 @@ export function DeleteWorkTaskButton({ id, title }: { id: string; title: string 
 /** A planner sets the whole task's status (applies to everyone on it). */
 export function PlannerStatusSelect({ id, status }: { id: string; status: string }) {
   const { run, pending } = useRun();
-  const [hold, setHold] = useState(false);
+  const [hold, setHold] = useState<"BLOCKED" | "WAITING_MATERIALS" | null>(null);
   return (
     <>
       <select
@@ -192,8 +187,9 @@ export function PlannerStatusSelect({ id, status }: { id: string; status: string
         value={status}
         disabled={pending}
         onChange={(e) => {
-          if (e.target.value === "BLOCKED") return setHold(true);
-          run(() => setTaskStatus({ id, status: e.target.value as "TODO", asPlanner: true }), { success: "Status updated for everyone on the task" });
+          const next = e.target.value as TaskStatus;
+          if (next === "BLOCKED" || next === "WAITING_MATERIALS") return setHold(next);
+          run(() => setTaskStatus({ id, status: next, asPlanner: true }), { success: next === "CANCELLED" ? "Task cancelled" : "Status updated for everyone on the task" });
         }}
         className={`${inputClass} h-8 w-auto text-[13px]`}
       >
@@ -204,9 +200,16 @@ export function PlannerStatusSelect({ id, status }: { id: string; status: string
         ))}
       </select>
       {hold && (
-        <DialogInline onClose={() => setHold(false)} title="Put the task on hold">
-          <ActionForm action={setTaskStatus} extra={{ id, status: "BLOCKED", asPlanner: true }} submitLabel="Put on hold" success="On hold" onSuccess={() => setHold(false)} onCancel={() => setHold(false)}>
-            <TextArea label="Why?" name="reason" required rows={2} maxLength={500} />
+        <DialogInline onClose={() => setHold(null)} title={hold === "BLOCKED" ? "Put the task on hold" : "Waiting for materials"}>
+          <ActionForm
+            action={setTaskStatus}
+            extra={{ id, status: hold, asPlanner: true }}
+            submitLabel={hold === "BLOCKED" ? "Put on hold" : "Save"}
+            success={hold === "BLOCKED" ? "On hold" : "Marked as waiting for materials"}
+            onSuccess={() => setHold(null)}
+            onCancel={() => setHold(null)}
+          >
+            {hold === "BLOCKED" ? <TextArea label="Why?" name="reason" required rows={2} maxLength={500} /> : <TextArea label="What's missing? (optional)" name="reason" rows={2} maxLength={500} />}
           </ActionForm>
         </DialogInline>
       )}

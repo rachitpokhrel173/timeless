@@ -14,6 +14,7 @@ import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, Pr
 import { amountDue } from "@/server/payment-reminders";
 import { workEligibility } from "@/server/assignments";
 import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, PaymentReminderButton, VoidPaymentButton } from "../BookingClient";
+import { isHeld } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -189,7 +190,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                       <span className="text-a-muted tabular-nums">{Math.round((work.filter((t) => t.status === "COMPLETED").length / work.length) * 100)}%</span>
                     </div>
                     <ProgressBar value={work.filter((t) => t.status === "COMPLETED").length} max={work.length} label="Work progress" tone="accent" />
-                    {work.some((t) => t.status === "BLOCKED") && <p className="mt-2 text-xs font-medium text-a-danger">{work.filter((t) => t.status === "BLOCKED").length} on hold</p>}
+                    {work.some((t) => isHeld(t.status)) && <p className="mt-2 text-xs font-medium text-a-danger">{work.filter((t) => isHeld(t.status)).length} on hold or waiting</p>}
                   </>
                 ) : (
                   <p className="text-[13px] text-a-muted">{workOk.ok ? "No tasks yet — break the approved décor into tasks for the team." : "Tasks open once the booking is confirmed."}</p>

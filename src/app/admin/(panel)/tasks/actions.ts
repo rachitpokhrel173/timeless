@@ -10,9 +10,10 @@ import { notify } from "@/server/notifications";
 import { fmtDateTime } from "@/lib/format";
 import { myAssignment } from "@/server/assignments";
 import { applyWorkPlan, eventInfo, usersForStaff } from "@/server/work";
+import { isHeld, TASK_LABELS, TASK_STATUSES } from "@/lib/task-status";
 
 const tasks = () => db.from(tbl(schema.eventTasks));
-const STATUS = z.enum(["TODO", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
+const STATUS = z.enum(TASK_STATUSES);
 const PRIORITY = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
 
 const dueAt = () =>
@@ -93,10 +94,14 @@ async function ownTask(id: string, user: SessionUser) {
 export const setTaskStatus = adminAction(
   ["events.update", "tasks.update"],
   z.object({ id: zs.uuid(), status: STATUS, note: zs.optional(2000), reason: zs.optional(500), asPlanner: z.boolean().default(false) }),
-  async ({ id, status, note, reason, asPlanner }, user) => {
+  async ({ id, status, note, reason, asPlanner: planned }, user) => {
+    let asPlanner = planned;
     if (status === "BLOCKED" && !reason) throw new UserError("Say why the work is on hold.", { reason: "Required." });
     const t = await ownTask(id, user);
     const planner = user.permissions.has("events.update");
+    if (status === "CANCELLED" && !planner) throw new UserError("Only a planner can cancel a task.");
+    // Cancelling is for the whole task, never one person's part
+    if (status === "CANCELLED") asPlanner = true;
 
     if (t.mine && !(planner && asPlanner)) {
       if (t.mine.status === status && !note && !reason) return;
@@ -105,7 +110,7 @@ export const setTaskStatus = adminAction(
           .from(tbl(schema.eventTaskAssignees))
           .update({
             status,
-            hold_reason: status === "BLOCKED" ? reason : null,
+            hold_reason: isHeld(status) ? reason || null : null,
             ...(status === "COMPLETED" && note ? { completion_note: note } : {}),
           })
           .eq("id", t.mine.id),
@@ -118,10 +123,10 @@ export const setTaskStatus = adminAction(
           .update(
             vals(schema.eventTasks, {
               status,
-              startedAt: status === "TODO" || status === "ACCEPTED" ? null : (t.startedAt ?? now),
+              startedAt: status === "TODO" || status === "ACCEPTED" || (status === "CANCELLED" && !t.startedAt) ? null : (t.startedAt ?? now),
               completedAt: status === "COMPLETED" ? now : null,
               completedBy: status === "COMPLETED" ? user.id : null,
-              blockedReason: status === "BLOCKED" ? reason : null,
+              blockedReason: isHeld(status) ? reason || null : null,
               ...(status === "COMPLETED" && note ? { completionNote: note } : {}),
             }),
           )
@@ -132,7 +137,7 @@ export const setTaskStatus = adminAction(
     await audit(user, "status", "task", id, `“${t.title}” → ${(TASK_LABEL[status] ?? status).toLowerCase()}${t.mine && !asPlanner ? " (own part)" : ""}${reason ? ` (${reason})` : ""}`);
     const actor = { id: user.id, name: user.name, planner };
     // Planners hear at once when someone puts work on hold; the rest follows the task's rolled-up status
-    if (status === "BLOCKED") afterCommit(() => onTaskProgress(id, "BLOCKED", actor));
+    if (isHeld(status)) afterCommit(() => onTaskProgress(id, status, actor));
     else if (after && after.status !== t.status) afterCommit(() => onTaskProgress(id, after.status, actor));
     else if (status === "COMPLETED" && t.mine && !planner)
       afterCommit(() =>
@@ -149,7 +154,7 @@ export const setTaskStatus = adminAction(
   },
 );
 
-const TASK_LABEL: Record<string, string> = { TODO: "Assigned", ACCEPTED: "Accepted", IN_PROGRESS: "In progress", BLOCKED: "On hold", COMPLETED: "Completed" };
+const TASK_LABEL: Record<string, string> = TASK_LABELS;
 
 export const deleteTask = adminAction("events.update", z.object({ id: zs.uuid() }), async ({ id }, user) => {
   const t = await one<{ title: string }>(tasks().delete().eq("id", id).select("title"));

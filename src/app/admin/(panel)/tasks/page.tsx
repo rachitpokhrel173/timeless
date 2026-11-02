@@ -11,6 +11,7 @@ import { FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { options, PRIORITY, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Card, EmptyState, PageHeader, Pagination, Tabs, Toolbar } from "@/components/admin/ui";
 import { DeleteTaskButton, TaskButton, TaskCheck, TaskStatusSelect } from "../events/EventClient";
+import { OPEN_TASK_STATUSES, TASK_STATUSES } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Tasks" };
 
@@ -33,7 +34,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/admin/task
     .select(`${cols(schema.eventTasks)},e:events(id,title,eventDate:event_date),s:staff(name),u:profiles!assignee_user_id(fullName:full_name)`, { count: "exact" });
   if (view === "mine") query = query.or(`assignee_user_id.eq.${user.id}${user.staffId ? `,assignee_staff_id.eq.${user.staffId}` : ""}`);
   if (view === "done") query = query.eq("status", "COMPLETED");
-  else if (status && ["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED"].includes(status)) query = query.eq("status", status);
+  else if (status && (TASK_STATUSES as readonly string[]).includes(status)) query = query.eq("status", status);
   else if (str("due") !== "overdue") query = query.neq("status", "COMPLETED");
   if (str("due") === "overdue") query = query.lt("due_at", now).neq("status", "COMPLETED");
   if (str("due") === "today") query = query.lt("due_at", new Date(`${todayISO(1)}T00:00:00+05:45`).toISOString());
@@ -73,7 +74,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/admin/task
           <SearchBox placeholder="Search tasks" />
           {view !== "done" && (
             <>
-              <FilterSelect param="status" label="Status" options={options(["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED"], TASK_STATUS)} />
+              <FilterSelect param="status" label="Status" options={options([...OPEN_TASK_STATUSES, "COMPLETED", "CANCELLED"], TASK_STATUS)} />
               <FilterSelect
                 param="due"
                 label="Due"
