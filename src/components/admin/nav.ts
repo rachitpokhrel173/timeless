@@ -2,7 +2,6 @@ import {
   BarChart3,
   Bell,
   CalendarCheck,
-  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   Contact,
@@ -63,7 +62,6 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/admin/my-work", label: "My work", icon: ClipboardList, permission: ["events.view", "tasks.update"] },
       { href: "/admin/work", label: "Work Management", icon: ClipboardCheck, permission: "events.view" },
-      { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, permission: "events.view" },
       { href: "/admin/events", label: "Events", icon: PartyPopper, permission: "events.view" },
       { href: "/admin/tasks", label: "Tasks", icon: ListTodo, permission: "events.view" },
     ],

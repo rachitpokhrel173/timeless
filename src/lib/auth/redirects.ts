@@ -19,6 +19,6 @@ export const invitationRedirectUrl = () => `${siteOrigin()}${ACCEPT_INVITATION_P
  */
 export function safeNextPath(next: unknown, fallback = "/admin") {
   if (typeof next !== "string" || next.length > 300) return fallback;
-  if (!/^\/(admin|client)(\/|\?|#|$)/.test(next) || next.includes("\\") || next.startsWith("//")) return fallback;
+  if (!/^\/(admin|client|staff)(\/|\?|#|$)/.test(next) || next.includes("\\") || next.startsWith("//")) return fallback;
   return next;
 }

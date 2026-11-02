@@ -1,17 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { PATH_HEADER } from "@/lib/path-header";
 
-const PUBLIC_PATHS = ["/admin/login", "/admin/forgot-password", "/admin/reset-password", "/admin/accept-invitation", "/client/login"];
+const PUBLIC_PATHS = ["/admin/login", "/admin/forgot-password", "/admin/reset-password", "/admin/accept-invitation", "/client/login", "/staff/login"];
 
 /**
  * Runs before private routes:
  *  1. refreshes the Supabase session cookie when the access token is about to expire;
  *  2. sends signed-out visitors to the login page (a fast first gate — every admin page and
  *     server action still checks the session and permissions, and RLS guards the data);
- *  3. adds no-index / no-frame / no-store headers.
+ *  3. adds no-index / no-frame / no-store headers;
+ *  4. passes the path to server layouts (PATH_HEADER) — informational only, never trusted for access.
  */
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  // Always overwritten here, so a value sent by the browser is never passed on
+  const next = () => {
+    const headers = new Headers(request.headers);
+    headers.set(PATH_HEADER, request.nextUrl.pathname);
+    return NextResponse.next({ request: { headers } });
+  };
+  let response = next();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const { pathname, search } = request.nextUrl;
@@ -23,7 +31,7 @@ export async function proxy(request: NextRequest) {
         getAll: () => request.cookies.getAll(),
         setAll: (list) => {
           for (const { name, value } of list) request.cookies.set(name, value);
-          response = NextResponse.next({ request });
+          response = next();
           for (const { name, value, options } of list) response.cookies.set(name, value, options);
         },
       },
@@ -33,10 +41,10 @@ export async function proxy(request: NextRequest) {
     signedIn = !!data?.claims?.sub;
   }
 
-  const needsAuth = (pathname.startsWith("/admin") || pathname.startsWith("/client")) && !PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  const needsAuth = (pathname.startsWith("/admin") || pathname.startsWith("/client") || pathname.startsWith("/staff")) && !PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (needsAuth && !signedIn) {
-    const login = new URL(pathname.startsWith("/client") ? "/client/login" : "/admin/login", request.url);
-    if (pathname !== "/admin" && pathname !== "/client") login.searchParams.set("next", pathname + search);
+    const login = new URL(pathname.startsWith("/client") ? "/client/login" : pathname.startsWith("/staff") ? "/staff/login" : "/admin/login", request.url);
+    if (pathname !== "/admin" && pathname !== "/client" && pathname !== "/staff") login.searchParams.set("next", pathname + search);
     const redirect = NextResponse.redirect(login);
     for (const c of response.cookies.getAll()) redirect.cookies.set(c);
     return redirect;
@@ -52,5 +60,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/client/:path*", "/quote/:path*", "/auth/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/client/:path*", "/staff/:path*", "/quote/:path*", "/auth/:path*", "/api/admin/:path*"],
 };

@@ -924,6 +924,8 @@ export const eventTasks = pgTable(
     reviewRequired: boolean("review_required").notNull().default(false),
     reviewedAt: ts("reviewed_at"),
     reviewedBy: uuid("reviewed_by").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
+    /* Phase 2 (00024): false for optional tasks — listed, but left out of progress (src/lib/progress.ts). */
+    countsTowardProgress: boolean("counts_toward_progress").notNull().default(true),
   },
   (t) => [
     index("tasks_event_idx").on(t.eventId),

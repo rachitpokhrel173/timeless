@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
+import CalendarButton from "@/components/admin/CalendarModal";
 import { isFieldOnly, requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
 import { maybeRunSweep } from "@/server/automation";
@@ -20,8 +21,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/admin">) {
   const signedIn = await requirePage();
-  // Field-team logins work from My work only
-  if (isFieldOnly(signedIn) || (!signedIn.permissions.has("dashboard.view") && signedIn.permissions.has("tasks.update"))) redirect("/admin/my-work");
+  // Field-team logins work from the staff portal
+  if (isFieldOnly(signedIn) || (!signedIn.permissions.has("dashboard.view") && signedIn.permissions.has("tasks.update"))) redirect("/staff");
   const user = await requirePage("dashboard.view");
   // Field team (no planning or sales access) start on their own schedule
   if (user.staffId && user.permissions.has("tasks.update") && !(["events.update", "leads.view", "bookings.view", "invoices.view"] as const).some((p) => user.permissions.has(p))) redirect("/admin/my-work");
@@ -103,6 +104,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
         description="Here's how the business is doing."
         actions={
           <>
+            {has("events.view") && <CalendarButton />}
             <RangeFilter />
             <DashboardCustomizer current={chosen} available={visible.map(({ key, label }) => ({ key, label }))} />
           </>
@@ -139,7 +141,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
             {has("leads.view") && <Kpi label="Total leads" value={totalLeads} hint={`${kpis.leadsNow} new · ${range.label.toLowerCase()}`} change={pctChange(kpis.leadsNow, kpis.leadsPrev)} icon={UserPlus} href="/admin/leads" />}
             {has("leads.view") && <Kpi label="New inquiries" value={kpis.inquiriesNow} change={pctChange(kpis.inquiriesNow, kpis.inquiriesPrev)} hint={<span className="sr-only">{range.label}</span>} icon={Inbox} href="/admin/inquiries" />}
             {has("bookings.view") && <Kpi label="Active bookings" value={kpis.active} hint={`${kpis.bookingsNow} new · ${range.label.toLowerCase()}`} icon={CalendarCheck} href="/admin/bookings" />}
-            {has("events.view") && <Kpi label="Upcoming events" value={kpis.upcoming} hint="Next 30 days" icon={CalendarDays} href="/admin/calendar" />}
+            {has("events.view") && <Kpi label="Upcoming events" value={kpis.upcoming} hint="Next 30 days" icon={CalendarDays} href="/admin/events" />}
             {has("payments.view") && <Kpi label="Revenue" value={nprCompact(kpis.revenueRange)} change={pctChange(kpis.revenueRange, kpis.revenuePrev)} hint={`${nprCompact(kpis.monthRevenue)} this month`} icon={TrendingUp} href="/admin/payments" />}
             {has("payments.view") && <Kpi label="Outstanding payments" value={nprCompact(kpis.outstanding.amount)} hint={`${kpis.outstanding.bookings} booking${kpis.outstanding.bookings === 1 ? "" : "s"}`} icon={AlertTriangle} href="/admin/invoices?status=open" />}
             {has("quotations.view") && <Kpi label="Pending quotations" value={kpis.pendingQuotes.c} hint={`${nprCompact(kpis.pendingQuotes.v)} awaiting reply`} icon={FileText} href="/admin/quotations?status=open" />}
@@ -166,7 +168,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
           )}
 
           {upcoming && (
-            <Card title="Upcoming events" actions={<LinkButton href="/admin/calendar" size="sm" variant="ghost">Calendar</LinkButton>} order={pos("upcoming")}>
+            <Card title="Upcoming events" actions={<LinkButton href="/admin/events" size="sm" variant="ghost">All events</LinkButton>} order={pos("upcoming")}>
               {upcoming.length === 0 ? (
                 <EmptyState compact icon={CalendarDays} title="No upcoming events" action={has("bookings.create") ? <LinkButton href="/admin/bookings/new" size="sm">Create booking</LinkButton> : undefined} />
               ) : (

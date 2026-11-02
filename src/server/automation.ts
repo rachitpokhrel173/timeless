@@ -228,12 +228,39 @@ export async function onTaskProgress(taskId: string, status: string, actor: { id
   );
   if (!task) return;
   const event = task.eventId
-    ? await maybe<{ id: string; title: string; status: string; b: { id: string; number: string; status: string } | null }>(
-        adminDb.from(tbl(schema.events)).select("id,title,status,b:bookings(id,number,status)").eq("id", task.eventId),
+    ? await maybe<{ id: string; title: string; status: string; managerId: string | null; b: { id: string; number: string; status: string } | null }>(
+        adminDb.from(tbl(schema.events)).select("id,title,status,managerId:manager_id,b:bookings(id,number,status)").eq("id", task.eventId),
       )
     : null;
   const href = event ? `/admin/events/${event.id}?tab=tasks` : "/admin/tasks";
   const notes: string[] = [];
+
+  // Phase 2: the team's progress reaches the office. Everyone has submitted → planners review it;
+  // accepted / started → the event's manager (or planners when the event has none) sees it move.
+  if (status === "REVIEW" && !actor.planner)
+    await notify({
+      type: "task.review",
+      title: `Review required: “${task.title}”`,
+      body: [event?.title, `submitted by ${actor.name}`].filter(Boolean).join(" · "),
+      href: "/admin/tasks?view=review",
+      priority: "HIGH",
+      permission: "events.update",
+      entityType: "task",
+      entityId: taskId,
+      dedupeKey: `task-review:${taskId}:${new Date().toISOString().slice(0, 13)}`,
+    });
+  else if ((status === "ACCEPTED" || status === "IN_PROGRESS") && !actor.planner && event?.managerId !== actor.id)
+    await notify({
+      type: "task.progress",
+      title: `${actor.name} ${status === "ACCEPTED" ? "accepted" : "started"} “${task.title}”`,
+      body: event?.title,
+      href,
+      priority: "LOW",
+      ...(event?.managerId ? { userId: event.managerId } : { permission: "events.update" as const }),
+      entityType: "task",
+      entityId: taskId,
+      dedupeKey: `task-${status.toLowerCase()}:${taskId}`,
+    });
 
   if (status === "BLOCKED" || status === "WAITING_MATERIALS")
     await notify({
@@ -454,7 +481,7 @@ export async function runScheduledAutomations() {
       adminDb
         .from(tbl(schema.eventTasks))
         .select("id,title,eventId:event_id,userId:assignee_user_id,staffId:assignee_staff_id")
-        .neq("status", "COMPLETED")
+        .not("status", "in", "(COMPLETED,CANCELLED,REVIEW)")
         .lt("due_at", new Date().toISOString())
         .order("id"),
     );
@@ -483,7 +510,40 @@ export async function runScheduledAutomations() {
         dedupeKey: `task-overdue:${t.id}`,
       });
     }
-    await logRun("task.overdue", `${tasks.length} overdue task(s)`);
+    // Phase 2: everyone on a shared task (event_task_assignees) hears it too, and work due in the
+    // next 24 hours gets one heads-up per person. Cancelled work and work in review are skipped.
+    const soonEnd = new Date(Date.now() + 24 * 3600_000).toISOString();
+    const parts = await all<{ id: string; staffId: string; t: { id: string; title: string; dueAt: string; status: string } }>(() =>
+      adminDb
+        .from(tbl(schema.eventTaskAssignees))
+        .select("id,staffId:staff_id,t:event_tasks!inner(id,title,dueAt:due_at,status)")
+        .is("removed_at", null)
+        .not("status", "in", "(COMPLETED,CANCELLED,REVIEW)")
+        .not("t.status", "in", "(COMPLETED,CANCELLED,REVIEW)")
+        .lt("t.due_at", soonEnd)
+        .order("id"),
+    );
+    const partUsers = await usersForStaff(parts.map((p) => p.staffId));
+    const nowMs = Date.now();
+    let soonCount = 0;
+    for (const p of parts) {
+      const userId = partUsers.get(p.staffId);
+      if (!userId) continue;
+      const late = new Date(p.t.dueAt).getTime() < nowMs;
+      if (!late) soonCount++;
+      await notify({
+        type: late ? "task.overdue" : "task.due_soon",
+        title: late ? `Task overdue: ${p.t.title}` : `Due soon: ${p.t.title}`,
+        body: late ? undefined : `Deadline ${fmtDate(p.t.dueAt)}`,
+        href: `/admin/my-work/${p.t.id}`,
+        priority: late ? "HIGH" : "MEDIUM",
+        userId,
+        entityType: "task",
+        entityId: p.t.id,
+        dedupeKey: late ? `task-overdue:${p.t.id}:${p.staffId}` : `task-due-soon:${p.t.id}:${p.staffId}:${p.t.dueAt}`,
+      });
+    }
+    await logRun("task.overdue", `${tasks.length} overdue task(s), ${soonCount} assignment(s) due within 24 hours`);
     results.push("task.overdue");
   }
 
