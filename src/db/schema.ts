@@ -58,7 +58,8 @@ export const activityType = pgEnum("activity_type", ["NOTE", "CALL", "WHATSAPP",
 export const quotationStatus = pgEnum("quotation_status", ["DRAFT", "SENT", "VIEWED", "ACCEPTED", "REJECTED", "EXPIRED"]);
 export const bookingStatus = pgEnum("booking_status", ["PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
 export const eventStatus = pgEnum("event_status", ["PLANNING", "READY", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
-export const taskStatus = pgEnum("task_status", ["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
+/** TODO = "Assigned", BLOCKED = "On hold" in the app. ACCEPTED added by 00017. */
+export const taskStatus = pgEnum("task_status", ["TODO", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
 export const paymentMethod = pgEnum("payment_method", ["CASH", "BANK_TRANSFER", "CARD", "ONLINE", "CHEQUE", "OTHER"]);
 export const invoiceStatus = pgEnum("invoice_status", ["DRAFT", "SENT", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"]);
 export const movementType = pgEnum("movement_type", [
@@ -857,6 +858,12 @@ export const eventTasks = pgTable(
     completionNote: text("completion_note"),
     proofMediaIds: uuid("proof_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
     blockedReason: text("blocked_reason"),
+    /** When work on the task can begin (the deadline is dueAt). */
+    startDate: date("start_date"),
+    /** Instructions shown to the assigned team (planners' private notes live in event_task_internal). */
+    staffInstructions: text("staff_instructions"),
+    /** Reference / inspiration images for the team (media ids, private event-media bucket). */
+    referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
     createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -869,6 +876,76 @@ export const eventTasks = pgTable(
     index("tasks_work_day_idx").on(t.eventId, t.workDay),
   ],
 );
+
+/**
+ * Who is on a task, each with their own progress. The task's status is rolled up from these by a
+ * trigger, and assigneeStaffId on the task mirrors the first active assignee. Removing someone
+ * keeps the row (removedAt) so the history stays.
+ */
+export const eventTaskAssignees = pgTable(
+  "event_task_assignees",
+  {
+    id: id(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => eventTasks.id, { onDelete: "cascade" }),
+    staffId: uuid("staff_id")
+      .notNull()
+      .references(() => staff.id, { onDelete: "restrict" }),
+    status: taskStatus("status").notNull().default("TODO"),
+    acceptedAt: ts("accepted_at"),
+    startedAt: ts("started_at"),
+    completedAt: ts("completed_at"),
+    completionNote: text("completion_note"),
+    holdReason: text("hold_reason"),
+    proofMediaIds: uuid("proof_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    assignedBy: uuid("assigned_by").references(() => profiles.id, { onDelete: "set null" }),
+    assignedAt: ts("assigned_at").notNull().default(sql`clock_timestamp()`),
+    removedAt: ts("removed_at"),
+    removedBy: uuid("removed_by").references(() => profiles.id, { onDelete: "set null" }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex("task_assignees_active_unique").on(t.taskId, t.staffId).where(sql`${t.removedAt} is null`),
+    index("task_assignees_task_idx").on(t.taskId),
+    index("task_assignees_staff_idx").on(t.staffId, t.status).where(sql`${t.removedAt} is null`),
+    check("event_task_assignees_hold_reason", sql`${t.status} <> 'BLOCKED' or length(btrim(coalesce(${t.holdReason}, ''))) > 0`),
+  ],
+);
+
+/** Append-only task history (assignments and status changes), written only by database triggers. */
+export const eventTaskUpdates = pgTable(
+  "event_task_updates",
+  {
+    id: id(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => eventTasks.id, { onDelete: "cascade" }),
+    assigneeId: uuid("assignee_id").references(() => eventTaskAssignees.id, { onDelete: "set null" }),
+    staffId: uuid("staff_id").references(() => staff.id, { onDelete: "set null" }),
+    actorId: uuid("actor_id").references(() => profiles.id, { onDelete: "set null" }),
+    kind: text("kind", { enum: ["STATUS", "ASSIGNED", "UNASSIGNED"] }).notNull(),
+    fromStatus: taskStatus("from_status"),
+    toStatus: taskStatus("to_status"),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("task_updates_task_idx").on(t.taskId, t.createdAt),
+    index("task_updates_staff_idx").on(t.staffId, t.createdAt),
+    check("event_task_updates_kind_check", sql`${t.kind} in ('STATUS', 'ASSIGNED', 'UNASSIGNED')`),
+  ],
+);
+
+/** Planners' private notes on a task — a separate table so RLS keeps them from the field team. */
+export const eventTaskInternal = pgTable("event_task_internal", {
+  taskId: uuid("task_id")
+    .primaryKey()
+    .references(() => eventTasks.id, { onDelete: "cascade" }),
+  notes: text("notes").notNull().default(""),
+  updatedBy: uuid("updated_by").references(() => profiles.id, { onDelete: "set null" }),
+  updatedAt: updatedAt(),
+});
 
 export const checklistTemplates = pgTable("checklist_templates", {
   id: id(),

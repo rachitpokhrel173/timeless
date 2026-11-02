@@ -271,6 +271,27 @@ export const templates = {
       }),
     };
   },
+  taskAssigned: (
+    b: Brand,
+    d: { staff: string; task: string; event: string; bookingCode?: string | null; eventDate?: string | null; due?: string | null; venue?: string | null; taskId: string; reassigned?: boolean },
+  ): Rendered => ({
+    subject: `${d.reassigned ? "Task handed to you" : "New task"}: ${d.task}`,
+    ...layout(b, {
+      preheader: `${d.task} for ${d.event}${d.due ? ` — due ${d.due}` : ""}.`,
+      heading: d.reassigned ? "A task has been handed to you" : "You have a new task",
+      paragraphs: [`Hi ${first(d.staff)}, you've been assigned “${d.task}” for ${d.event}.`, "Open it to see the instructions and reference photos, then accept it so the team knows it's in hand."],
+      details: [
+        { label: "Task", value: d.task },
+        { label: "Event", value: d.event },
+        ...(d.bookingCode ? [{ label: "Booking", value: d.bookingCode }] : []),
+        ...(d.eventDate ? [{ label: "Event date", value: fmtDateLong(d.eventDate) }] : []),
+        ...(d.venue ? [{ label: "Venue", value: d.venue }] : []),
+        ...(d.due ? [{ label: "Deadline", value: d.due, strong: true }] : []),
+      ],
+      cta: { label: "Open the task", href: `${siteUrl()}/admin/my-work/${d.taskId}` },
+      footnote: "You'll be asked to sign in. Never share your password — the team will never ask for it.",
+    }),
+  }),
 };
 
 export type TemplateName = keyof typeof templates;
@@ -329,6 +350,7 @@ export async function previewTemplate(name: TemplateName) {
     paymentReminder: { name: "Anil Sharma", booking: "BK-2026-001", title: "Priya & Anil Wedding", eventDate: "2026-12-12", stage: "balance", amount: 150000, dueDate: "2026-12-05" },
     eventReminder: { name: "Anil Sharma", title: "Priya & Anil Wedding", date: "2026-10-12", days: 7 },
     followUpReminder: { staff: "Sita Karki", count: 3 },
+    taskAssigned: { staff: "Sita Karki", task: "Stage decoration", event: "Priya & Anil Wedding", bookingCode: "BK-2026-001", eventDate: "2026-12-12", due: "11 Dec 2026, 5:00 pm", venue: "Hotel Shanker", taskId: "preview" },
   }[name];
   return (templates[name] as (b: Brand, d: unknown) => Rendered)(brand, sample);
 }

@@ -1,4 +1,4 @@
-import { AlertCircle, Archive, Ban, CheckCircle2, CircleDot, Clock, Eye, FileEdit, Handshake, Hourglass, Send, Sparkles, Trophy, XCircle, type LucideIcon } from "lucide-react";
+import { AlertCircle, Archive, Ban, CheckCircle2, CircleCheck, CircleDot, Clock, Eye, FileEdit, Handshake, Hourglass, Send, Sparkles, Trophy, XCircle, type LucideIcon } from "lucide-react";
 import { Badge, type Tone } from "./ui";
 
 type StatusDef = { label: string; tone: Tone; icon?: LucideIcon };
@@ -62,10 +62,11 @@ export const EVENT_STATUS: Record<string, StatusDef> = {
 };
 
 export const TASK_STATUS: Record<string, StatusDef> = {
-  TODO: { label: "To do", tone: "neutral", icon: CircleDot },
+  TODO: { label: "Assigned", tone: "neutral", icon: CircleDot },
+  ACCEPTED: { label: "Accepted", tone: "gold", icon: CircleCheck },
   IN_PROGRESS: { label: "In progress", tone: "info", icon: Clock },
+  BLOCKED: { label: "On hold", tone: "danger", icon: Ban },
   COMPLETED: { label: "Completed", tone: "success", icon: CheckCircle2 },
-  BLOCKED: { label: "Blocked", tone: "danger", icon: Ban },
 };
 
 export const PRIORITY: Record<string, StatusDef> = {

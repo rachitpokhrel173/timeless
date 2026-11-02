@@ -480,10 +480,13 @@ export async function runScheduledAutomations() {
       await notify({
         type: "task.overdue",
         title: `Task overdue: ${t.title}`,
-        href: t.eventId ? `/admin/events/${t.eventId}?tab=tasks` : "/admin/tasks",
+        href: `/admin/my-work/${t.id}`,
         priority: "HIGH",
-        permission: "events.view",
-        userId: t.userId ?? linked.find((u) => u.staffId === t.staffId)?.id ?? null,
+        // Sent to the person doing it (field-team logins don't hold events.view); otherwise to planners
+        ...(() => {
+          const userId = t.userId ?? linked.find((u) => u.staffId === t.staffId)?.id ?? null;
+          return userId ? { userId } : { permission: "events.view" };
+        })(),
         dedupeKey: `task-overdue:${t.id}`,
       });
     }
@@ -496,15 +499,30 @@ export async function runScheduledAutomations() {
     const dayStart = new Date(`${today}T00:00:00+05:45`);
     const dayEnd = new Date(`${todayISO(1)}T00:00:00+05:45`).toISOString();
     const [due, onTeam] = await Promise.all([
-      all<{ id: string; dueAt: string; userId: string | null; staffId: string | null }>(() =>
-        adminDb
-          .from(tbl(schema.eventTasks))
-          .select("id,dueAt:due_at,userId:assignee_user_id,staffId:assignee_staff_id")
-          .neq("status", "COMPLETED")
-          .lt("due_at", dayEnd)
-          .or("assignee_user_id.not.is.null,assignee_staff_id.not.is.null")
-          .order("id"),
-      ),
+      // Every open assignment (each person on a task) plus personal tasks given to a login
+      Promise.all([
+        all<{ id: string; staffId: string; t: { dueAt: string } }>(() =>
+          adminDb
+            .from(tbl(schema.eventTaskAssignees))
+            .select("id,staffId:staff_id,t:event_tasks!inner(dueAt:due_at)")
+            .is("removed_at", null)
+            .neq("status", "COMPLETED")
+            .lt("t.due_at", dayEnd)
+            .order("id"),
+        ),
+        all<{ id: string; dueAt: string; userId: string }>(() =>
+          adminDb
+            .from(tbl(schema.eventTasks))
+            .select("id,dueAt:due_at,userId:assignee_user_id")
+            .neq("status", "COMPLETED")
+            .lt("due_at", dayEnd)
+            .not("assignee_user_id", "is", null)
+            .order("id"),
+        ),
+      ]).then(([assigned, personal]) => [
+        ...assigned.map((a) => ({ id: a.id, dueAt: a.t.dueAt, userId: null as string | null, staffId: a.staffId as string | null })),
+        ...personal.map((t) => ({ id: t.id, dueAt: t.dueAt, userId: t.userId as string | null, staffId: null as string | null })),
+      ]),
       many<{ staffId: string; e: { title: string } }>(
         adminDb.from(tbl(schema.staffAssignments)).select("staffId:staff_id,e:events!inner(title)").eq("e.event_date", today).neq("e.status", "CANCELLED"),
       ),

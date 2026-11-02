@@ -5,7 +5,7 @@ import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import type { UserPrefs } from "@/db/schema";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { supabaseServer } from "@/lib/supabase/server";
-import type { Permission } from "./permissions";
+import { FIELD_PERMISSIONS, type Permission } from "./permissions";
 
 export type SessionUser = {
   id: string;
@@ -70,6 +70,13 @@ export async function loadUser(userId: string, sessionId: string | null = null):
 }
 
 export const can = (user: SessionUser | null, permission: Permission) => !!user?.permissions.has(permission);
+
+/**
+ * A field-team login: may update their own tasks and nothing beyond (mirrors public.is_office()
+ * in the database). They work from My work and never see the wider admin.
+ */
+export const isFieldOnly = (user: SessionUser | null) =>
+  !!user?.isStaff && user.permissions.has("tasks.update") && [...user.permissions].every((p) => FIELD_PERMISSIONS.includes(p));
 
 // Sign-in methods Supabase records (JWT `amr` claim) when someone arrives through an email link
 const EMAIL_LINK_METHODS = new Set(["invite", "recovery", "otp", "magiclink", "email/signup"]);

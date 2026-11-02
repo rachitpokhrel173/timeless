@@ -155,7 +155,13 @@ export const DEFAULT_ROLES: { key: string; name: string; description: string; pe
   {
     key: "STAFF",
     name: "Staff",
-    description: "Sees events, the calendar and their tasks; can update tasks.",
-    permissions: ["dashboard.view", "events.view", "tasks.update", "inventory.view"],
+    description: "Field team: sees only the tasks assigned to them and updates their progress.",
+    permissions: ["tasks.update"],
   },
 ];
+
+/**
+ * Permissions a field-team login may hold and still count as "field only". Keep in sync with
+ * public.is_office() in supabase/migrations/00018_staff_work_management.sql.
+ */
+export const FIELD_PERMISSIONS: readonly Permission[] = ["tasks.update", "dashboard.view"];

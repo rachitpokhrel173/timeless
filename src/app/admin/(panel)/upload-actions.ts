@@ -1,10 +1,11 @@
 "use server";
 
-import { cols, db, exec, maybe, one, schema, tbl, vals, withUser, type Row } from "@/db";
+import { adminDb, cols, db, exec, maybe, one, schema, tbl, vals, withUser, type Row } from "@/db";
 import { UserError, type ActionResult } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import type { Permission } from "@/lib/auth/permissions";
 import { getCurrentUser, type SessionUser } from "@/lib/auth/session";
+import { myAssignment } from "@/server/assignments";
 import { processUpload, storeUpload, UploadError } from "@/server/media";
 import { refreshSite } from "@/server/revalidate";
 import { deleteStoredFile, makePath, putFile } from "@/server/storage";
@@ -207,22 +208,71 @@ export async function removeCustomerImage(customerId: string, mediaId: string): 
 
 const PROOF_LIMIT = 10;
 
-/** Photos of finished work on a task (private event-media bucket) — by the person it's assigned to, or a planner. */
+/**
+ * Photos of finished work. A team member on the task adds them to their own assignment; a planner
+ * (or the owner of an unassigned personal task) adds them to the task itself. Private event-media bucket.
+ */
 export async function uploadTaskProof(form: FormData) {
   return upload(["events.update", "tasks.update"], form, async (files, user) => {
     const taskId = uuid(form.get("taskId"));
     if (!taskId) throw new UserError("Choose a task.");
-    const task = await maybe<{ title: string; eventId: string | null; ids: string[]; userId: string | null; staffId: string | null }>(
-      db.from(tbl(schema.eventTasks)).select("title,eventId:event_id,ids:proof_media_ids,userId:assignee_user_id,staffId:assignee_staff_id").eq("id", taskId),
+    const task = await maybe<{ title: string; eventId: string | null; ids: string[]; userId: string | null }>(
+      adminDb.from(tbl(schema.eventTasks)).select("title,eventId:event_id,ids:proof_media_ids,userId:assignee_user_id").eq("id", taskId),
     );
     if (!task) throw new UserError("Task not found.");
-    if (!user.permissions.has("events.update") && task.userId !== user.id && (!user.staffId || task.staffId !== user.staffId)) throw new UserError("You can only add photos to your own tasks.");
-    if (task.ids.length + files.length > PROOF_LIMIT) throw new UserError(`Up to ${PROOF_LIMIT} photos per task.`);
+    const planner = user.permissions.has("events.update");
+    const mine = await myAssignment(taskId, user.staffId);
+    if (!planner && !mine && task.userId !== user.id) throw new UserError("You can only add photos to your own tasks.");
+    const existing = mine && !(planner && form.get("asPlanner") === "1") ? mine.proofMediaIds : task.ids;
+    if (existing.length + files.length > PROOF_LIMIT) throw new UserError(`Up to ${PROOF_LIMIT} photos each.`);
     for (const f of files) if (!QUOTE_IMAGE_TYPES.includes(f.type)) throw new UserError(`“${f.name}” isn't a PNG, JPG or WEBP image.`);
     const ids: string[] = [];
     for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: task.eventId ? `events/${task.eventId}/work` : "tasks", uploadedBy: user.id, imagesOnly: true })).id);
-    await exec(db.from(tbl(schema.eventTasks)).update({ proof_media_ids: [...task.ids, ...ids] }).eq("id", taskId));
+    if (existing === task.ids) await exec(db.from(tbl(schema.eventTasks)).update({ proof_media_ids: [...task.ids, ...ids] }).eq("id", taskId));
+    else await exec(db.from(tbl(schema.eventTaskAssignees)).update({ proof_media_ids: [...existing, ...ids] }).eq("id", mine!.id));
     await audit(user, "upload", "task", taskId, `Added ${ids.length} photo(s) to “${task.title}”`);
     return { count: ids.length };
   });
+}
+
+const REFERENCE_LIMIT = 12;
+
+/** Reference / inspiration images for the team on a task (planners; private event-media bucket). */
+export async function uploadTaskReference(form: FormData) {
+  return upload("events.update", form, async (files, user) => {
+    const taskId = uuid(form.get("taskId"));
+    if (!taskId) throw new UserError("Choose a task.");
+    const task = await maybe<{ title: string; eventId: string | null; ids: string[] }>(
+      db.from(tbl(schema.eventTasks)).select("title,eventId:event_id,ids:reference_media_ids").eq("id", taskId),
+    );
+    if (!task) throw new UserError("Task not found.");
+    if (task.ids.length + files.length > REFERENCE_LIMIT) throw new UserError(`Up to ${REFERENCE_LIMIT} reference images per task.`);
+    for (const f of files) if (!QUOTE_IMAGE_TYPES.includes(f.type)) throw new UserError(`“${f.name}” isn't a PNG, JPG or WEBP image.`);
+    const ids: string[] = [];
+    for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: task.eventId ? `events/${task.eventId}/references` : "tasks", uploadedBy: user.id, imagesOnly: true })).id);
+    await exec(db.from(tbl(schema.eventTasks)).update({ reference_media_ids: [...task.ids, ...ids] }).eq("id", taskId));
+    await audit(user, "upload", "task", taskId, `Added ${ids.length} reference image(s) to “${task.title}”`);
+    return { count: ids.length };
+  });
+}
+
+export async function removeTaskReference(taskId: string, mediaId: string): Promise<ActionResult<undefined>> {
+  const user = await getCurrentUser();
+  if (!user?.permissions.has("events.update")) return { ok: false, error: "You don't have permission to do that." };
+  if (!uuid(taskId) || !uuid(mediaId)) return { ok: false, error: "Image not found." };
+  try {
+    await withUser(async () => {
+      const task = await maybe<{ ids: string[] }>(db.from(tbl(schema.eventTasks)).select("ids:reference_media_ids").eq("id", taskId));
+      if (!task?.ids.includes(mediaId)) throw new UserError("Image not found.");
+      await exec(db.from(tbl(schema.eventTasks)).update({ reference_media_ids: task.ids.filter((i) => i !== mediaId) }).eq("id", taskId));
+      const m = await maybe<{ bucket: string; path: string }>(db.from(tbl(schema.media)).update({ deleted_at: new Date().toISOString() }).eq("id", mediaId).select("bucket,path"));
+      if (m) await deleteStoredFile(m.bucket, m.path);
+      await audit(user, "delete", "task", taskId, "Removed a reference image");
+    });
+    return { ok: true, data: undefined };
+  } catch (error) {
+    if (error instanceof UserError) return { ok: false, error: error.message };
+    console.error("[task reference remove]", error);
+    return { ok: false, error: "Couldn't remove that image." };
+  }
 }

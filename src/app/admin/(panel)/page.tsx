@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
-import { requirePage } from "@/lib/auth/session";
+import { isFieldOnly, requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
 import { maybeRunSweep } from "@/server/automation";
 import { inventoryWithStock } from "@/server/inventory";
@@ -20,6 +20,9 @@ import { DEFAULT_WIDGETS, WIDGETS, type WidgetKey } from "./widgets";
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/admin">) {
+  const signedIn = await requirePage();
+  // Field-team logins work from My work only
+  if (isFieldOnly(signedIn) || (!signedIn.permissions.has("dashboard.view") && signedIn.permissions.has("tasks.update"))) redirect("/admin/my-work");
   const user = await requirePage("dashboard.view");
   // Field team (no planning or sales access) start on their own schedule
   if (user.staffId && user.permissions.has("tasks.update") && !(["events.update", "leads.view", "bookings.view", "invoices.view"] as const).some((p) => user.permissions.has(p))) redirect("/admin/my-work");

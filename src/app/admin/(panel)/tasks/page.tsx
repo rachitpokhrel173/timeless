@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ListTodo } from "lucide-react";
 import { adminDb, cols, many, paged, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
@@ -18,7 +19,7 @@ type TaskRow = Row<typeof schema.eventTasks> & { e: { id: string; title: string;
 export default async function TasksPage({ searchParams }: PageProps<"/admin/tasks">) {
   const user = await requirePage();
   const can = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);
-  if (!can("events.view") && !can("tasks.update")) await requirePage("events.view");
+  if (!can("events.view")) redirect("/admin/my-work");
   const sp = await searchParams;
   const { page, pageSize, offset, q, str } = listParams(sp, 40);
   const planner = can("events.update");
@@ -32,7 +33,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/admin/task
     .select(`${cols(schema.eventTasks)},e:events(id,title,eventDate:event_date),s:staff(name),u:profiles!assignee_user_id(fullName:full_name)`, { count: "exact" });
   if (view === "mine") query = query.or(`assignee_user_id.eq.${user.id}${user.staffId ? `,assignee_staff_id.eq.${user.staffId}` : ""}`);
   if (view === "done") query = query.eq("status", "COMPLETED");
-  else if (status && ["TODO", "IN_PROGRESS", "BLOCKED", "COMPLETED"].includes(status)) query = query.eq("status", status);
+  else if (status && ["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED"].includes(status)) query = query.eq("status", status);
   else if (str("due") !== "overdue") query = query.neq("status", "COMPLETED");
   if (str("due") === "overdue") query = query.lt("due_at", now).neq("status", "COMPLETED");
   if (str("due") === "today") query = query.lt("due_at", new Date(`${todayISO(1)}T00:00:00+05:45`).toISOString());
@@ -72,7 +73,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/admin/task
           <SearchBox placeholder="Search tasks" />
           {view !== "done" && (
             <>
-              <FilterSelect param="status" label="Status" options={options(["TODO", "IN_PROGRESS", "BLOCKED"], TASK_STATUS)} />
+              <FilterSelect param="status" label="Status" options={options(["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED"], TASK_STATUS)} />
               <FilterSelect
                 param="due"
                 label="Due"

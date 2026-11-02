@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { CalendarDays, FileText, PartyPopper, Wallet } from "lucide-react";
+import { CalendarDays, ClipboardList, FileText, PartyPopper, Wallet } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
@@ -12,13 +12,14 @@ import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import { BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, label, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
 import { amountDue } from "@/server/payment-reminders";
+import { workEligibility } from "@/server/assignments";
 import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, PaymentReminderButton, VoidPaymentButton } from "../BookingClient";
 
 export const metadata: Metadata = { title: "Booking" };
 
 type Booking = Row<typeof schema.bookings> & {
   customer: { id: string; name: string; phone: string | null; email: string | null };
-  quote: { id: string; number: string } | null;
+  quote: { id: string; number: string; status: string } | null;
   pkg: { id: string; name: string } | null;
   event: Row<typeof schema.events> | Row<typeof schema.events>[] | null;
 };
@@ -31,7 +32,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
   const booking = await maybe<Booking>(
     adminDb
       .from(tbl(schema.bookings))
-      .select(`${cols(schema.bookings)},customer:customers!inner(id,name,phone,email),quote:quotations(id,number),pkg:packages(id,name),event:events(${cols(schema.events)})`)
+      .select(`${cols(schema.bookings)},customer:customers!inner(id,name,phone,email),quote:quotations(id,number,status),pkg:packages(id,name),event:events(${cols(schema.events)})`)
       .eq("id", id),
   );
   if (!booking) notFound();
@@ -39,7 +40,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
   const event = first(booking.event);
   const tab = ["overview", "payments", "invoices"].includes(str("tab") ?? "") ? str("tab")! : "overview";
 
-  const [items, payments, invoices, types] = await Promise.all([
+  const [items, payments, invoices, types, work] = await Promise.all([
     many<Row<typeof schema.bookingItems>>(adminDb.from(tbl(schema.bookingItems)).select(cols(schema.bookingItems)).eq("booking_id", id).order("position")),
     can("payments.view")
       ? many<Row<typeof schema.payments> & { inv: { number: string } | null }>(
@@ -48,7 +49,11 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       : [],
     can("invoices.view") ? many<Row<typeof schema.invoices>>(adminDb.from(tbl(schema.invoices)).select(cols(schema.invoices)).eq("booking_id", id).order("created_at", { ascending: false })) : [],
     eventTypeOptions(),
+    event && can("events.view")
+      ? many<{ id: string; status: string; dueAt: Date | null }>(adminDb.from(tbl(schema.eventTasks)).select("id,status,dueAt:due_at").eq("event_id", event.id))
+      : null,
   ]);
+  const workOk = workEligibility({ status: booking.status, quoteStatus: booking.quote?.status ?? null, hasEvent: !!event });
   const balance = balanceOf(booking);
   const depositOutstanding = booking.depositAmount > booking.amountPaid;
   const today = todayISO();
@@ -163,6 +168,34 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
             </Card>
           </div>
           <div className="space-y-4">
+            {work && (
+              <Card
+                title="Work Management"
+                description={workOk.ok ? "Decoration tasks and who is doing them." : workOk.reason}
+                actions={
+                  workOk.ok || work.length ? (
+                    <LinkButton href={`/admin/work/${id}`} size="sm" icon={ClipboardList} variant={work.length ? "secondary" : "primary"}>
+                      {work.length ? "Open" : can("events.update") ? "Assign tasks" : "View"}
+                    </LinkButton>
+                  ) : undefined
+                }
+              >
+                {work.length ? (
+                  <>
+                    <div className="mb-1.5 flex justify-between text-[13px]">
+                      <span>
+                        {work.filter((t) => t.status === "COMPLETED").length} of {work.length} tasks done
+                      </span>
+                      <span className="text-a-muted tabular-nums">{Math.round((work.filter((t) => t.status === "COMPLETED").length / work.length) * 100)}%</span>
+                    </div>
+                    <ProgressBar value={work.filter((t) => t.status === "COMPLETED").length} max={work.length} label="Work progress" tone="accent" />
+                    {work.some((t) => t.status === "BLOCKED") && <p className="mt-2 text-xs font-medium text-a-danger">{work.filter((t) => t.status === "BLOCKED").length} on hold</p>}
+                  </>
+                ) : (
+                  <p className="text-[13px] text-a-muted">{workOk.ok ? "No tasks yet — break the approved décor into tasks for the team." : "Tasks open once the booking is confirmed."}</p>
+                )}
+              </Card>
+            )}
             <Card title="Event" actions={event && <StatusBadge map={EVENT_STATUS} value={event.status} />}>
               {event ? (
                 <DetailList

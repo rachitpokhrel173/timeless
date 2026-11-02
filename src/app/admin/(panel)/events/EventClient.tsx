@@ -28,9 +28,10 @@ const PRIORITIES: Option[] = [
   { value: "URGENT", label: "Urgent" },
 ];
 const TASK_STATUSES: Option[] = [
-  { value: "TODO", label: "To do" },
+  { value: "TODO", label: "Assigned" },
+  { value: "ACCEPTED", label: "Accepted" },
   { value: "IN_PROGRESS", label: "In progress" },
-  { value: "BLOCKED", label: "Blocked" },
+  { value: "BLOCKED", label: "On hold" },
   { value: "COMPLETED", label: "Completed" },
 ];
 /** Date → value for <input type="datetime-local"> in Nepal time. */

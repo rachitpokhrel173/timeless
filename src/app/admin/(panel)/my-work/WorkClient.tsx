@@ -2,23 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
-import { Ban, Camera, CheckCircle2, Play, RotateCcw } from "lucide-react";
+import { Camera, CheckCircle2, PauseCircle, Play, RotateCcw, ThumbsUp } from "lucide-react";
 import { Button, Dialog, inputClass, useRun, useToast } from "@/components/admin/interactive";
 import UploadButton, { shrink } from "@/components/admin/Upload";
 import { setTaskStatus } from "../tasks/actions";
 import { uploadTaskProof } from "../upload-actions";
 
-/** Start / finish (with a note and photos) / report a problem — the buttons on each piece of work. */
-export function WorkTaskActions({ id, title, status }: { id: string; title: string; status: string }) {
+/**
+ * The buttons on each piece of work: accept it, start it, put it on hold (with a reason), finish
+ * it (note + photos) or reopen it. Big, thumb-friendly targets — the team uses this on site.
+ */
+export function WorkTaskActions({ id, title, status, large }: { id: string; title: string; status: string; large?: boolean }) {
   const { run, pending } = useRun();
   const [dialog, setDialog] = useState<"done" | "blocked" | null>(null);
   const close = () => setDialog(null);
+  const size = large ? "lg" : "md";
+  const wide = large ? "flex-1 justify-center sm:flex-none" : undefined;
 
   if (status === "COMPLETED")
     return (
       <div className="flex flex-wrap gap-2">
-        <UploadButton action={uploadTaskProof} fields={{ taskId: id }} label="Add photos" accept="image/png,image/jpeg,image/webp" size="sm" success="Photos added" />
-        <Button size="sm" variant="ghost" icon={RotateCcw} pending={pending} onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Reopened" })}>
+        <UploadButton action={uploadTaskProof} fields={{ taskId: id }} label="Add photos" accept="image/png,image/jpeg,image/webp" size={size} success="Photos added" />
+        <Button size={size} variant="ghost" icon={RotateCcw} pending={pending} onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Reopened" })}>
           Reopen
         </Button>
       </div>
@@ -26,23 +31,30 @@ export function WorkTaskActions({ id, title, status }: { id: string; title: stri
 
   return (
     <div className="flex flex-wrap gap-2">
+      {status === "TODO" && (
+        <Button size={size} variant="primary" icon={ThumbsUp} pending={pending} className={wide} onClick={() => run(() => setTaskStatus({ id, status: "ACCEPTED" }), { success: "Accepted — the planner can see it's in hand" })}>
+          Accept
+        </Button>
+      )}
       {status !== "IN_PROGRESS" && (
-        <Button size="sm" variant={status === "TODO" ? "primary" : "secondary"} icon={Play} pending={pending} onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Started — good luck!" })}>
+        <Button size={size} variant={status === "ACCEPTED" || status === "BLOCKED" ? "primary" : "secondary"} icon={Play} pending={pending} className={wide} onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Started — good luck!" })}>
           {status === "BLOCKED" ? "Resume" : "Start"}
         </Button>
       )}
-      <Button size="sm" variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={CheckCircle2} onClick={() => setDialog("done")}>
-        Done
-      </Button>
-      {status !== "BLOCKED" && (
-        <Button size="sm" variant="ghost" icon={Ban} onClick={() => setDialog("blocked")}>
-          Problem
+      {status !== "TODO" && (
+        <Button size={size} variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={CheckCircle2} className={wide} onClick={() => setDialog("done")}>
+          Done
         </Button>
       )}
-      <Dialog open={dialog === "done"} onClose={close} title="Mark as done" description={title}>
+      {status !== "BLOCKED" && (
+        <Button size={size} variant="ghost" icon={PauseCircle} onClick={() => setDialog("blocked")}>
+          On hold
+        </Button>
+      )}
+      <Dialog open={dialog === "done"} onClose={close} title="Mark as completed" description={title}>
         {dialog === "done" && <DoneForm id={id} onDone={close} />}
       </Dialog>
-      <Dialog open={dialog === "blocked"} onClose={close} title="Report a problem" description={title}>
+      <Dialog open={dialog === "blocked"} onClose={close} title="Put on hold" description={title}>
         {dialog === "blocked" && <BlockedForm id={id} onDone={close} />}
       </Dialog>
     </div>
@@ -84,7 +96,7 @@ function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <label className="block text-[13px] font-medium">
-        Note for the planner <span className="font-normal text-a-muted">(optional)</span>
+        Completion note <span className="font-normal text-a-muted">(optional)</span>
         <textarea name="note" rows={3} maxLength={2000} placeholder="Anything they should know — items short, damage, client feedback…" className={`${inputClass} mt-1 h-auto py-2`} />
       </label>
       <label className="block text-[13px] font-medium">
@@ -112,18 +124,18 @@ function BlockedForm({ id, onDone }: { id: string; onDone: () => void }) {
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
-    run(() => setTaskStatus({ id, status: "BLOCKED", reason }), { success: "The planners have been told", onSuccess: onDone });
+    run(() => setTaskStatus({ id, status: "BLOCKED", reason }), { success: "On hold — the planners have been told", onSuccess: onDone });
   }
   return (
     <form onSubmit={submit} className="space-y-4">
       <label className="block text-[13px] font-medium">
-        What&apos;s stopping the work?
-        <textarea name="reason" rows={3} required maxLength={500} placeholder="Venue not open yet, flowers not delivered, item missing…" className={`${inputClass} mt-1 h-auto py-2`} />
+        Why is the work on hold? <span className="font-normal text-a-muted">(required — the planners are told straight away)</span>
+        <textarea name="reason" rows={3} required minLength={3} maxLength={500} placeholder="Venue not open yet, flowers not delivered, item missing…" className={`${inputClass} mt-1 h-auto py-2`} />
       </label>
       <div className="flex justify-end gap-2">
         <Button onClick={onDone}>Cancel</Button>
-        <Button type="submit" variant="danger" icon={Ban} pending={pending}>
-          Report problem
+        <Button type="submit" variant="danger" icon={PauseCircle} pending={pending}>
+          Put on hold
         </Button>
       </div>
     </form>

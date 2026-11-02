@@ -8,10 +8,11 @@ import type { SessionUser } from "@/lib/auth/session";
 import { onTaskProgress } from "@/server/automation";
 import { notify } from "@/server/notifications";
 import { fmtDateTime } from "@/lib/format";
+import { myAssignment } from "@/server/assignments";
 import { applyWorkPlan, eventInfo, usersForStaff } from "@/server/work";
 
 const tasks = () => db.from(tbl(schema.eventTasks));
-const STATUS = z.enum(["TODO", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
+const STATUS = z.enum(["TODO", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "BLOCKED"]);
 const PRIORITY = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
 
 const dueAt = () =>
@@ -75,48 +76,80 @@ export const saveTask = adminAction(
 );
 
 async function ownTask(id: string, user: SessionUser) {
-  const t = await maybe<{ title: string; status: string; startedAt: Date | null; assigneeUserId: string | null; assigneeStaffId: string | null; eventId: string | null; proofMediaIds: string[] }>(
-    tasks().select("title,status,startedAt:started_at,assigneeUserId:assignee_user_id,assigneeStaffId:assignee_staff_id,eventId:event_id,proofMediaIds:proof_media_ids").eq("id", id),
+  const t = await maybe<{ title: string; status: string; startedAt: Date | null; assigneeUserId: string | null; eventId: string | null }>(
+    tasks().select("title,status,startedAt:started_at,assigneeUserId:assignee_user_id,eventId:event_id").eq("id", id),
   );
   if (!t) throw new UserError("Task not found.");
-  if (!user.permissions.has("events.update") && t.assigneeUserId !== user.id && (!user.staffId || t.assigneeStaffId !== user.staffId)) {
-    throw new UserError("You can only update tasks assigned to you.");
-  }
-  return t;
+  const mine = await myAssignment(id, user.staffId);
+  if (!user.permissions.has("events.update") && !mine && t.assigneeUserId !== user.id) throw new UserError("You can only update tasks assigned to you.");
+  return { ...t, mine };
 }
 
 /**
- * Staff with tasks.update can move their tasks along; planners can move any. Finishing can carry
- * a note for the planners, and blocking a reason.
+ * Move work along. A team member on the task updates their own assignment (the task's status is
+ * rolled up from everyone's by the database); planners set the whole task. Finishing can carry a
+ * note for the planners; putting work on hold needs a reason.
  */
 export const setTaskStatus = adminAction(
   ["events.update", "tasks.update"],
-  z.object({ id: zs.uuid(), status: STATUS, note: zs.optional(2000), reason: zs.optional(500) }),
-  async ({ id, status, note, reason }, user) => {
+  z.object({ id: zs.uuid(), status: STATUS, note: zs.optional(2000), reason: zs.optional(500), asPlanner: z.boolean().default(false) }),
+  async ({ id, status, note, reason, asPlanner }, user) => {
+    if (status === "BLOCKED" && !reason) throw new UserError("Say why the work is on hold.", { reason: "Required." });
     const t = await ownTask(id, user);
-    if (t.status === status && !note && !reason) return;
-    const now = new Date();
-    await exec(
-      tasks()
-        .update(
-          vals(schema.eventTasks, {
+    const planner = user.permissions.has("events.update");
+
+    if (t.mine && !(planner && asPlanner)) {
+      if (t.mine.status === status && !note && !reason) return;
+      await exec(
+        db
+          .from(tbl(schema.eventTaskAssignees))
+          .update({
             status,
-            startedAt: status === "TODO" ? null : (t.startedAt ?? now),
-            completedAt: status === "COMPLETED" ? now : null,
-            completedBy: status === "COMPLETED" ? user.id : null,
-            blockedReason: status === "BLOCKED" ? reason : null,
-            ...(status === "COMPLETED" && note ? { completionNote: note } : {}),
-          }),
-        )
-        .eq("id", id),
-    );
-    await audit(user, "status", "task", id, `“${t.title}” → ${status.toLowerCase().replace("_", " ")}${reason ? ` (${reason})` : ""}`);
-    if (t.status !== status) {
-      const actor = { id: user.id, name: user.name, planner: user.permissions.has("events.update") };
-      afterCommit(() => onTaskProgress(id, status, actor));
+            hold_reason: status === "BLOCKED" ? reason : null,
+            ...(status === "COMPLETED" && note ? { completion_note: note } : {}),
+          })
+          .eq("id", t.mine.id),
+      );
+    } else {
+      if (t.status === status && !note && !reason) return;
+      const now = new Date();
+      await exec(
+        tasks()
+          .update(
+            vals(schema.eventTasks, {
+              status,
+              startedAt: status === "TODO" || status === "ACCEPTED" ? null : (t.startedAt ?? now),
+              completedAt: status === "COMPLETED" ? now : null,
+              completedBy: status === "COMPLETED" ? user.id : null,
+              blockedReason: status === "BLOCKED" ? reason : null,
+              ...(status === "COMPLETED" && note ? { completionNote: note } : {}),
+            }),
+          )
+          .eq("id", id),
+      );
     }
+    const after = await maybe<{ status: string }>(tasks().select("status").eq("id", id));
+    await audit(user, "status", "task", id, `“${t.title}” → ${(TASK_LABEL[status] ?? status).toLowerCase()}${t.mine && !asPlanner ? " (own part)" : ""}${reason ? ` (${reason})` : ""}`);
+    const actor = { id: user.id, name: user.name, planner };
+    // Planners hear at once when someone puts work on hold; the rest follows the task's rolled-up status
+    if (status === "BLOCKED") afterCommit(() => onTaskProgress(id, "BLOCKED", actor));
+    else if (after && after.status !== t.status) afterCommit(() => onTaskProgress(id, after.status, actor));
+    else if (status === "COMPLETED" && t.mine && !planner)
+      afterCommit(() =>
+        notify({
+          type: "task.progress",
+          title: `${user.name} finished their part of “${t.title}”`,
+          body: note ?? undefined,
+          href: `/admin/my-work/${id}`,
+          permission: "events.update",
+          entityType: "task",
+          entityId: id,
+        }),
+      );
   },
 );
+
+const TASK_LABEL: Record<string, string> = { TODO: "Assigned", ACCEPTED: "Accepted", IN_PROGRESS: "In progress", BLOCKED: "On hold", COMPLETED: "Completed" };
 
 export const deleteTask = adminAction("events.update", z.object({ id: zs.uuid() }), async ({ id }, user) => {
   const t = await one<{ title: string }>(tasks().delete().eq("id", id).select("title"));
