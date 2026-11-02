@@ -44,6 +44,8 @@ export const metadata: Metadata = { title: "Event" };
 
 const TABS = ["overview", "requirements", "services", "designs", "work-orders", "tasks", "team", "vendors", "inventory", "timeline", "documents", "finance"] as const;
 type Tab = (typeof TABS)[number];
+/** Vendors & Inventory are out of scope for now — hidden, not removed. Flip to bring them back. */
+const HIDDEN_TABS_ENABLED = false;
 
 export default async function EventPage({ params, searchParams }: PageProps<"/admin/events/[id]">) {
   const user = await requirePage("events.view");
@@ -59,7 +61,8 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
   if (!event) notFound();
   const can = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);
   const asked = str("tab") === "profit" ? "finance" : (str("tab") ?? "");
-  const tab: Tab = (TABS as readonly string[]).includes(asked) ? (asked as Tab) : "overview";
+  const shown = (t: string) => HIDDEN_TABS_ENABLED || (t !== "vendors" && t !== "inventory");
+  const tab: Tab = (TABS as readonly string[]).includes(asked) && shown(asked) ? (asked as Tab) : "overview";
   const closed = ["COMPLETED", "CANCELLED"].includes(event.status);
   const plan = can("events.update") && !closed;
   const base = `/admin/events/${id}`;
@@ -70,13 +73,12 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
       many<{ status: string }>(adminDb.from(tbl(schema.eventTasks)).select("status").eq("event_id", id)),
       many<{ status: string }>(adminDb.from(tbl(schema.workOrders)).select("status").eq("event_id", id)),
       many<{ id: string }>(adminDb.from(tbl(schema.staffAssignments)).select("id").eq("event_id", id)),
-      many<{ id: string }>(adminDb.from(tbl(schema.vendorAssignments)).select("id").eq("event_id", id).neq("status", "CANCELLED")),
     ]),
     bookingContext(event.bookingId),
     userOptions(),
     staffOptions(),
   ]);
-  const [allTasks, orderRows, teamRows, vendorRows] = counts;
+  const [allTasks, orderRows, teamRows] = counts;
   const taskRows = allTasks.filter((t) => t.status !== "CANCELLED");
   const openTasks = taskRows.filter((t) => !isClosedTask(t.status)).length;
   const liveOrders = orderRows.filter((o) => o.status !== "CANCELLED");
@@ -125,8 +127,7 @@ export default async function EventPage({ params, searchParams }: PageProps<"/ad
           { key: "work-orders", label: "Work orders", href: `${base}?tab=work-orders`, count: openOrders },
           { key: "tasks", label: "Tasks", href: `${base}?tab=tasks`, count: openTasks },
           { key: "team", label: "Team", href: `${base}?tab=team`, count: teamRows.length },
-          ...(can("vendors.view") ? [{ key: "vendors", label: "Vendors", href: `${base}?tab=vendors`, count: vendorRows.length }] : []),
-          ...(can("inventory.view") ? [{ key: "inventory", label: "Inventory", href: `${base}?tab=inventory` }] : []),
+          // Vendors & Inventory are hidden from the UI (Phase 3); their data and tabs below stay intact.
           { key: "timeline", label: "Timeline", href: `${base}?tab=timeline` },
           ...(can("documents.view") ? [{ key: "documents", label: "Documents", href: `${base}?tab=documents` }] : []),
           ...(can("payments.view") || can("expenses.view") ? [{ key: "finance", label: "Finance", href: `${base}?tab=finance` }] : []),

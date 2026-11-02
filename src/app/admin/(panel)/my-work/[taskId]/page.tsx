@@ -12,6 +12,7 @@ import { proofPhotos } from "@/server/work";
 import { PRIORITY, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Avatar, Card, DetailList, LinkButton, Notice, PageHeader } from "@/components/admin/ui";
 import { WorkTaskActions } from "../WorkClient";
+import { ReviewButtons } from "../../staff/StaffClient";
 import { TaskChecklist, TaskComments } from "../../events/WorkspaceClient";
 import { isClosedTask, isHeld, taskLabel } from "@/lib/task-status";
 
@@ -96,6 +97,8 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
 
   const status = mine?.status ?? task.status;
   const late = !isClosedTask(status) && task.dueAt && task.dueAt.getTime() < serverNow();
+  const canApprove = user.permissions.has("events.update");
+  const waiting = team.filter((a) => a.status === "REVIEW");
   const canAct = !!mine || task.assigneeUserId === user.id || user.permissions.has("events.update");
   const e = task.e;
   const place = e ? [e.venue, e.venueAddress].filter(Boolean).join(", ") : "";
@@ -126,6 +129,20 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
             {mine?.holdReason ?? task.blockedReason}
           </Notice>
         )}
+        {task.reviewRequired && canApprove && (task.status === "REVIEW" || waiting.length > 0) && (
+          <Notice tone="warning" title="Waiting for your review">
+            <span className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                {waiting.length ? `Submitted by ${waiting.map((a) => a.s.name).join(", ")}.` : "Submitted for review."} Check the photos and notes below, then approve it or ask for changes.
+              </span>
+              <ReviewButtons taskId={task.id} title={task.title} />
+            </span>
+          </Notice>
+        )}
+        {task.reviewRequired && !canApprove && status !== "COMPLETED" && status !== "CANCELLED" && status !== "REVIEW" && (
+          <Notice title="Needs a manager's approval">When you&apos;re finished, submit it for review with photos of the work — a manager approves it or asks for changes.</Notice>
+        )}
+        {task.reviewedAt && task.status === "COMPLETED" && <Notice tone="success" title="Approved">Approved by a manager on {fmtDateTime(task.reviewedAt)}.</Notice>}
         {mine === null && planner && !task.assigneeUserId && team.length > 0 && <Notice title="You're viewing as a planner">Status changes here apply to everyone on the task.</Notice>}
 
         {canAct && (
@@ -141,7 +158,7 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
                       ? "Waiting for a planner to review your work."
                       : "Update your progress as you go."}
             </p>
-            <WorkTaskActions id={task.id} title={task.title} status={status} large />
+            <WorkTaskActions id={task.id} title={task.title} status={status} large review={task.reviewRequired && !canApprove} />
           </div>
         )}
 

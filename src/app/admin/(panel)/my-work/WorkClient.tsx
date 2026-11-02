@@ -12,7 +12,8 @@ import { uploadTaskProof } from "../upload-actions";
  * The buttons on each piece of work: accept it, start it, put it on hold (with a reason), finish
  * it (note + photos) or reopen it. Big, thumb-friendly targets — the team uses this on site.
  */
-export function WorkTaskActions({ id, title, status, large }: { id: string; title: string; status: string; large?: boolean }) {
+/** `review`: the task needs a manager's approval, so "Done" submits it for review instead (Phase 3). */
+export function WorkTaskActions({ id, title, status, large, review = false }: { id: string; title: string; status: string; large?: boolean; review?: boolean }) {
   const { run, pending } = useRun();
   const [dialog, setDialog] = useState<"done" | "blocked" | "materials" | null>(null);
   const close = () => setDialog(null);
@@ -50,12 +51,12 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
           {["BLOCKED", "WAITING_MATERIALS", "REVIEW"].includes(status) ? "Resume" : "Start"}
         </Button>
       )}
-      {status !== "TODO" && (
-        <Button size={size} variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={CheckCircle2} className={wide} onClick={() => setDialog("done")}>
-          Done
+      {status !== "TODO" && !(review && status === "REVIEW") && (
+        <Button size={size} variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={review ? Eye : CheckCircle2} className={wide} onClick={() => setDialog("done")}>
+          {review ? "Submit for review" : "Done"}
         </Button>
       )}
-      {["IN_PROGRESS", "WAITING_MATERIALS"].includes(status) && (
+      {!review && ["IN_PROGRESS", "WAITING_MATERIALS"].includes(status) && (
         <Button size={size} variant="secondary" icon={Eye} pending={pending} onClick={() => run(() => setTaskStatus({ id, status: "REVIEW" }), { success: "Sent for review — a planner will check it" })}>
           Ready for review
         </Button>
@@ -73,8 +74,8 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
       <Dialog open={dialog === "materials"} onClose={close} title="Waiting for materials" description={title}>
         {dialog === "materials" && <MaterialsForm id={id} onDone={close} />}
       </Dialog>
-      <Dialog open={dialog === "done"} onClose={close} title="Mark as completed" description={title}>
-        {dialog === "done" && <DoneForm id={id} onDone={close} />}
+      <Dialog open={dialog === "done"} onClose={close} title={review ? "Submit for review" : "Mark as completed"} description={review ? `${title} — a manager approves it or asks for changes.` : title}>
+        {dialog === "done" && <DoneForm id={id} onDone={close} review={review} />}
       </Dialog>
       <Dialog open={dialog === "blocked"} onClose={close} title="Put on hold" description={title}>
         {dialog === "blocked" && <BlockedForm id={id} onDone={close} />}
@@ -83,7 +84,7 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
   );
 }
 
-function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
+function DoneForm({ id, onDone, review }: { id: string; onDone: () => void; review: boolean }) {
   const [pending, start] = useTransition();
   const [count, setCount] = useState(0);
   const toast = useToast();
@@ -104,9 +105,9 @@ function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
           const up = await uploadTaskProof(form);
           if (!up.ok) return toast("error", up.error);
         }
-        const r = await setTaskStatus({ id, status: "COMPLETED", note });
+        const r = await setTaskStatus({ id, status: review ? "REVIEW" : "COMPLETED", note });
         if (!r.ok) return toast("error", r.error);
-        toast("success", "Done — nice work!");
+        toast("success", review ? "Sent for review — a manager will check it" : "Done — nice work!");
         onDone();
         router.refresh();
       } catch {
@@ -133,8 +134,8 @@ function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
       </label>
       <div className="flex justify-end gap-2">
         <Button onClick={onDone}>Cancel</Button>
-        <Button type="submit" variant="primary" icon={CheckCircle2} pending={pending}>
-          Mark done
+        <Button type="submit" variant="primary" icon={review ? Eye : CheckCircle2} pending={pending}>
+          {review ? "Submit for review" : "Mark done"}
         </Button>
       </div>
     </form>

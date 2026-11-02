@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AlertTriangle, Copy, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
-import { ActionForm, Button, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
+import { ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
 import UploadButton from "@/components/admin/Upload";
 import { Avatar } from "@/components/admin/ui";
 import { cn } from "@/lib/utils";
@@ -75,11 +75,11 @@ export function StaffPicker({ staff, selected = [] }: { staff: PickerStaff[]; se
                     {[s.role, s.phone].filter(Boolean).join(" · ") || "Team"}
                     {!s.hasLogin && " · no login (won't see it)"}
                   </span>
-                  {s.away && (
-                    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-a-warning">
-                      <AlertTriangle className="size-3" aria-hidden /> {s.away}
+                  {[...(s.away ? [s.away] : []), ...s.conflicts].map((c) => (
+                    <span key={c} className="mt-0.5 flex items-center gap-1 text-xs font-medium text-a-warning">
+                      <AlertTriangle className="size-3 shrink-0" aria-hidden /> {c}
                     </span>
-                  )}
+                  ))}
                 </span>
                 <span className="shrink-0 text-right text-xs tabular-nums">
                   <span className="block font-medium">{s.open} open</span>
@@ -105,6 +105,7 @@ export type TaskValues = {
   startDate: string | null;
   dueAt: Date | string | null;
   priority: string;
+  reviewRequired?: boolean;
   staffIds: string[];
 };
 
@@ -130,6 +131,12 @@ export function TaskFormButton({ bookingId, staff, values, eventDate, label, var
           </div>
           <TextArea label="Instructions for the team" name="staffInstructions" rows={3} maxLength={2000} defaultValue={values?.staffInstructions ?? ""} hint="Shown to the people assigned." placeholder="Venue access from 6 am, handle the chandelier with care…" />
           <TextArea label="Internal notes" name="internalNotes" rows={2} maxLength={2000} defaultValue={values?.internalNotes ?? ""} hint="Planners only — never shown to the team." />
+          <CheckboxField
+            name="reviewRequired"
+            label="Needs a manager's approval"
+            defaultChecked={values?.reviewRequired ?? false}
+            hint="The team submits it for review with their photos instead of marking it done; a planner approves it or asks for changes."
+          />
           <StaffPicker staff={staff} selected={values?.staffIds} />
         </ActionForm>
       )}

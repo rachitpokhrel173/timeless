@@ -111,7 +111,8 @@ export const setTaskStatus = adminAction(
           .update({
             status,
             hold_reason: isHeld(status) ? reason || null : null,
-            ...(status === "COMPLETED" && note ? { completion_note: note } : {}),
+            // A part submitted for review keeps its note too (Phase 3 manager review)
+            ...((status === "COMPLETED" || status === "REVIEW") && note ? { completion_note: note } : {}),
           })
           .eq("id", t.mine.id),
       );
@@ -127,7 +128,7 @@ export const setTaskStatus = adminAction(
               completedAt: status === "COMPLETED" ? now : null,
               completedBy: status === "COMPLETED" ? user.id : null,
               blockedReason: isHeld(status) ? reason || null : null,
-              ...(status === "COMPLETED" && note ? { completionNote: note } : {}),
+              ...((status === "COMPLETED" || status === "REVIEW") && note ? { completionNote: note } : {}),
             }),
           )
           .eq("id", id),

@@ -35,7 +35,6 @@ const ACTIONS: (Omit<Entry, "group" | "key"> & { perm: string })[] = [
   { label: "Create booking", href: "/admin/bookings/new", icon: CalendarCheck, perm: "bookings.create" },
   { label: "Create customer", href: "/admin/customers/new", icon: UserPlus, perm: "customers.create" },
   { label: "Open calendar", href: "/admin/calendar", icon: CalendarDays, perm: "events.view" },
-  { label: "Open inventory", href: "/admin/inventory", icon: Boxes, perm: "inventory.view" },
   { label: "Open settings", href: "/admin/settings", icon: Settings, perm: "settings.manage" },
 ];
 

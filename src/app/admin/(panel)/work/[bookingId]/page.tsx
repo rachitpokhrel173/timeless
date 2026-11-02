@@ -397,6 +397,7 @@ function TaskCard({
               startDate: t.startDate,
               dueAt: t.dueAt,
               priority: t.priority,
+              reviewRequired: t.reviewRequired,
               staffIds: people.map((p) => p.staffId),
             }}
           />

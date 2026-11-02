@@ -78,6 +78,9 @@ export async function workloads() {
   return out;
 }
 
+/** Open tasks at which a person counts as heavily loaded. */
+export const HEAVY_LOAD = 8;
+
 /** Team members to choose from when assigning, with their load and availability on a day. */
 export async function staffPicker(day?: string | null, eventId?: string | null) {
   const [people, load, away, team, logins] = await Promise.all([
@@ -91,6 +94,12 @@ export async function staffPicker(day?: string | null, eventId?: string | null) 
     eventId ? many<{ staffId: string; role: string | null }>(adminDb.from(tbl(schema.staffAssignments)).select("staffId:staff_id,role").eq("event_id", eventId)) : [],
     many<{ staffId: string }>(adminDb.from(tbl(schema.profiles)).select("staffId:staff_id").not("staff_id", "is", null).eq("active", true)),
   ]);
+  // Phase 3: other events the same day (overlaps) — shown as a warning, never a block
+  const sameDay = day
+    ? await many<{ staffId: string; e: { id: string; title: string } }>(
+        adminDb.from(tbl(schema.staffAssignments)).select("staffId:staff_id,e:events!inner(id,title)").eq("e.event_date", day).neq("e.status", "CANCELLED"),
+      )
+    : [];
   const withLogin = new Set(logins.map((l) => l.staffId));
   return people.map((p) => {
     const off = away.find((a) => a.staffId === p.id);
@@ -105,6 +114,11 @@ export async function staffPicker(day?: string | null, eventId?: string | null) 
       away: off ? `${off.status === "LEAVE" ? "On leave" : "Unavailable"}${off.note ? ` — ${off.note}` : ""}` : null,
       onEvent: team.some((t) => t.staffId === p.id),
       hasLogin: withLogin.has(p.id),
+      /** Reasons to think twice before assigning, besides `away` and `overdue` (planner decides; nothing is blocked). */
+      conflicts: [
+        ...sameDay.filter((x) => x.staffId === p.id && x.e.id !== eventId).map((x) => `Also on “${x.e.title}” that day`),
+        ...((load.get(p.id)?.open ?? 0) >= HEAVY_LOAD ? [`Heavy workload: ${load.get(p.id)!.open} open tasks`] : []),
+      ],
     };
   });
 }

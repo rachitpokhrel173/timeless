@@ -1,12 +1,14 @@
 "use server";
 
 import { z } from "zod";
-import { adminDb, db, exec, likeEscape, many, maybe, one, schema, tbl } from "@/db";
+import { adminDb, db, DbError, exec, likeEscape, many, maybe, one, rpc, schema, tbl } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/auth/permissions";
 import { invitationRedirectUrl } from "@/lib/auth/redirects";
 import { serviceRoleConfigured, supabaseAdmin } from "@/lib/supabase/admin";
+import { notify } from "@/server/notifications";
+import { resendInvitation } from "@/server/staff-accounts";
 
 const roleById = (id: string) => maybe<{ id: string; key: string; name: string; isSystem: boolean }>(db.from(tbl(schema.roles)).select("id,key,name,isSystem:is_system").eq("id", id));
 
@@ -33,8 +35,10 @@ export const inviteUser = adminAction(
     }
     const isCustomer = await maybe(adminDb.from(tbl(schema.customers)).select("id").eq("auth_user_id", profile.id).limit(1));
     if (isCustomer) throw new UserError("That email is a client-portal login. Use a different email for staff.");
-    await exec(adminDb.from(tbl(schema.profiles)).update({ full_name: fullName, active: true, ...(staffId ? { staff_id: staffId } : {}) }).eq("id", profile.id));
+    await exec(adminDb.from(tbl(schema.profiles)).update({ full_name: fullName, active: true }).eq("id", profile.id));
     await exec(db.from(tbl(schema.userRoles)).upsert({ user_id: profile.id, role_id: roleId }, { onConflict: "user_id,role_id", ignoreDuplicates: true }));
+    // One login per team member, never a client login, never an archived record (checked by the database)
+    if (staffId) await checked(() => rpc(db, "link_staff_login", { p_staff: staffId, p_user: profile.id, p_role: null }));
     await audit(user, "role_grant", "user", profile.id, `Invited ${email} as ${role.name}`);
   },
 );
@@ -54,6 +58,7 @@ export const setUserRoles = adminAction("users.manage", z.object({ userId: zs.uu
   }
   if (remove.length) await exec(db.from(tbl(schema.userRoles)).delete().eq("user_id", userId).in("role_id", remove.map((c) => c.roleId)));
   if (add.length) await exec(db.from(tbl(schema.userRoles)).insert(add.map((roleId) => ({ user_id: userId, role_id: roleId }))));
+  if (add.length || remove.length) await notify({ type: "account.role", title: "Your access has changed", body: `Roles now: ${roleIds.map((id) => roles.find((r) => r.id === id)?.name).filter(Boolean).join(", ") || "none"}`, userId, href: "/admin" });
   await audit(user, "role_change", "user", userId, `Roles changed: +${add.map((id) => roles.find((r) => r.id === id)?.name).join(", ") || "none"} / −${remove.map((c) => c.r.name).join(", ") || "none"}`);
 });
 
@@ -66,9 +71,25 @@ export const setUserActive = adminAction("users.manage", z.object({ userId: zs.u
   await audit(user, active ? "activate" : "deactivate", "user", userId, `${active ? "Reactivated" : "Deactivated"} ${p.email}`);
 });
 
+/** Readable messages from the account functions (00021); everything else stays masked. */
+async function checked<T>(fn: () => Promise<T>) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof DbError && (error.code === "P0001" || error.code === "42501")) throw new UserError(error.message);
+    throw error;
+  }
+}
+
 export const linkStaff = adminAction("users.manage", z.object({ userId: zs.uuid(), staffId: zs.optUuid() }), async ({ userId, staffId }, user) => {
-  await exec(db.from(tbl(schema.profiles)).update({ staff_id: staffId }).eq("id", userId));
+  if (staffId) await checked(() => rpc(db, "link_staff_login", { p_staff: staffId, p_user: userId, p_role: null }));
+  else await exec(db.from(tbl(schema.profiles)).update({ staff_id: null }).eq("id", userId));
   await audit(user, "update", "user", userId, staffId ? "Linked the login to a team member" : "Unlinked the team member");
+});
+
+export const resendUserInvitation = adminAction("users.manage", z.object({ userId: zs.uuid() }), async ({ userId }, user) => {
+  const staff = await maybe<{ staffId: string | null }>(adminDb.from(tbl(schema.profiles)).select("staffId:staff_id").eq("id", userId));
+  return resendInvitation(userId, staff?.staffId ?? null, user);
 });
 
 /* ───────── Roles ───────── */

@@ -531,6 +531,16 @@ export const staff = pgTable("staff", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   archivedAt: ts("archived_at"),
+  /* Phase 3 (00021): `role` is the job title, `photoId` the profile photo, active/archivedAt the employment status. */
+  employeeCode: text("employee_code"),
+  department: text("department"),
+  employmentType: text("employment_type", { enum: ["FULL_TIME", "PART_TIME", "CONTRACT", "FREELANCE", "INTERN"] }),
+  joinedOn: date("joined_on"),
+  /** Last invitation sent to their email (the login itself is profiles.staffId → this row). */
+  invitedAt: ts("invited_at"),
+  invitedBy: uuid("invited_by").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
+  /** Why the last invitation failed, when it did (cleared on success). */
+  inviteError: text("invite_error"),
 });
 
 export const staffAvailability = pgTable(
@@ -910,6 +920,10 @@ export const eventTasks = pgTable(
     createdBy: uuid("created_by").references(() => profiles.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /* Phase 3 (00021): finishing needs a planner's approval — the team submits it for review (REVIEW). */
+    reviewRequired: boolean("review_required").notNull().default(false),
+    reviewedAt: ts("reviewed_at"),
+    reviewedBy: uuid("reviewed_by").references((): AnyPgColumn => profiles.id, { onDelete: "set null" }),
   },
   (t) => [
     index("tasks_event_idx").on(t.eventId),

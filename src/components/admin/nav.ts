@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Bell,
-  Boxes,
   CalendarCheck,
   CalendarDays,
   ClipboardCheck,
@@ -21,7 +20,6 @@ import {
   ScrollText,
   Settings,
   Sparkles,
-  Store,
   TrendingDown,
   UserPlus,
   UsersRound,
@@ -73,8 +71,6 @@ export const NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/admin/inventory", label: "Inventory", icon: Boxes, permission: "inventory.view" },
-      { href: "/admin/vendors", label: "Vendors", icon: Store, permission: "vendors.view" },
       { href: "/admin/staff", label: "Staff", icon: UsersRound, permission: "staff.view" },
     ],
   },

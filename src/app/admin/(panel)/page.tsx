@@ -7,7 +7,6 @@ import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
 import { isFieldOnly, requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
 import { maybeRunSweep } from "@/server/automation";
-import { inventoryWithStock } from "@/server/inventory";
 import { dashboardKpis, monthlyRevenue, outstandingTotal, pipelineSnapshot, resolveRange, salesFunnel } from "@/server/metrics";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import { BarList, ColumnChart, Funnel } from "@/components/admin/charts";
@@ -38,7 +37,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   after(() => maybeRunSweep().catch((e) => console.error("[automations]", e)));
 
   const today = todayISO();
-  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, lowStock, payments, outstanding, activity, types] = await Promise.all([
+  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, , payments, outstanding, activity, types] = await Promise.all([
     on("kpis") ? dashboardKpis(range) : null,
     on("revenue") ? monthlyRevenue(12) : null,
     on("conversion") ? salesFunnel(range) : null,
@@ -68,7 +67,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
     on("inquiries")
       ? many<Row<typeof schema.inquiries>>(adminDb.from(tbl(schema.inquiries)).select(cols(schema.inquiries)).eq("spam", false).is("archived_at", null).order("created_at", { ascending: false }).limit(6))
       : null,
-    (on("inventory") || on("kpis")) && has("inventory.view") ? inventoryWithStock().then((items) => items.filter((i) => i.low)) : null,
+    // Phase 3: Inventory is hidden from the interface (its data and pages are kept)
+    null,
     on("payments")
       ? many<Row<typeof schema.payments> & { c: { name: string } }>(
           adminDb
@@ -143,7 +143,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
             {has("payments.view") && <Kpi label="Revenue" value={nprCompact(kpis.revenueRange)} change={pctChange(kpis.revenueRange, kpis.revenuePrev)} hint={`${nprCompact(kpis.monthRevenue)} this month`} icon={TrendingUp} href="/admin/payments" />}
             {has("payments.view") && <Kpi label="Outstanding payments" value={nprCompact(kpis.outstanding.amount)} hint={`${kpis.outstanding.bookings} booking${kpis.outstanding.bookings === 1 ? "" : "s"}`} icon={AlertTriangle} href="/admin/invoices?status=open" />}
             {has("quotations.view") && <Kpi label="Pending quotations" value={kpis.pendingQuotes.c} hint={`${nprCompact(kpis.pendingQuotes.v)} awaiting reply`} icon={FileText} href="/admin/quotations?status=open" />}
-            {has("inventory.view") && <Kpi label="Low stock items" value={lowStock?.length ?? 0} hint="Below their threshold" icon={Boxes} href="/admin/inventory?stock=low" />}
           </section>
         )}
 
@@ -263,32 +262,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
                     ) : null,
                   )}
                 </div>
-              )}
-            </Card>
-          )}
-
-          {on("inventory") && lowStock && (
-            <Card title="Inventory alerts" actions={<LinkButton href="/admin/inventory?stock=low" size="sm" variant="ghost">All</LinkButton>} order={pos("inventory")}>
-              {lowStock.length === 0 ? (
-                <EmptyState compact icon={Boxes} title="Stock levels look healthy" />
-              ) : (
-                <ul className="divide-y divide-a-border">
-                  {lowStock.slice(0, 6).map((i) => (
-                    <li key={i.id}>
-                      <Link href={`/admin/inventory/${i.id}`} className="flex items-center justify-between gap-3 py-2 text-[13px] hover:bg-a-subtle/50">
-                        <span className="min-w-0 truncate font-medium">{i.name}</span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs text-a-muted tabular-nums">
-                            {i.available} / {i.lowStockThreshold}
-                          </span>
-                          <Badge tone="warning" icon={AlertTriangle}>
-                            Low stock
-                          </Badge>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
               )}
             </Card>
           )}

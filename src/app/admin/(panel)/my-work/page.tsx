@@ -412,7 +412,7 @@ function TaskList({ tasks, photos, showDate }: { tasks: TaskRow[]; photos: Map<s
                   ))}
                 </div>
               )}
-              <WorkTaskActions id={t.id} title={t.title} status={status} />
+              <WorkTaskActions id={t.id} title={t.title} status={status} review={t.reviewRequired} />
             </div>
           </article>
         );
