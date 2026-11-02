@@ -77,7 +77,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
       />
 
       <div className="mb-5 rounded-xl border border-a-border bg-a-surface p-4">
-        <p className="mb-2 text-xs font-semibold tracking-wide text-a-muted uppercase">Pipeline stage</p>
+        <p className="mb-2 text-xs font-semibold tracking-wide text-a-muted uppercase">Stage</p>
         <StageControl id={lead.id} stage={lead.stage} stages={stages} disabled={!can("leads.update")} />
         {lead.stage === "LOST" && lead.lostReason && <p className="mt-2 text-[13px] text-a-muted">Lost because: {lead.lostReason}</p>}
       </div>

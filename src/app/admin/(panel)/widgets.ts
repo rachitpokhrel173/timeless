@@ -4,7 +4,7 @@ export const WIDGETS = [
   { key: "kpis", label: "Key figures" },
   { key: "revenue", label: "Revenue chart", permission: "payments.view" },
   { key: "conversion", label: "Lead conversion", permission: "leads.view" },
-  { key: "pipeline", label: "Sales pipeline", permission: "leads.view" },
+  { key: "pipeline", label: "Leads by stage", permission: "leads.view" },
   { key: "upcoming", label: "Upcoming events", permission: "events.view" },
   { key: "inquiries", label: "Recent inquiries", permission: "leads.view" },
   { key: "followups", label: "Pending follow-ups", permission: "leads.view" },

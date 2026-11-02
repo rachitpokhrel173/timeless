@@ -166,7 +166,7 @@ async function Overview({
         </div>
         {totalTasks > 0 && <ProgressBar value={totalTasks - openTasks} max={totalTasks} label="Tasks complete" tone="success" />}
         <Card title="Requirements">{event.requirements ? <p className="whitespace-pre-line">{event.requirements}</p> : <p className="text-[13px] text-a-muted">No requirements recorded.</p>}</Card>
-        <Card title="Event notes" description="Shared notes appear in the client portal; internal ones never do.">
+        <Card title="Event notes" description="Private team notes about this event.">
           {canEdit && (
             <div className="mb-4">
               <EventNoteForm eventId={event.id} />
@@ -560,7 +560,7 @@ async function DocumentsTab({ eventId, customerId, manage }: { eventId: string; 
   return (
     <Card
       title="Documents"
-      description="Private files — opened with short-lived links. Shared documents appear in the client portal."
+      description="Private files — opened with short-lived links."
       bodyClassName="p-0"
       actions={
         manage && (
@@ -572,9 +572,6 @@ async function DocumentsTab({ eventId, customerId, manage }: { eventId: string; 
               <option value="RECEIPT">Receipt</option>
               <option value="OTHER">Other</option>
             </select>
-            <label className="flex h-8 items-center gap-1.5 text-[13px]">
-              <input type="checkbox" name="shared" className="size-4 accent-[var(--a-accent)]" /> Share with client
-            </label>
           </UploadButton>
         )
       }

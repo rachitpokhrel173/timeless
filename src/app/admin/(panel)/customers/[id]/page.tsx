@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Archive, ArchiveRestore, FilePlus2, FileText, KeyRound, Trash2, X } from "lucide-react";
+import { Archive, ArchiveRestore, FilePlus2, FileText, Trash2, X } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr } from "@/lib/format";
@@ -15,7 +15,7 @@ import FollowUps from "@/components/admin/FollowUps";
 import { ActionButton, ConfirmButton } from "@/components/admin/interactive";
 import { ArchivedBadge, BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, LEAD_STAGE, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, Kpi, LinkButton, PageHeader, Table, Td, Th } from "@/components/admin/ui";
-import { deleteContact, deleteCustomer, inviteToPortal, revokePortal, setCustomerArchived } from "../actions";
+import { deleteContact, deleteCustomer, setCustomerArchived } from "../actions";
 import { ContactButton, EditCustomerButton } from "../CustomerForm";
 import RequestedServices from "../RequestedServices";
 import ReferenceImages from "../../quotations/ReferenceImages";
@@ -101,7 +101,6 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
           <span className="flex flex-wrap items-center gap-3">
             {customer.name}
             {active.length > 1 && <Badge tone="gold">Returning</Badge>}
-            {customer.authUserId && <Badge tone="info">Portal access</Badge>}
             {customer.archivedAt && <ArchivedBadge />}
           </span>
         }
@@ -343,19 +342,8 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
             </Card>
           )}
 
-          {can("customers.update") && (
-            <Card title="Client portal" description="Customers see their quotations, bookings, invoices, schedule, shared documents and designs — nothing else.">
-              {customer.authUserId ? (
-                <ConfirmButton action={revokePortal.bind(null, { id: customer.id })} title="Remove portal access?" confirmLabel="Remove access" success="Portal access removed" icon={<X />}>
-                  Remove portal access
-                </ConfirmButton>
-              ) : (
-                <ActionButton action={inviteToPortal.bind(null, { id: customer.id })} success="Invitation sent" icon={<KeyRound />} disabled={!customer.email}>
-                  {customer.email ? "Invite to client portal" : "Add an email to invite"}
-                </ActionButton>
-              )}
-            </Card>
-          )}
+          {/* Client portal is hidden for Phase 1. The invite/revoke actions (customers/actions.ts),
+              the /client routes and existing portal logins are kept intact for a later phase. */}
 
           {(can("customers.update") || can("customers.delete")) && (
             <Card title="Manage">

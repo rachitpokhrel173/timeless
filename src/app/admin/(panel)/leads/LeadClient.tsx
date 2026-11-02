@@ -27,7 +27,7 @@ export function StageControl({ id, stage, stages, disabled }: { id: string; stag
     run(() => moveLeadAction({ id, stage: s as Stage, beforeId: null, lostReason }), { success: "Stage updated", onSuccess: () => setLostOpen(false) });
   return (
     <>
-      <ol className="flex flex-wrap gap-1" aria-label="Pipeline stage">
+      <ol className="flex flex-wrap gap-1" aria-label="Lead stage">
         {stages.map((s, i) => {
           const done = stage !== "LOST" && i < current && s.value !== "LOST";
           const active = s.value === stage;

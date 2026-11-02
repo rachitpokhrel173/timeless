@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CheckCircle2, ClipboardList, PackageCheck, Pencil, Plus, Send, Trash2, Undo2, UserPlus } from "lucide-react";
 import { TEAM_ROLES } from "@/lib/defaults";
-import { ActionButton, ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, useToast, type Option } from "@/components/admin/interactive";
+import { ActionButton, ActionForm, Button, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, useToast, type Option } from "@/components/admin/interactive";
 import { deleteDocument } from "../upload-actions";
 import { addChecklist, addWorkPlan, deleteTask, saveTask, setTaskStatus } from "../tasks/actions";
 import {
@@ -451,7 +451,6 @@ export function EventNoteForm({ eventId }: { eventId: string }) {
   return (
     <ActionForm action={addEventNote} extra={{ eventId }} submitLabel="Add note" success="Note added" resetOnSuccess>
       <TextArea label="Note" name="body" rows={2} required />
-      <CheckboxField name="visibility" label="Share with the client" hint="Shared notes appear in the client portal." value="CLIENT" />
     </ActionForm>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Archive, Kanban, Plus, UserPlus } from "lucide-react";
+import { Archive, Plus, UserPlus } from "lucide-react";
 import { adminDb, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate } from "@/lib/format";
@@ -51,7 +51,7 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
         { label: "Mark qualified", action: bulkLeadStage.bind(null, "QUALIFIED"), success: "Leads updated" },
         { label: "Mark lost", action: bulkLeadStage.bind(null, "LOST"), confirm: "Mark the selected leads as lost?", success: "Leads updated" },
         { label: "Assign to me", action: bulkAssignLeads.bind(null, user.id), success: "Leads assigned" },
-        { label: "Archive", icon: <Archive />, action: bulkArchiveLeads, confirm: "Archived leads leave the pipeline but keep their history. Archive the selected leads?", success: "Leads archived" },
+        { label: "Archive", icon: <Archive />, action: bulkArchiveLeads, confirm: "Archived leads leave the active list but keep their history. Archive the selected leads?", success: "Leads archived" },
       ]
     : [];
   const sortLink = (key: keyof typeof SORTS, label: string) => (
@@ -67,9 +67,6 @@ export default async function LeadsPage({ searchParams }: PageProps<"/admin/lead
         description="Everyone who has shown interest — from first contact to confirmed booking."
         actions={
           <>
-            <LinkButton href="/admin/pipeline" icon={Kanban}>
-              Pipeline board
-            </LinkButton>
             <ExportLink entity="leads" />
             {user.permissions.has("leads.create") && <ImportButton entity="leads" />}
             {user.permissions.has("leads.create") && (

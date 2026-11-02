@@ -11,7 +11,6 @@ import {
   Globe,
   Images,
   Inbox,
-  Kanban,
   KeyRound,
   LayoutDashboard,
   ListTodo,
@@ -56,7 +55,6 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/admin/leads", label: "Leads", icon: UserPlus, permission: "leads.view", match: ["/admin/follow-ups"] },
       { href: "/admin/inquiries", label: "Inquiries", icon: Inbox, permission: "leads.view", badge: "inquiries" },
-      { href: "/admin/pipeline", label: "Pipeline", icon: Kanban, permission: "leads.view" },
       { href: "/admin/customers", label: "Customers", icon: Contact, permission: "customers.view" },
       { href: "/admin/quotations", label: "Quotations", icon: FileText, permission: "quotations.view" },
       { href: "/admin/bookings", label: "Bookings", icon: CalendarCheck, permission: "bookings.view" },

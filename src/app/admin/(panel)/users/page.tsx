@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { adminDb, all, cols, many, schema, tbl, type Row } from "@/db";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePage } from "@/lib/auth/session";
@@ -107,7 +106,7 @@ async function Users({
         </tbody>
       </Table>
       <p className="px-4 py-3 text-xs text-a-muted">
-        Client-portal logins are managed from each <Link href="/admin/customers" className="underline">customer</Link>. Passwords are never stored here — Supabase Auth handles sign-in and resets.
+        Passwords are never stored here — Supabase Auth handles sign-in and resets.
       </p>
     </Card>
   );

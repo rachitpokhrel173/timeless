@@ -232,7 +232,7 @@ async function Lists() {
           ))}
         </ul>
       </Card>
-      <Card title="Pipeline stages" description="Names shown on the sales pipeline." bodyClassName="p-0">
+      <Card title="Lead stages" description="The stages a lead moves through, shown on each lead." bodyClassName="p-0">
         <ul className="divide-y divide-a-border">
           {stages.map((s) => (
             <li key={s.key} className="flex items-center justify-between gap-2 px-4 py-2 text-[13px]">

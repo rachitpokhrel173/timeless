@@ -161,8 +161,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
           )}
 
           {pipeline && (
-            <Card title="Sales pipeline" description="Open leads by stage, right now" actions={<LinkButton href="/admin/pipeline" size="sm" variant="ghost">Board</LinkButton>} order={pos("pipeline")}>
-              <BarList items={pipeline.map((s) => ({ label: s.name, value: s.leads }))} format="leads" ariaLabel="Leads per pipeline stage" max={8} empty="No leads yet." />
+            <Card title="Leads by stage" description="Open leads by stage, right now" actions={<LinkButton href="/admin/leads" size="sm" variant="ghost">Leads</LinkButton>} order={pos("pipeline")}>
+              <BarList items={pipeline.map((s) => ({ label: s.name, value: s.leads }))} format="leads" ariaLabel="Leads per stage" max={8} empty="No leads yet." />
             </Card>
           )}
 

@@ -98,7 +98,6 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
             allLabel="Everyone"
             options={[
               { value: "returning", label: "Returning customers" },
-              { value: "portal", label: "With portal access" },
             ]}
           />
         </Toolbar>
@@ -114,7 +113,6 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
                 </Link>
                 <div className="mt-0.5 flex flex-wrap gap-1">
                   {bookings > 1 && <Badge tone="gold">Returning</Badge>}
-                  {r.authUserId && <Badge tone="info">Portal</Badge>}
                   {r.tags
                     .slice(0, 2)
                     .map((t) => (
