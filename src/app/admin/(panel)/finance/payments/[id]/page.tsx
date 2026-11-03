@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { notFound } from "next/navigation";
 import { Printer } from "lucide-react";
 import { adminDb, many, maybe, schema, tbl } from "@/db";

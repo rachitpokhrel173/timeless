@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, ExternalLink, LoaderCircle, MapPin, UserRound } from "lucide-react";
 import { calendarEvents, type CalendarEvent } from "@/app/admin/(panel)/calendar-actions";

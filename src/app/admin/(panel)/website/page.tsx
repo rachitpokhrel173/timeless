@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { Eye, ExternalLink, Images, MessageSquareQuote, Package, Sparkles } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";

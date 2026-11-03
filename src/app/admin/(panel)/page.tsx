@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { AlertTriangle, Boxes, CalendarCheck, CalendarDays, FileText, Inbox, TrendingUp, UserPlus, Wallet } from "lucide-react";

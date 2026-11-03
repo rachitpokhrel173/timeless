@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, ClipboardList, Clock, Hourglass, ListChecks, MapPin, Phone, Printer, UsersRound } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage, type SessionUser } from "@/lib/auth/session";

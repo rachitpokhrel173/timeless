@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { BellRing, FileText, Receipt, Wallet } from "lucide-react";
 import { adminDb, all, cols, many, paged, pgrstValue, schema, tbl, type Row } from "@/db";
 import { ALLOCATION_STATE, BOOKING_PAY_STATUS, METHOD_LABEL, methodLabel, PAYMENT_STATE, PAYMENT_TYPE_LABEL } from "@/lib/finance";

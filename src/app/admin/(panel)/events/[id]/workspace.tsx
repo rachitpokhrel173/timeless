@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { CheckCircle2, ClipboardList, FileText, Receipt } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { fmtDate, fmtDateTime, npr, num } from "@/lib/format";

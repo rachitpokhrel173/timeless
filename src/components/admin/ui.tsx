@@ -3,7 +3,7 @@
  * ./interactive.tsx. Everything uses the semantic admin tokens (bg-a-*, text-a-*), so light and
  * dark themes come for free.
  */
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import type { ComponentProps, ReactNode } from "react";
 import {
   AlertTriangle,

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { notFound } from "next/navigation";
 import { CalendarDays, ClipboardList, Clock, FileText, History, MapPin, PartyPopper, Users } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";

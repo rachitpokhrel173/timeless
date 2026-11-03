@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { adminDb, all, cols, many, schema, tbl, type Row } from "@/db";
 import { PERMISSIONS, type Permission } from "@/lib/auth/permissions";
 import { requirePage } from "@/lib/auth/session";

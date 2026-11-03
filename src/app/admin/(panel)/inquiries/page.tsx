@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { Archive, Ban, Inbox, MailOpen, Monitor, Plus, Smartphone, Tablet } from "lucide-react";
 import { adminDb, cols, paged, pgrstValue, schema, tbl, total as countRows, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";

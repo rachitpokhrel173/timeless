@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { redirect } from "next/navigation";
 import { ListTodo } from "lucide-react";
 import { adminDb, all, cols, many, paged, schema, tbl, type Row } from "@/db";

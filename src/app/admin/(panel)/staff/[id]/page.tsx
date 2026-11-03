@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/admin/Link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Hourglass, ShieldCheck } from "lucide-react";
 import { adminDb, cols, many, schema, tbl, type Row } from "@/db";
