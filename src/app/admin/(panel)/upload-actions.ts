@@ -142,6 +142,34 @@ export async function uploadMedia(form: FormData) {
   });
 }
 
+/**
+ * Swap the picture behind a media library image. The id stays the same, so every page, album,
+ * service and draft that uses it shows the new picture; the old file is removed afterwards.
+ */
+export async function replaceMediaFile(form: FormData) {
+  return upload("cms.manage", form, async (files, user) => {
+    const id = uuid(form.get("mediaId"));
+    if (!id || files.length !== 1) throw new UserError("Choose one image to replace it with.");
+    const current = await maybe<{ bucket: string; path: string; filename: string; folder: string }>(
+      db.from(tbl(schema.media)).select("bucket,path,filename,folder").eq("id", id).in("bucket", ["public-media", "static"]).is("deleted_at", null),
+    );
+    if (!current) throw new UserError("Only website images can be replaced.");
+    const p = await processUpload(files[0]!, { imagesOnly: true });
+    const stored = await putFile("public-media", makePath(current.folder.toLowerCase(), p.filename), p.body, p.mime);
+    await exec(
+      db
+        .from(tbl(schema.media))
+        .update({ bucket: "public-media", path: stored.path, url: stored.url, filename: p.filename, mime: p.mime, size: p.body.length, width: p.width, height: p.height, updated_at: new Date().toISOString() })
+        .eq("id", id),
+    );
+    // Files shipped with the site ("static") stay in /public; only stored uploads are removed
+    await deleteStoredFile(current.bucket, current.path).catch((e) => console.error("[media replace] old file not removed", e));
+    await audit(user, "update", "media", id, `Replaced image ${current.filename} with ${p.filename}`, { previous: `${current.bucket}/${current.path}` });
+    refreshSite();
+    return { id };
+  });
+}
+
 const QUOTE_IMAGE_LIMIT = 12;
 const CUSTOMER_IMAGE_LIMIT = 30;
 const QUOTE_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];

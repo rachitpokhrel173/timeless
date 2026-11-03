@@ -5,15 +5,16 @@ import ContentEditor from "@/components/admin/ContentEditor";
 import MediaPicker, { type MediaOption } from "@/components/admin/MediaPicker";
 import { ActionButton, ActionForm, CheckboxField, ConfirmButton, DialogButton, SelectField, TextArea, TextField } from "@/components/admin/interactive";
 import { deleteSocialLink, moveSection, saveContentSetting, saveHomeSection, savePageSeo, saveSeoGlobal, saveSocialLink, setSectionStatus } from "./actions";
+import { DRAFT_SAVED } from "./SiteForms";
 
 type Json = Parameters<typeof ContentEditor>[0]["initial"];
 
 export function SectionEditor({ sectionKey, initial, media }: { sectionKey: string; initial: Json; media: MediaOption[] }) {
-  return <ContentEditor initial={initial} media={media} onSave={(content) => saveHomeSection({ key: sectionKey, content })} saveLabel="Save section" />;
+  return <ContentEditor initial={initial} media={media} onSave={(content) => saveHomeSection({ key: sectionKey, content })} saveLabel="Save draft" successMessage={DRAFT_SAVED} />;
 }
 
 export function SettingEditor({ settingKey, initial, media }: { settingKey: "about" | "faqs" | "inquiry_options" | "catalogue_meta"; initial: Json; media: MediaOption[] }) {
-  return <ContentEditor initial={initial} media={media} onSave={(content) => saveContentSetting({ key: settingKey, content })} />;
+  return <ContentEditor initial={initial} media={media} onSave={(content) => saveContentSetting({ key: settingKey, content })} saveLabel="Save draft" successMessage={DRAFT_SAVED} />;
 }
 
 export function SectionControls({ sectionKey, published, first, last }: { sectionKey: string; published: boolean; first: boolean; last: boolean }) {
@@ -24,6 +25,7 @@ export function SectionControls({ sectionKey, published, first, last }: { sectio
       <ActionButton
         size="sm"
         variant="ghost"
+        disabled={sectionKey === "hero" && published}
         icon={published ? EyeOff : Eye}
         action={() => setSectionStatus({ key: sectionKey, status: published ? "DRAFT" : "PUBLISHED" })}
         success={published ? "Hidden from the homepage" : "Shown on the homepage"}
@@ -44,7 +46,13 @@ export function SeoGlobalForm({ values }: { values: { homeTitle?: string; homeDe
   );
 }
 
-export function PageSeoButton({ media, values }: { media: MediaOption[]; values?: { path: string; title: string | null; description: string | null; ogImageId: string | null; noindex: boolean } }) {
+export function PageSeoButton({
+  media,
+  values,
+}: {
+  media: MediaOption[];
+  values?: { path: string; title: string | null; description: string | null; ogImageId: string | null; noindex: boolean; ogTitle?: string | null; ogDescription?: string | null; canonicalPath?: string | null };
+}) {
   return (
     <DialogButton label={values ? <span className="sr-only">Edit SEO</span> : "Add page"} icon={values ? Pencil : Plus} size={values ? "icon-sm" : "sm"} variant={values ? "ghost" : "secondary"} title={values ? `SEO for ${values.path}` : "Page SEO override"} dialogSize="lg">
       {(close) => (
@@ -52,7 +60,10 @@ export function PageSeoButton({ media, values }: { media: MediaOption[]; values?
           {!values && <TextField label="Page path" name="path" required placeholder="/services" />}
           <TextField label="Title" name="title" defaultValue={values?.title ?? ""} maxLength={70} hint="Leave empty to use the page's built-in title." />
           <TextArea label="Description" name="description" defaultValue={values?.description ?? ""} rows={2} maxLength={170} />
-          <MediaPicker name="ogImageId" label="Share image" media={media} defaultValue={values?.ogImageId} />
+          <MediaPicker name="ogImageId" label="Share image (Facebook, WhatsApp, X)" media={media} defaultValue={values?.ogImageId} />
+          <TextField label="Share title" name="ogTitle" defaultValue={values?.ogTitle ?? ""} maxLength={90} hint="Shown on social share cards. Empty = the page title." />
+          <TextArea label="Share description" name="ogDescription" defaultValue={values?.ogDescription ?? ""} rows={2} maxLength={200} hint="Empty = the description above." />
+          <TextField label="Canonical path" name="canonicalPath" defaultValue={values?.canonicalPath ?? ""} placeholder="/services" hint="Only if this page duplicates another one. Empty = the page's own address." />
           <CheckboxField name="noindex" label="Hide this page from search engines" defaultChecked={values?.noindex} />
         </ActionForm>
       )}

@@ -4,14 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Menu, Phone, X } from "lucide-react";
-import { INQUIRY_PATH, navLinks } from "@/data/site";
+import { INQUIRY_PATH, navLinks as defaultLinks } from "@/data/site";
+import type { NavLink } from "@/types";
 import { useSite } from "@/components/site/SiteContext";
 import Logo from "@/components/brand/Logo";
 import { buttonClass } from "@/components/ui/ButtonLink";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
 import { cn, telHref, whatsappHref } from "@/lib/utils";
 
-export default function Navigation() {
+/** `links` come from Website CMS → Navigation (validated on the server); the built-in menu is the fallback. */
+export default function Navigation({ links: navLinks = defaultLinks }: { links?: NavLink[] }) {
   const site = useSite();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);

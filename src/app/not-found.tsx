@@ -3,14 +3,14 @@ import { ArrowRight } from "lucide-react";
 import Navigation from "@/components/navigation/Navigation";
 import SiteFooter from "@/components/footer/SiteFooter";
 import { SiteProvider } from "@/components/site/SiteContext";
-import { getSiteSettings } from "@/lib/content";
+import { getNavigation, getSiteSettings } from "@/lib/content";
 
 // Rendered outside the (site) layout, so it brings its own header and footer
 export default async function NotFound() {
-  const site = await getSiteSettings();
+  const [site, nav] = await Promise.all([getSiteSettings(), getNavigation()]);
   return (
     <SiteProvider value={site}>
-      <Navigation />
+      <Navigation links={nav.links} />
       <main id="main" className="flex-1">
         <section className="mx-auto flex max-w-2xl flex-col items-center px-5 py-32 text-center">
           <p className="eyebrow">Page not found</p>

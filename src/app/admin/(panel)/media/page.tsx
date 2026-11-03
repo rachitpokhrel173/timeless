@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ImageIcon } from "lucide-react";
 import { adminDb, all, cols, paged, pgrstValue, schema, tbl, type Row } from "@/db";
+import { mediaUsage } from "@/server/media-usage";
 import { requirePage } from "@/lib/auth/session";
 import { bytes } from "@/lib/format";
 import { likeTerm, listParams } from "@/lib/list";
@@ -22,6 +23,12 @@ export default async function MediaPage({ searchParams }: PageProps<"/admin/medi
   let query = adminDb.from(tbl(schema.media)).select(cols(schema.media), { count: "exact" }).in("bucket", ["public-media", "static"]).is("deleted_at", null).like("mime", "image/%");
   if (str("folder")) query = query.eq("folder", str("folder")!);
   if (str("alt") === "missing") query = query.eq("alt", "");
+  const usage = await mediaUsage();
+  if (str("usage")) {
+    const used = [...usage.keys()];
+    if (str("usage") === "used") query = query.in("id", used.length ? used : ["00000000-0000-0000-0000-000000000000"]);
+    else if (used.length) query = query.not("id", "in", `(${used.join(",")})`);
+  }
   if (q) {
     const term = pgrstValue(likeTerm(q));
     query = query.or(`title.ilike.${term},alt.ilike.${term},filename.ilike.${term}`);
@@ -57,6 +64,15 @@ export default async function MediaPage({ searchParams }: PageProps<"/admin/medi
           <SearchBox placeholder="Title, alt text or file name" />
           <FilterSelect param="folder" label="Folder" options={folderOptions} />
           <FilterSelect param="alt" label="Alt text" allLabel="Any" options={[{ value: "missing", label: "Missing" }]} />
+          <FilterSelect
+            param="usage"
+            label="Usage"
+            allLabel="Any"
+            options={[
+              { value: "used", label: "In use" },
+              { value: "unused", label: "Not used anywhere" },
+            ]}
+          />
         </Toolbar>
         {rows.length === 0 ? (
           <EmptyState icon={ImageIcon} title="No images found" />
@@ -82,11 +98,21 @@ export default async function MediaPage({ searchParams }: PageProps<"/admin/medi
                         No alt text
                       </Badge>
                     )}
+                    {(() => {
+                      const used = usage.get(m.id.toLowerCase()) ?? [];
+                      return used.length ? (
+                        <p className="mt-1 line-clamp-2 text-[11px] text-a-muted" title={used.join("\n")}>
+                          Used: {used.join(", ")}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-a-muted">Not used</p>
+                      );
+                    })()}
                   </div>
                   {manage && (
                     <span className="flex shrink-0">
-                      <MediaEditButton values={m} />
-                      {m.bucket !== "static" && <MediaDeleteButton id={m.id} />}
+                      <MediaEditButton values={m} usedBy={usage.get(m.id.toLowerCase()) ?? []} />
+                      {m.bucket !== "static" && !usage.get(m.id.toLowerCase())?.length && <MediaDeleteButton id={m.id} />}
                     </span>
                   )}
                 </div>

@@ -70,3 +70,73 @@ export default function MediaPicker({ name, label, media, defaultValue }: { name
     </div>
   );
 }
+
+/**
+ * Choose several images (in order) from the media library. Submits the media ids under `name`
+ * as a comma-separated list; the server re-checks every id.
+ */
+export function MediaMultiPicker({ name, label, media, defaultValue = [], max = 24, hint }: { name: string; label: string; media: MediaOption[]; defaultValue?: string[]; max?: number; hint?: string }) {
+  const [ids, setIds] = useState<string[]>(defaultValue.filter((id) => media.some((m) => m.id === id)));
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const byId = useMemo(() => new Map(media.map((m) => [m.id, m])), [media]);
+  const shown = useMemo(() => media.filter((m) => `${m.title ?? ""} ${m.alt} ${m.folder}`.toLowerCase().includes(q.toLowerCase())).slice(0, 120), [media, q]);
+  const toggle = (id: string) => setIds((all) => (all.includes(id) ? all.filter((x) => x !== id) : all.length >= max ? all : [...all, id]));
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[13px] font-medium">{label}</p>
+      <input type="hidden" name={name} value={ids.join(",")} />
+      <ul className="flex flex-wrap gap-2">
+        {ids.map((id) => {
+          const m = byId.get(id);
+          return (
+            <li key={id} className="relative size-16 overflow-hidden rounded-md border border-a-border bg-a-subtle">
+              {m?.url && (
+                // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail
+                <img src={m.url} alt={m.alt} className="size-full object-cover" />
+              )}
+              <button type="button" onClick={() => toggle(id)} aria-label="Remove image" className="absolute top-0.5 right-0.5 rounded-full bg-black/60 p-0.5 text-white">
+                <X className="size-3" aria-hidden />
+              </button>
+            </li>
+          );
+        })}
+        <li>
+          <Button size="sm" onClick={() => setOpen(true)} className="h-16">
+            {ids.length ? "Add / remove" : "Choose images"}
+          </Button>
+        </li>
+      </ul>
+      {hint && <p className="text-xs text-a-muted">{hint}</p>}
+      <Dialog open={open} onClose={() => setOpen(false)} title={label} description={`Tap to add or remove (up to ${max}). Upload new images on Website → Media.`} size="xl" footer={<Button variant="primary" onClick={() => setOpen(false)}>Done ({ids.length})</Button>}>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search images…" aria-label="Search images" className={`${inputClass} mb-3`} />
+        {shown.length === 0 ? (
+          <p className="py-8 text-center text-[13px] text-a-muted">No images found.</p>
+        ) : (
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {shown.map((m) => {
+              const n = ids.indexOf(m.id);
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(m.id)}
+                    aria-pressed={n >= 0}
+                    className={`relative block w-full overflow-hidden rounded-md border-2 ${n >= 0 ? "border-a-accent" : "border-transparent hover:border-a-strong"}`}
+                    aria-label={`${n >= 0 ? "Remove" : "Add"} ${m.title || m.alt || "image"}`}
+                  >
+                    {m.url && (
+                      // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail
+                      <img src={m.url} alt="" loading="lazy" className="aspect-square w-full object-cover" />
+                    )}
+                    {n >= 0 && <span className="absolute top-1 left-1 rounded-full bg-a-accent px-1.5 text-[11px] font-semibold text-white">{n + 1}</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Dialog>
+    </div>
+  );
+}

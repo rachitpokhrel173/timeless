@@ -5,8 +5,9 @@ import { UserError } from "@/lib/actions";
 import { todayISO } from "@/lib/format";
 import { couponDiscount, depositShare, quoteTotals } from "@/lib/quote-math";
 import { advanceLead, logLeadActivity } from "./crm";
-import { checkOutEvent, describeShortages, packageRequirements, releaseEvent, setReservations } from "./inventory";
+import { checkOutEvent, describeShortages, releaseEvent, setReservations } from "./inventory";
 import { nextNumber } from "./numbering";
+import type { PackageSnapshot } from "@/db/schema";
 
 type Actor = { id: string; name: string } | null;
 type Conn = DB;
@@ -111,11 +112,32 @@ async function saveVersion(conn: Conn, quotationId: string, actor: Actor, reason
     );
 }
 
+/**
+ * Freeze a package as it is right now (name, price, contents, add-ons). Quotations and bookings
+ * keep this copy, so editing or deleting the package later never changes what was agreed or what
+ * stock gets reserved.
+ */
+export async function takePackageSnapshot(conn: Conn, packageId: string): Promise<PackageSnapshot | null> {
+  const pkg = await maybe<{ id: string; name: string; price: number; priceFrom: boolean; addOns: PackageSnapshot["addOns"] | null }>(
+    conn.from(tbl(schema.packages)).select("id,name,price,priceFrom:price_from,addOns:add_ons").eq("id", packageId),
+  );
+  if (!pkg) return null;
+  const items = await many<{ label: string; quantity: number; inventoryItemId: string | null }>(
+    conn.from(tbl(schema.packageItems)).select("label,quantity,inventoryItemId:inventory_item_id").eq("package_id", packageId).order("position"),
+  );
+  return { id: pkg.id, name: pkg.name, price: pkg.price, priceFrom: pkg.priceFrom, takenAt: new Date().toISOString(), items, addOns: Array.isArray(pkg.addOns) ? pkg.addOns : [] };
+}
+
+/** Stock a package snapshot needs, ready for setReservations. */
+const snapshotNeeds = (snap: PackageSnapshot | null | undefined) =>
+  (snap?.items ?? []).filter((i): i is typeof i & { inventoryItemId: string } => !!i.inventoryItemId).map((i) => ({ itemId: i.inventoryItemId, quantity: i.quantity }));
+
 /** Create or update a quotation. Totals are always recomputed on the server. */
 export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor, id?: string) {
   if (!input.items.length) throw new UserError("Add at least one line item.");
   let wasSent = false;
   let version = 1;
+  let previous: { packageId: string | null; packageSnapshot: PackageSnapshot | null } | null = null;
   if (id) {
     const existing = await getQuote(conn, id);
     if (!existing) throw new UserError("Quotation not found.");
@@ -123,6 +145,7 @@ export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor,
       throw new UserError(`An ${existing.status.toLowerCase()} quotation can't be edited — duplicate it to make a new one.`);
     }
     wasSent = !!existing.sentAt;
+    previous = { packageId: existing.packageId, packageSnapshot: existing.packageSnapshot ?? null };
     // Editing a quote the client has already received starts a new version
     version = wasSent ? existing.version + 1 : existing.version;
   }
@@ -152,11 +175,19 @@ export async function saveQuotation(conn: Conn, input: QuoteInput, actor: Actor,
     depositAmount: input.depositAmount,
   });
 
+  // The package is copied when it's first put on the quote; re-saving keeps that copy
+  const packageSnapshot = !input.packageId
+    ? null
+    : previous?.packageId === input.packageId && previous.packageSnapshot
+      ? previous.packageSnapshot
+      : await takePackageSnapshot(conn, input.packageId);
+
   const values = {
     customerId: input.customerId,
     leadId: input.leadId,
     inquiryId: input.inquiryId,
     packageId: input.packageId,
+    packageSnapshot,
     couponId: coupon?.id ?? null,
     title: input.title,
     eventType: input.eventType,
@@ -227,6 +258,7 @@ export async function duplicateQuotation(conn: Conn, id: string, actor: Actor) {
     leadId: src.leadId,
     inquiryId: src.inquiryId,
     packageId: src.packageId,
+    packageSnapshot: src.packageSnapshot,
     title: src.title,
     eventType: src.eventType,
     eventDate: src.eventDate,
@@ -507,11 +539,13 @@ export async function createBooking(conn: Conn, input: BookingInput, actor: Acto
     });
 
   const lead = input.leadId ? await maybe<Row<typeof schema.leads>>(conn.from(tbl(schema.leads)).select(cols(schema.leads)).eq("id", input.leadId)) : null;
+  const packageSnapshot = input.packageId ? await takePackageSnapshot(conn, input.packageId) : null;
   const bookingValues = vals(schema.bookings, {
     number: await nextNumber("BK", conn),
     customerId: input.customerId,
     quotationId: input.quotationId,
     packageId: input.packageId,
+    packageSnapshot,
     leadId: lead?.id,
     inquiryId: input.inquiryId,
     status: input.status,
@@ -560,16 +594,8 @@ export async function createBooking(conn: Conn, input: BookingInput, actor: Acto
   await advanceLead(conn, lead?.id ?? null, "CONFIRMED", actor, `Booking ${booking.number} created`);
   if (lead) await logLeadActivity(conn, lead.id, "BOOKING", `Booking ${booking.number} created`, actor?.id, { bookingId: booking.id });
 
-  // Inventory: package contents + booked lines linked to stock
-  const needs: { itemId: string; quantity: number }[] = [];
-  if (input.packageId) needs.push(...(await packageRequirements(conn, input.packageId)));
-  for (const it of input.items ?? [])
-    if (it.inventoryItemId)
-      needs.push({
-        itemId: it.inventoryItemId,
-        quantity: Math.ceil(it.quantity),
-      });
-  const shortages = await reserveForBooking(conn, event.id, booking.number, input.packageId ?? null, input.items ?? [], actor);
+  // Inventory: package contents (as booked) + booked lines linked to stock
+  const shortages = await reserveForBooking(conn, event.id, booking.number, snapshotNeeds(packageSnapshot), input.items ?? [], actor);
   return { booking, event, shortages };
 }
 
@@ -589,12 +615,11 @@ async function reserveForBooking(
   conn: Conn,
   eventId: string,
   reference: string,
-  packageId: string | null,
+  packageNeeds: { itemId: string; quantity: number }[],
   items: { inventoryItemId?: string | null; quantity: number }[],
   actor: Actor,
 ): Promise<string | null> {
-  const needs: { itemId: string; quantity: number }[] = [];
-  if (packageId) needs.push(...(await packageRequirements(conn, packageId)));
+  const needs: { itemId: string; quantity: number }[] = [...packageNeeds];
   for (const it of items) if (it.inventoryItemId) needs.push({ itemId: it.inventoryItemId, quantity: Math.ceil(it.quantity) });
   if (!needs.length) return null;
   const short = await setReservations(conn, eventId, needs, actor, reference, { partial: true });
@@ -629,7 +654,12 @@ export async function bookingFromQuotation(conn: Conn, quotationId: string, acto
   const items = await many<{ inventoryItemId: string | null; quantity: number }>(
     conn.from(tbl(schema.bookingItems)).select("inventoryItemId:inventory_item_id,quantity").eq("booking_id", r.bookingId),
   );
-  const shortages = r.eventId ? await reserveForBooking(conn, r.eventId, number, r.packageId ?? null, items, actor) : null;
+  // The booking keeps the package exactly as quoted. Quotes saved before snapshots existed fall
+  // back to the package as it is now (the previous behaviour).
+  const quoted = await maybe<{ packageSnapshot: PackageSnapshot | null }>(conn.from(qt).select("packageSnapshot:package_snapshot").eq("id", quotationId));
+  const packageSnapshot = quoted?.packageSnapshot ?? (r.packageId ? await takePackageSnapshot(conn, r.packageId) : null);
+  if (packageSnapshot) await exec(conn.from(tbl(schema.bookings)).update({ package_snapshot: packageSnapshot }).eq("id", r.bookingId));
+  const shortages = r.eventId ? await reserveForBooking(conn, r.eventId, number, snapshotNeeds(packageSnapshot), items, actor) : null;
   return {
     booking: { id: r.bookingId, number },
     event: r.eventId ? { id: r.eventId } : null,

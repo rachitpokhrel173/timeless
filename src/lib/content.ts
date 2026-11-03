@@ -1,9 +1,9 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { asAnon, cols, many, maybe, schema, tbl, type DB, type Row } from "@/db";
-import { siteSettings as defaultSite } from "@/data/site";
+import { legalLinks, navLinks, siteSettings as defaultSite } from "@/data/site";
 import { toImageAsset } from "@/server/media";
-import type { CatalogueSection, EventType, EventTypeSlug, GalleryItem, HomeContent, ImageAsset, PriceList, Service, SiteSettings, SocialLink, Testimonial } from "@/types";
+import type { CatalogueSection, EventType, EventTypeSlug, GalleryItem, HomeContent, ImageAsset, NavLink, PriceList, PublicPackage, Service, SiteSettings, SocialLink, Testimonial } from "@/types";
 import { showPlaceholders } from "./utils";
 
 /*
@@ -29,16 +29,26 @@ async function setting<T>(conn: DB, key: string): Promise<T | undefined> {
 
 /* ───────── Business details ───────── */
 
-export type AboutContent = { eyebrow: string; title: string; subtitle: string; heading: string; paragraphs: string[]; image: ImageAsset; ctaImage: ImageAsset };
+export type AboutContent = {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  heading: string;
+  paragraphs: string[];
+  image: ImageAsset;
+  ctaImage: ImageAsset;
+  /** Second block ("One team, start to finish") — added by 00025 from the copy that was hard-coded. */
+  team?: { heading: string; paragraphs: string[]; images: ImageAsset[] };
+};
 export type BusinessSettings = Omit<SiteSettings, "socials" | "url"> & { currency?: string; timezone?: string };
 
-export const getSiteSettings = cached(
-  async (): Promise<SiteSettings & { currency: string; timezone: string }> =>
-    asAnon(async (conn) => {
-      const [business, socials] = await Promise.all([
+/** Business details for the site chrome. `override` is a draft being previewed (Website CMS → Contact). */
+export async function buildSiteSettings(conn: DB, override?: Partial<BusinessSettings>): Promise<SiteSettings & { currency: string; timezone: string }> {
+      const [stored, socials] = await Promise.all([
         setting<BusinessSettings>(conn, "business"),
         many<Row<typeof schema.socialLinks>>(conn.from(tbl(schema.socialLinks)).select(cols(schema.socialLinks)).order("position")),
       ]);
+      const business = override ? { ...stored, ...override } : stored;
       return {
         ...defaultSite,
         ...business,
@@ -49,32 +59,62 @@ export const getSiteSettings = cached(
           ? socials.map((s) => ({ platform: s.platform as SocialLink["platform"], label: s.label, url: s.url, handle: s.handle ?? undefined }))
           : defaultSite.socials,
       };
-    }),
-  "site",
-);
+}
+
+export const getSiteSettings = cached(async () => asAnon((conn) => buildSiteSettings(conn)), "site");
+
+/* ───────── Navigation & footer (Website CMS → Navigation) ───────── */
+
+export type NavigationContent = { links: NavLink[]; footerText: string; copyright: string };
+
+/**
+ * Only these public destinations can be linked from the menu, so a menu edit can never point
+ * visitors at admin, API or private pages. Service and package pages are allowed by slug.
+ */
+export const NAV_DESTINATION = /^\/(?:(?:about|services|gallery|catalogue|contact|inquiry|packages)(?:\/[a-z0-9-]{1,80})?)?(?:#[a-z0-9-]{1,40})?$/;
+export const isNavDestination = (href: string) => NAV_DESTINATION.test(href) && !/^\/(about|gallery|catalogue|contact|inquiry)\//.test(href);
+
+export function buildNavigation(value: Partial<NavigationContent> | undefined): NavigationContent & { legal: NavLink[] } {
+  const links = (value?.links ?? []).filter((l) => l?.label?.trim() && isNavDestination(l.href));
+  return {
+    links: links.length ? links : navLinks,
+    footerText: value?.footerText ?? "",
+    copyright: value?.copyright ?? "",
+    legal: legalLinks,
+  };
+}
+
+export const navigationFor = async (conn: DB, override?: Partial<NavigationContent>) => buildNavigation(override ?? (await setting<Partial<NavigationContent>>(conn, "navigation")));
+export const getNavigation = cached(async () => asAnon((conn) => navigationFor(conn)), "navigation");
+
+export const homeSectionOrder = (conn: DB) =>
+  many<{ key: string; position: number }>(conn.from(tbl(schema.homepageSections)).select("key,position").eq("status", "PUBLISHED").neq("key", "offer").order("position"));
 
 /** Published homepage sections in display order (Website → Homepage controls this). */
 export const getHomeSections = cached(
-  async () => asAnon((conn) => many<{ key: string; position: number }>(conn.from(tbl(schema.homepageSections)).select("key,position").neq("key", "offer").order("position"))),
+  async () => asAnon((conn) => homeSectionOrder(conn)),
   "home-sections",
 );
 
-export const getHomeContent = cached(
-  async (): Promise<HomeContent> =>
-    asAnon(async (conn) => {
+/**
+ * Homepage content. The public site reads it as `anon` (RLS: published only); the draft preview
+ * reads it with the service client and lays the drafts (`overlay`) over the published copy.
+ */
+export async function buildHomeContent(conn: DB, overlay?: Map<string, unknown>): Promise<HomeContent> {
       const [sections, packages] = await Promise.all([
-        many<{ key: string; content: unknown }>(conn.from(tbl(schema.homepageSections)).select("key,content")),
+        many<{ key: string; content: unknown }>(conn.from(tbl(schema.homepageSections)).select("key,content").eq("status", "PUBLISHED")),
         many<{ name: string; summary: string | null; image: Media | null }>(
           conn
             .from(tbl(schema.packages))
             .select(`name,summary,${media("image", "image_id")}`)
+            .eq("status", "PUBLISHED")
             .eq("featured", true)
             .order("position")
             .limit(3),
         ),
       ]);
       if (!sections.length) throw new Error("Homepage content is missing — run the seed (see README).");
-      const home = Object.fromEntries(sections.map((s) => [s.key, s.content])) as unknown as HomeContent;
+      const home = Object.fromEntries(sections.map((s) => [s.key, overlay?.get(s.key) ?? s.content])) as unknown as HomeContent;
       // Unpublished sections aren't returned by RLS; give components empty-but-valid shapes
       home.offer ??= { enabled: false } as HomeContent["offer"];
       // Homepage package cards come from Packages (featured + published) so they stay in sync with sales
@@ -83,11 +123,13 @@ export const getHomeContent = cached(
         .filter((p): p is { name: string; text: string; image: ImageAsset } => !!p.image);
       if (home.packages) home.packages = { ...home.packages, items: items.length ? items : (home.packages.items ?? []) };
       return home;
-    }),
-  "home",
-);
+}
 
-export const getAboutContent = cached(async () => asAnon(async (conn) => (await setting<AboutContent>(conn, "about"))!), "about");
+export const getHomeContent = cached(async () => asAnon((conn) => buildHomeContent(conn)), "home");
+
+export const getAboutFor = async (conn: DB) => ((await setting<AboutContent>(conn, "about")) ?? ({} as AboutContent));
+export const getAboutContent = cached(async () => asAnon(getAboutFor), "about");
+export const getFaqsFor = async (conn: DB) => (await setting<{ q: string; a: string }[]>(conn, "faqs")) ?? [];
 export const getFaqs = cached(async () => asAnon(async (conn) => (await setting<{ q: string; a: string }[]>(conn, "faqs")) ?? []), "faqs");
 export const getCatalogueMeta = cached(
   async () => asAnon(async (conn) => (await setting<{ offerings: string[]; priceNote: string }>(conn, "catalogue_meta")) ?? { offerings: [], priceNote: "" }),
@@ -115,40 +157,114 @@ export const getSeoGlobal = cached(
 export const getPageSeo = cached(
   async (path: string) =>
     asAnon(async (conn) => {
-      const row = await maybe<{ title: string | null; description: string | null; noindex: boolean; image: Media | null }>(
+      const row = await maybe<{ title: string | null; description: string | null; noindex: boolean; ogTitle: string | null; ogDescription: string | null; canonicalPath: string | null; image: Media | null }>(
         conn
           .from(tbl(schema.seoSettings))
-          .select(`title,description,noindex,${media("image", "og_image_id")}`)
+          .select(`title,description,noindex,ogTitle:og_title,ogDescription:og_description,canonicalPath:canonical_path,${media("image", "og_image_id")}`)
           .eq("path", path),
       );
-      return row ? { title: row.title, description: row.description, noindex: row.noindex, image: toImageAsset(row.image) } : null;
+      return row
+        ? { title: row.title, description: row.description, noindex: row.noindex, ogTitle: row.ogTitle, ogDescription: row.ogDescription, canonicalPath: row.canonicalPath, image: toImageAsset(row.image) }
+        : null;
     }),
   "page-seo",
 );
 
 /* ───────── Collections (RLS returns published rows only) ───────── */
 
+type ServiceRow = Row<typeof schema.services> & { image: Media | null };
+
+/** Images for a list of media ids, in that order (public buckets only, never deleted files). */
+async function imagesById(conn: DB, ids: string[], fallbackAlt: string) {
+  if (!ids.length) return [];
+  const rows = await many<Media & { id: string }>(
+    conn.from(tbl(schema.media)).select("id,url,alt,width,height,tags").in("id", ids).in("bucket", ["public-media", "static"]).is("deleted_at", null),
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.map((id) => toImageAsset(byId.get(id), fallbackAlt)).filter((x): x is ImageAsset => !!x);
+}
+
+const toService = (s: ServiceRow): Service => ({
+  id: s.id,
+  slug: s.slug,
+  name: s.name,
+  summary: s.summary,
+  description: s.description,
+  featured: s.featured,
+  order: s.position,
+  image: toImageAsset(s.image, s.name)!,
+  category: s.category ?? undefined,
+  startingPrice: s.startingPrice ?? undefined,
+  seoTitle: s.seoTitle ?? undefined,
+  seoDescription: s.seoDescription ?? undefined,
+});
+
 export const getServices = cached(
   async ({ featured }: { featured?: boolean } = {}): Promise<Service[]> =>
     asAnon(async (conn) => {
-      let query = conn.from(tbl(schema.services)).select(`${cols(schema.services)},${media("image", "image_id")}`);
+      let query = conn.from(tbl(schema.services)).select(`${cols(schema.services)},${media("image", "image_id")}`).eq("status", "PUBLISHED");
       if (featured !== undefined) query = query.eq("featured", featured);
-      const rows = await many<Row<typeof schema.services> & { image: Media | null }>(query.order("position"));
-      return rows
-        .map((s) => ({
-          id: s.id,
-          slug: s.slug,
-          name: s.name,
-          summary: s.summary,
-          description: s.description,
-          featured: s.featured,
-          order: s.position,
-          image: toImageAsset(s.image, s.name)!,
-        }))
-        .filter((s) => s.image);
+      const rows = await many<ServiceRow>(query.order("position"));
+      return rows.map(toService).filter((s) => s.image);
     }),
   "services",
 );
+
+/**
+ * One service with its gallery and "what's included" list. The public page reads published
+ * services as `anon`; the draft preview passes the service client and `anyStatus`.
+ */
+export async function serviceBySlug(conn: DB, slug: string, { anyStatus = false } = {}): Promise<Service | null> {
+  let q = conn.from(tbl(schema.services)).select(`${cols(schema.services)},${media("image", "image_id")}`).eq("slug", slug);
+  if (!anyStatus) q = q.eq("status", "PUBLISHED");
+  const row = await maybe<ServiceRow>(q);
+  if (!row) return null;
+  const [gallery, items] = await Promise.all([
+    imagesById(conn, row.galleryIds ?? [], row.name),
+    many<{ title: string; description: string | null }>(conn.from(tbl(schema.serviceItems)).select("title,description").eq("service_id", row.id).order("position")),
+  ]);
+  const service = toService(row);
+  return service.image ? { ...service, gallery, includes: items.map((i) => ({ title: i.title, description: i.description ?? undefined })) } : null;
+}
+
+export const getService = cached(async (slug: string) => asAnon((conn) => serviceBySlug(conn, slug)), "service");
+
+type PackageRow = Row<typeof schema.packages> & { image: Media | null };
+
+/** One package with its gallery, contents and linked services (published only unless `anyStatus`). */
+export async function packageBySlug(conn: DB, slug: string, { anyStatus = false } = {}): Promise<PublicPackage | null> {
+  let q = conn.from(tbl(schema.packages)).select(`${cols(schema.packages)},${media("image", "image_id")}`).eq("slug", slug);
+  if (!anyStatus) q = q.eq("status", "PUBLISHED");
+  const p = await maybe<PackageRow>(q);
+  if (!p) return null;
+  const [gallery, items, services] = await Promise.all([
+    imagesById(conn, p.galleryIds ?? [], p.name),
+    many<{ label: string; quantity: number }>(conn.from(tbl(schema.packageItems)).select("label,quantity").eq("package_id", p.id).order("position")),
+    p.serviceIds?.length
+      ? many<{ slug: string; name: string }>(conn.from(tbl(schema.services)).select("slug,name").in("id", p.serviceIds).eq("status", "PUBLISHED").order("position"))
+      : Promise.resolve([]),
+  ]);
+  return {
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    tier: p.tier,
+    category: p.category,
+    summary: p.summary,
+    description: p.description,
+    price: p.price,
+    priceFrom: p.priceFrom,
+    features: p.features.length ? p.features : items.map((i) => (i.quantity > 1 ? `${i.quantity} × ${i.label}` : i.label)),
+    addOns: Array.isArray(p.addOns) ? p.addOns.filter((a) => a?.label) : [],
+    image: toImageAsset(p.image, p.name),
+    gallery,
+    services,
+    seoTitle: p.seoTitle,
+    seoDescription: p.seoDescription,
+  };
+}
+
+export const getPackage = cached(async (slug: string) => asAnon((conn) => packageBySlug(conn, slug)), "package");
 
 export const getPackages = cached(
   async () =>
@@ -158,6 +274,7 @@ export const getPackages = cached(
           conn
             .from(tbl(schema.packages))
             .select(`${cols(schema.packages)},${media("image", "image_id")}`)
+            .eq("status", "PUBLISHED")
             .order("position"),
         ),
         many<Row<typeof schema.packageItems>>(conn.from(tbl(schema.packageItems)).select(cols(schema.packageItems)).order("position")),
@@ -197,7 +314,7 @@ export const getEventTypes = cached(
 export const getGalleryItems = cached(
   async ({ featured, limit }: { featured?: boolean; limit?: number } = {}): Promise<GalleryItem[]> =>
     asAnon(async (conn) => {
-      let query = conn.from(tbl(schema.galleryAlbums)).select(`${cols(schema.galleryAlbums)},${media("cover", "cover_id")}`);
+      let query = conn.from(tbl(schema.galleryAlbums)).select(`${cols(schema.galleryAlbums)},${media("cover", "cover_id")}`).eq("status", "PUBLISHED");
       if (featured !== undefined) query = query.eq("featured", featured);
       let albums = await many<Row<typeof schema.galleryAlbums> & { cover: Media | null }>(query.order("position").order("created_at").limit(500));
       // Sample albums always show in development. In production they're hidden as soon as a real
@@ -214,6 +331,7 @@ export const getGalleryItems = cached(
             albums.map((x) => x.id),
           )
           .eq("kind", "IMAGE")
+          .eq("status", "PUBLISHED")
           .order("position"),
       );
       return albums
@@ -297,10 +415,12 @@ export const getTestimonials = cached(
         conn
           .from(tbl(schema.testimonials))
           .select(`${cols(schema.testimonials)},${media("photo", "photo_id")}`)
+          .eq("status", "PUBLISHED")
+          .order("featured", { ascending: false })
           .order("position"),
       );
       return rows
-        .filter((r) => (r.placeholder ? showPlaceholders : r.consent))
+        .filter((r) => (r.placeholder ? showPlaceholders : r.consent && r.reviewStatus === "APPROVED"))
         .map((r) => ({
           id: r.id,
           customerName: r.customerName,

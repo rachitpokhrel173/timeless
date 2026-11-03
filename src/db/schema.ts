@@ -206,6 +206,8 @@ export const media = pgTable(
     folder: text("folder").notNull().default("General"),
     tags: textArray("tags"),
     uploadedBy: uuid("uploaded_by").references(() => profiles.id, { onDelete: "set null" }),
+    /** Phase 5 (00025): the private original this public copy was made from (gallery from an event). */
+    sourceMediaId: uuid("source_media_id").references((): AnyPgColumn => media.id, { onDelete: "set null" }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: ts("deleted_at"),
@@ -640,7 +642,27 @@ export const packages = pgTable("packages", {
   position: integer("position").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+  /* Phase 5 (00025) */
+  category: text("category"),
+  galleryIds: uuid("gallery_ids").array().notNull().default(sql`'{}'::uuid[]`),
+  serviceIds: uuid("service_ids").array().notNull().default(sql`'{}'::uuid[]`),
+  addOns: jsonb("add_ons").$type<PackageAddOn[]>().notNull().default([]),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  publishedAt: ts("published_at"),
 });
+
+export type PackageAddOn = { label: string; price: number };
+/** Copy of a package as it was put on a quotation/booking — later package edits never change it. */
+export type PackageSnapshot = {
+  id: string;
+  name: string;
+  price: number;
+  priceFrom: boolean;
+  takenAt: string;
+  items: { label: string; quantity: number; inventoryItemId: string | null }[];
+  addOns: PackageAddOn[];
+};
 
 /** What a package needs — drives inventory reservation when it's booked. */
 export const packageItems = pgTable(
@@ -697,6 +719,8 @@ export const quotations = pgTable(
     referenceMediaIds: uuid("reference_media_ids").array().notNull().default(sql`'{}'::uuid[]`),
     /** Capability token for the public /quote/<token> page. */
     publicToken: text("public_token").notNull().unique(),
+    /** Phase 5 (00025): the package as quoted (inventory for the booking is reserved from this). */
+    packageSnapshot: jsonb("package_snapshot").$type<PackageSnapshot>(),
     sentAt: ts("sent_at"),
     viewedAt: ts("viewed_at"),
     respondedAt: ts("responded_at"),
@@ -782,6 +806,8 @@ export const bookings = pgTable(
       .unique()
       .references(() => quotations.id, { onDelete: "set null" }),
     packageId: uuid("package_id").references(() => packages.id, { onDelete: "set null" }),
+    /** Phase 5 (00025): the package as booked (copied from the quotation, or taken when booked directly). */
+    packageSnapshot: jsonb("package_snapshot").$type<PackageSnapshot>(),
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
     inquiryId: uuid("inquiry_id").references(() => inquiries.id, { onDelete: "set null" }),
     status: bookingStatus("status").notNull().default("PENDING"),
@@ -1590,6 +1616,10 @@ export const seoSettings = pgTable("seo_settings", {
   ogImageId: uuid("og_image_id").references(() => media.id, { onDelete: "set null" }),
   noindex: boolean("noindex").notNull().default(false),
   updatedAt: updatedAt(),
+  /* Phase 5 (00025): share-card text and canonical override */
+  ogTitle: text("og_title"),
+  ogDescription: text("og_description"),
+  canonicalPath: text("canonical_path"),
 });
 
 export const services = pgTable("services", {
@@ -1605,6 +1635,13 @@ export const services = pgTable("services", {
   position: integer("position").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+  /* Phase 5 (00025) */
+  category: text("category"),
+  startingPrice: integer("starting_price"),
+  galleryIds: uuid("gallery_ids").array().notNull().default(sql`'{}'::uuid[]`),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  publishedAt: ts("published_at"),
 });
 
 export const serviceItems = pgTable(
@@ -1639,7 +1676,50 @@ export const testimonials = pgTable("testimonials", {
   position: integer("position").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+  /* Phase 5 (00025): moderation. Publishing needs APPROVED + consent (enforced by a trigger). */
+  reviewStatus: text("review_status", { enum: ["PENDING", "APPROVED", "REJECTED"] }).notNull().default("PENDING"),
+  featured: boolean("featured").notNull().default(false),
+  reviewedAt: ts("reviewed_at"),
 });
+
+/** Staff-only notes on a testimonial (kept apart because published testimonial rows are public). */
+export const testimonialNotes = pgTable("testimonial_notes", {
+  testimonialId: uuid("testimonial_id")
+    .primaryKey()
+    .references(() => testimonials.id, { onDelete: "cascade" }),
+  notes: text("notes").notNull().default(""),
+  updatedBy: uuid("updated_by").references(() => profiles.id, { onDelete: "set null" }),
+  updatedAt: updatedAt(),
+});
+
+/** Unpublished edits to homepage sections and website settings (staff only). */
+export const cmsDrafts = pgTable(
+  "cms_drafts",
+  {
+    scope: text("scope", { enum: ["section", "setting"] }).notNull(),
+    key: text("key").notNull(),
+    content: jsonb("content").notNull(),
+    updatedBy: uuid("updated_by").references(() => profiles.id, { onDelete: "set null" }),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.scope, t.key] })],
+);
+
+/** Append-only publishing history: what went live, when and by whom. */
+export const cmsRevisions = pgTable(
+  "cms_revisions",
+  {
+    id: id(),
+    scope: text("scope", { enum: ["section", "setting", "service", "package", "album", "testimonial"] }).notNull(),
+    key: text("key").notNull(),
+    action: text("action", { enum: ["PUBLISH", "UNPUBLISH", "RESTORE", "ARCHIVE"] }).notNull(),
+    content: jsonb("content"),
+    note: text("note"),
+    actorId: uuid("actor_id").references(() => profiles.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("cms_revisions_key_idx").on(t.scope, t.key, t.createdAt)],
+);
 
 export const galleryAlbums = pgTable(
   "gallery_albums",
@@ -1663,6 +1743,8 @@ export const galleryAlbums = pgTable(
     position: integer("position").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    /** Phase 5 (00025) */
+    publishedAt: ts("published_at"),
   },
   (t) => [index("albums_position_idx").on(t.status, t.position)],
 );

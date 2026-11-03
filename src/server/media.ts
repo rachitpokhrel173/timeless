@@ -18,6 +18,29 @@ const DOC_TYPES = [
 
 export class UploadError extends Error {}
 
+/** What sharp must detect for each declared image type (the browser's type is only a claim). */
+const IMAGE_FORMAT: Record<string, string[]> = { "image/jpeg": ["jpeg"], "image/png": ["png"], "image/webp": ["webp"], "image/avif": ["heif", "avif"], "image/gif": ["gif"] };
+
+/** Check the file's first bytes match its declared document type. */
+function looksLike(mime: string, b: Buffer) {
+  const starts = (...bytes: number[]) => bytes.every((x, i) => b[i] === x);
+  switch (mime) {
+    case "application/pdf":
+      return starts(0x25, 0x50, 0x44, 0x46); // %PDF
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return starts(0x50, 0x4b, 0x03, 0x04); // zip
+    case "application/msword":
+    case "application/vnd.ms-excel":
+      return starts(0xd0, 0xcf, 0x11, 0xe0); // OLE
+    case "text/csv":
+    case "text/plain":
+      return !b.subarray(0, 8192).includes(0);
+    default:
+      return true;
+  }
+}
+
 export type ProcessedFile = { body: Buffer; mime: string; filename: string; width: number | null; height: number | null };
 
 /**
@@ -35,7 +58,18 @@ export async function processUpload(file: File, opts: { imagesOnly?: boolean } =
   let filename = file.name || "upload";
   let width: number | null = null;
   let height: number | null = null;
+  if (!IMAGE_TYPES.includes(file.type) && !looksLike(file.type, body)) throw new UploadError("That file's contents don't match its type.");
   if (IMAGE_TYPES.includes(file.type)) {
+    let format: string | undefined;
+    try {
+      format = (await sharp(body).metadata()).format;
+    } catch {
+      throw new UploadError("That image couldn't be read. Try a different file.");
+    }
+    // Must really be a raster image we accept (never SVG/HTML). GIFs are stored as-is, so they must match exactly;
+    // everything else is re-encoded to WebP, so a PNG saved as .jpg is fine.
+    const ok = file.type === "image/gif" ? format === "gif" : !!format && format !== "gif" && Object.values(IMAGE_FORMAT).flat().includes(format);
+    if (!ok) throw new UploadError("That file isn't the kind of image its name says. Export it again as JPEG, PNG or WebP.");
     try {
       if (file.type === "image/gif") {
         const meta = await sharp(body).metadata();

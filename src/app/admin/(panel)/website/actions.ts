@@ -4,12 +4,14 @@ import { z } from "zod";
 import { db, exec, many, maybe, schema, tbl, vals } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
+import { isNavDestination } from "@/lib/content";
+import { CMS_SETTINGS, discardDraft, publishDraft, recordPublication, restoreRevision, saveDraft, type Json } from "@/server/cms";
 import { refreshSite } from "@/server/revalidate";
 
-type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
-
-/** Content settings the website editor may change (all public, shown on the site). */
+/** Content settings edited with the generic editor (business details and navigation have their own forms). */
 const CONTENT_SETTINGS = ["about", "faqs", "inquiry_options", "catalogue_meta"] as const;
+const scopeKey = z.object({ scope: z.enum(["section", "setting"]), key: z.string().regex(/^[a-z_]{1,40}$/) });
+const settingLabel = (key: string) => key.replace(/_/g, " ");
 
 /**
  * Images picked in the editor carry a media id; fill in the authoritative URL and size from the
@@ -50,17 +52,40 @@ function parseJson(raw: string): Json {
   }
 }
 
-export const saveHomeSection = adminAction("cms.manage", z.object({ key: z.string().min(1).max(40), content: z.string() }), async ({ key, content }, user) => {
+/** Save a homepage section as a draft — the live homepage doesn't change until it's published. */
+export const saveHomeSection = adminAction("cms.manage", z.object({ key: z.string().regex(/^[a-z_]{1,40}$/), content: z.string() }), async ({ key, content }, user) => {
   const value = await hydrateImages(parseJson(content));
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("Invalid section content.");
-  const row = await maybe<{ label: string }>(db.from(tbl(schema.homepageSections)).update({ content: value, updated_by: user.id }).eq("key", key).select("label"));
+  const row = await maybe<{ label: string }>(db.from(tbl(schema.homepageSections)).select("label").eq("key", key));
   if (!row) throw new UserError("Section not found.");
-  await audit(user, "update", "homepage_section", key, `Edited the homepage “${row.label}” section`);
+  await saveDraft("section", key, value, user);
+  await audit(user, "update", "homepage_section", key, `Saved a draft of the homepage “${row.label}” section`);
+});
+
+/** Publish a draft (homepage section or website setting) to the live website. */
+export const publishContent = adminAction("cms.manage", scopeKey, async ({ scope, key }, user) => {
+  if (scope === "setting" && !(CMS_SETTINGS as readonly string[]).includes(key)) throw new UserError("That isn't website content.");
+  await publishDraft(scope, key, user);
+  await audit(user, "publish", scope === "section" ? "homepage_section" : "setting", key, `Published changes to ${scope === "section" ? `the homepage “${key}” section` : `website ${settingLabel(key)}`}`);
   refreshSite();
 });
 
+export const discardContentDraft = adminAction("cms.manage", scopeKey, async ({ scope, key }, user) => {
+  await discardDraft(scope, key);
+  await audit(user, "discard", scope === "section" ? "homepage_section" : "setting", key, `Discarded unpublished changes to ${settingLabel(key)}`);
+});
+
+/** Copy an earlier published version into the draft (it still has to be published). */
+export const restoreContentVersion = adminAction("cms.manage", z.object({ id: zs.uuid() }), async ({ id }, user) => {
+  const rev = await restoreRevision(id, user);
+  await audit(user, "restore", rev.scope === "section" ? "homepage_section" : "setting", rev.key, `Restored an earlier version of ${settingLabel(rev.key)} into the draft`);
+});
+
 export const setSectionStatus = adminAction("cms.manage", z.object({ key: z.string().min(1).max(40), status: z.enum(["DRAFT", "PUBLISHED"]) }), async ({ key, status }, user) => {
-  await exec(db.from(tbl(schema.homepageSections)).update({ status, updated_by: user.id }).eq("key", key));
+  if (key === "hero" && status === "DRAFT") throw new UserError("The hero is the top of the homepage and can't be hidden — edit it instead.");
+  const row = await maybe<{ key: string }>(db.from(tbl(schema.homepageSections)).update({ status, updated_by: user.id }).eq("key", key).select("key"));
+  if (!row) throw new UserError("Section not found.");
+  await recordPublication("section", key, status === "PUBLISHED" ? "PUBLISH" : "UNPUBLISH", user, status === "PUBLISHED" ? "Shown on the homepage" : "Hidden from the homepage");
   await audit(user, status === "PUBLISHED" ? "publish" : "unpublish", "homepage_section", key, `${status === "PUBLISHED" ? "Showed" : "Hid"} the homepage “${key}” section`);
   refreshSite();
 });
@@ -76,12 +101,99 @@ export const moveSection = adminAction("cms.manage", z.object({ key: z.string().
   refreshSite();
 });
 
+/** Save page/form content as a draft (published separately). */
 export const saveContentSetting = adminAction("cms.manage", z.object({ key: z.enum(CONTENT_SETTINGS), content: z.string() }), async ({ key, content }, user) => {
   const value = await hydrateImages(parseJson(content));
-  await exec(db.from(tbl(schema.siteSettings)).upsert({ key, value, is_public: true, updated_by: user.id }, { onConflict: "key" }));
-  await audit(user, "update", "setting", key, `Edited website content “${key.replace("_", " ")}”`);
-  refreshSite();
+  await saveDraft("setting", key, value, user);
+  await audit(user, "update", "setting", key, `Saved a draft of website content “${settingLabel(key)}”`);
 });
+
+const httpsUrl = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => !v || /^https:\/\/[^\s"'<>]+$/.test(v), `${label} must be a full https:// link.`)
+    .default("");
+
+/**
+ * Contact details shown across the site (header, footer, contact page, Google structured data).
+ * Saved as a draft of the "business" setting; everything not on this form is kept as it is.
+ */
+export const saveContactDraft = adminAction(
+  "cms.manage",
+  z.object({
+    name: zs.required("Business name", 120),
+    email: zs.email(),
+    phones: z
+      .string()
+      .max(500)
+      .transform((v) =>
+        v
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .slice(0, 5),
+      )
+      .refine((v) => v.length > 0, "Add at least one phone number."),
+    whatsapp: z
+      .string()
+      .trim()
+      .max(20)
+      .transform((v) => v.replace(/\D/g, ""))
+      .refine((v) => !v || v.length >= 8, "Enter the WhatsApp number with the country code, e.g. 9779845411029."),
+    street: zs.required("Street / area", 120),
+    city: zs.required("City", 80),
+    postalCode: zs.text(20),
+    hours: zs.text(160),
+    mapUrl: httpsUrl("The map link"),
+  }),
+  async (input, user) => {
+    const [live, draft] = await Promise.all([
+      maybe<{ value: { [k: string]: Json } }>(db.from(tbl(schema.siteSettings)).select("value").eq("key", "business")),
+      maybe<{ content: { [k: string]: Json } }>(db.from(tbl(schema.cmsDrafts)).select("content").eq("scope", "setting").eq("key", "business")),
+    ]);
+    const base = draft?.content ?? live?.value ?? {};
+    const address = (base.address && typeof base.address === "object" && !Array.isArray(base.address) ? base.address : {}) as { [k: string]: Json };
+    const phones = input.phones.map((line) => {
+      const [label, e164] = line.split("|").map((x) => x.trim());
+      const digits = (e164 || label || "").replace(/[^\d+]/g, "");
+      return { label: label || digits, e164: digits.startsWith("+") ? digits : `+977${digits.replace(/^0/, "")}` };
+    });
+    const value: { [k: string]: Json } = {
+      ...base,
+      name: input.name,
+      email: input.email,
+      phones,
+      whatsapp: input.whatsapp,
+      address: { ...address, street: input.street, city: input.city, postalCode: input.postalCode },
+      hours: input.hours,
+      mapUrl: input.mapUrl,
+    };
+    await saveDraft("setting", "business", value, user);
+    await audit(user, "update", "setting", "business", "Saved a draft of the contact details");
+  },
+);
+
+/** Menu links, footer text and copyright line. Links can only point at public website pages. */
+export const saveNavigationDraft = adminAction(
+  "cms.manage",
+  z.object({
+    links: z
+      .array(z.object({ label: zs.required("Label", 30), href: z.string().trim().max(130) }))
+      .min(1, "Keep at least one menu link.")
+      .max(8, "Up to 8 menu links fit in the header."),
+    footerText: zs.text(300),
+    copyright: zs.text(160),
+  }),
+  async (input, user) => {
+    const bad = input.links.find((l) => !isNavDestination(l.href));
+    if (bad) throw new UserError(`“${bad.href}” isn't a website page. Use a page like /services, /gallery or /contact.`);
+    if (!input.links.some((l) => l.href === "/contact" || l.href.startsWith("/contact#"))) throw new UserError("Keep a link to the Contact page so visitors can reach you.");
+    await saveDraft("setting", "navigation", input as unknown as Json, user);
+    await audit(user, "update", "setting", "navigation", "Saved a draft of the menu and footer");
+  },
+);
 
 export const savePageSeo = adminAction(
   "cms.manage",
@@ -93,9 +205,20 @@ export const savePageSeo = adminAction(
     title: zs.optional(70),
     description: zs.optional(170),
     ogImageId: zs.optUuid(),
+    ogTitle: zs.optional(90),
+    ogDescription: zs.optional(200),
+    canonicalPath: z
+      .string()
+      .trim()
+      .max(200)
+      .optional()
+      .nullable()
+      .transform((v) => v || null)
+      .refine((v) => !v || /^\/[a-z0-9/_-]*$/.test(v), "Use a site path like /services."),
     noindex: z.boolean().default(false),
   }),
   async (input, user) => {
+    if (input.noindex && input.path === "/") throw new UserError("The homepage can't be hidden from search engines.");
     await exec(db.from(tbl(schema.seoSettings)).upsert(vals(schema.seoSettings, input), { onConflict: "path" }));
     await audit(user, "update", "seo", input.path, `Updated SEO for ${input.path}`);
     refreshSite();

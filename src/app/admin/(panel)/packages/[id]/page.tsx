@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
+import { Eye } from "lucide-react";
+import { adminDb, cols, many, maybe, total, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { npr } from "@/lib/format";
 import { isUuid } from "@/lib/list";
 import { inventoryWithStock } from "@/server/inventory";
 import { eventTypeName, eventTypeOptions, inventoryItemOptions, mediaOptions } from "@/server/lookups";
 import { CONTENT_STATUS, StatusBadge } from "@/components/admin/status";
-import { Badge, Card, DetailList, EmptyState, Notice, PageHeader, Table, Td, Th } from "@/components/admin/ui";
-import { DeletePackageItemButton, EditPackageButton, PackageItemButton } from "../PackageClient";
+import { Badge, buttonClass, Card, DetailList, EmptyState, Notice, PageHeader, Table, Td, Th } from "@/components/admin/ui";
+import { DeletePackageItemButton, EditPackageButton, PackageItemButton, PackagePublishControls } from "../PackageClient";
 
 export const metadata: Metadata = { title: "Package" };
 
@@ -22,11 +23,14 @@ export default async function PackagePage({ params }: PageProps<"/admin/packages
   const pkg = await maybe<Row<typeof schema.packages> & { image: { url: string | null } | null }>(adminDb.from(tbl(schema.packages)).select(`${cols(schema.packages)},image:media!image_id(url)`).eq("id", id));
   if (!pkg) notFound();
   const manage = can("cms.manage") || can("inventory.update");
-  const [lines, eventTypes, media, itemOptions] = await Promise.all([
+  const [lines, eventTypes, media, itemOptions, services, quoted, booked] = await Promise.all([
     many<Row<typeof schema.packageItems>>(adminDb.from(tbl(schema.packageItems)).select(cols(schema.packageItems)).eq("package_id", id).order("position")),
     eventTypeOptions(),
     manage ? mediaOptions() : [],
     manage ? inventoryItemOptions() : [],
+    many<{ value: string; label: string }>(adminDb.from(tbl(schema.services)).select("value:id,label:name").neq("status", "ARCHIVED").order("position")),
+    total(adminDb.from(tbl(schema.quotations)).select("id", { count: "exact", head: true }).eq("package_id", id).is("deleted_at", null)),
+    total(adminDb.from(tbl(schema.bookings)).select("id", { count: "exact", head: true }).eq("package_id", id)),
   ]);
   const linked = lines.map((l) => l.inventoryItemId).filter((x): x is string => !!x);
   const stock = linked.length && can("inventory.view") ? await inventoryWithStock(linked) : [];
@@ -46,8 +50,23 @@ export default async function PackagePage({ params }: PageProps<"/admin/packages
           </span>
         }
         description={pkg.summary}
-        actions={manage && <EditPackageButton values={pkg} media={media} eventTypes={eventTypes} />}
+        actions={
+          <>
+            <a href={pkg.status === "PUBLISHED" ? `/packages/${pkg.slug}` : `/preview/packages/${pkg.slug}`} target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
+              <Eye className="size-4" aria-hidden /> {pkg.status === "PUBLISHED" ? "View on website" : "Preview"}
+            </a>
+            {manage && <PackagePublishControls id={pkg.id} status={pkg.status} canPublish={can("cms.manage")} />}
+            {manage && <EditPackageButton values={pkg} media={media} eventTypes={eventTypes} services={services} />}
+          </>
+        }
       />
+      {(quoted > 0 || booked > 0) && (
+        <div className="mb-4">
+          <Notice tone="info" title={`Used on ${quoted} quotation${quoted === 1 ? "" : "s"} and ${booked} booking${booked === 1 ? "" : "s"}`}>
+            Each of them keeps a copy of this package as it was when it was quoted or booked — editing the package here never changes their prices, contents or reserved stock.
+          </Notice>
+        </div>
+      )}
       {short.length > 0 && (
         <div className="mb-4">
           <Notice tone="warning" title="You don't own enough for one booking">
