@@ -41,7 +41,8 @@ export async function proxy(request: NextRequest) {
     signedIn = !!data?.claims?.sub;
   }
 
-  const needsAuth = (pathname.startsWith("/admin") || pathname.startsWith("/client") || pathname.startsWith("/staff")) && !PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  // /preview shows unpublished website drafts to signed-in editors (the page checks permissions too)
+  const needsAuth = (pathname.startsWith("/admin") || pathname.startsWith("/client") || pathname.startsWith("/staff") || pathname.startsWith("/preview")) && !PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (needsAuth && !signedIn) {
     const login = new URL(pathname.startsWith("/client") ? "/client/login" : pathname.startsWith("/staff") ? "/staff/login" : "/admin/login", request.url);
     if (pathname !== "/admin" && pathname !== "/client" && pathname !== "/staff") login.searchParams.set("next", pathname + search);
@@ -60,5 +61,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/client/:path*", "/staff/:path*", "/quote/:path*", "/auth/:path*", "/api/admin/:path*"],
+  matcher: ["/admin/:path*", "/preview/:path*", "/preview", "/client/:path*", "/staff/:path*", "/quote/:path*", "/auth/:path*", "/api/admin/:path*"],
 };

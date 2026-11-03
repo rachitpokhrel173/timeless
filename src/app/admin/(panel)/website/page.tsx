@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ExternalLink, Images, MessageSquareQuote, Package, Sparkles } from "lucide-react";
+import { Eye, ExternalLink, Images, MessageSquareQuote, Package, Sparkles } from "lucide-react";
 import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
+import { navLinks, siteSettings as defaultSite } from "@/data/site";
+import { draftKeys, loadEditable } from "@/server/cms";
 import { mediaOptions } from "@/server/lookups";
 import { CONTENT_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, buttonClass, Card, EmptyState, LinkButton, PageHeader, Table, Tabs, Td, Th } from "@/components/admin/ui";
 import { DeleteSocialLinkButton, PageSeoButton, SectionControls, SeoGlobalForm, SocialLinkButton } from "./WebsiteClient";
+import { ContactForm, NavigationForm } from "./SiteForms";
+import { PublishPanel } from "./PublishPanel";
+import { revisionRows } from "./revisions";
 
 export const metadata: Metadata = { title: "Website CMS" };
 
@@ -24,17 +29,23 @@ export default async function WebsitePage({ searchParams }: PageProps<"/admin/we
   if (!user.permissions.has("cms.view") && !user.permissions.has("cms.manage")) await requirePage("cms.view");
   const manage = user.permissions.has("cms.manage");
   const { str } = listParams(await searchParams);
-  const tab = ["homepage", "content", "seo", "social"].includes(str("tab") ?? "") ? str("tab")! : "homepage";
+  const tab = ["homepage", "content", "contact", "seo", "social"].includes(str("tab") ?? "") ? str("tab")! : "homepage";
+  const settingDrafts = await draftKeys("setting");
 
   return (
     <>
       <PageHeader
         title="Website CMS"
-        description="Everything visitors see on timelesstieevents.com.np. Changes go live as soon as you save."
+        description="Everything visitors see on timelesstieevents.com.np. Edits are saved as drafts — preview them, then publish to update the live website."
         actions={
-          <a href="/" target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
-            <ExternalLink className="size-4" aria-hidden /> View website
-          </a>
+          <>
+            <a href="/preview" target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
+              <Eye className="size-4" aria-hidden /> Preview drafts
+            </a>
+            <a href="/" target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
+              <ExternalLink className="size-4" aria-hidden /> View website
+            </a>
+          </>
         }
       />
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -55,6 +66,7 @@ export default async function WebsitePage({ searchParams }: PageProps<"/admin/we
         items={[
           { key: "homepage", label: "Homepage", href: "/admin/website" },
           { key: "content", label: "Pages & forms", href: "/admin/website?tab=content" },
+          { key: "contact", label: "Contact & menu", href: "/admin/website?tab=contact", count: (settingDrafts.has("business") ? 1 : 0) + (settingDrafts.has("navigation") ? 1 : 0) || undefined },
           { key: "seo", label: "SEO", href: "/admin/website?tab=seo" },
           { key: "social", label: "Social links", href: "/admin/website?tab=social" },
         ]}
@@ -66,7 +78,14 @@ export default async function WebsitePage({ searchParams }: PageProps<"/admin/we
             {CONTENT.map((c) => (
               <li key={c.key} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div>
-                  <p className="font-medium">{c.label}</p>
+                  <p className="font-medium">
+                    {c.label}
+                    {settingDrafts.has(c.key) && (
+                      <Badge tone="warning" className="ml-2">
+                        Unpublished changes
+                      </Badge>
+                    )}
+                  </p>
                   <p className="text-xs text-a-muted">{c.hint}</p>
                 </div>
                 <LinkButton href={`/admin/website/content/${c.key}`} size="sm">
@@ -76,8 +95,8 @@ export default async function WebsitePage({ searchParams }: PageProps<"/admin/we
             ))}
             <li className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
-                <p className="font-medium">Business details, logo & contact</p>
-                <p className="text-xs text-a-muted">Name, phones, address and announcement bar — in Settings</p>
+                <p className="font-medium">Logo, site title & announcement bar</p>
+                <p className="text-xs text-a-muted">In Settings (contact details are under Contact &amp; menu)</p>
               </div>
               {user.permissions.has("settings.manage") && (
                 <LinkButton href="/admin/settings" size="sm">
@@ -97,6 +116,7 @@ export default async function WebsitePage({ searchParams }: PageProps<"/admin/we
           </ul>
         </Card>
       )}
+      {tab === "contact" && <ContactAndMenu manage={manage} />}
       {tab === "seo" && <Seo manage={manage} />}
       {tab === "social" && <Social manage={manage} />}
     </>
@@ -109,9 +129,14 @@ async function Homepage({ manage }: { manage: boolean }) {
   );
   const ordered = sections.filter((s) => s.key !== "offer");
   const offer = sections.find((s) => s.key === "offer");
+  const drafts = await draftKeys("section");
   return (
     <div className="space-y-4">
-      <Card title="Homepage sections" description="Shown top to bottom in this order. Hidden sections are kept as drafts." bodyClassName="p-0">
+      <Card
+        title="Homepage sections"
+        description="Shown top to bottom in this order. Moving or hiding a section changes the live homepage straight away; edits to a section's content wait as a draft until you publish them."
+        bodyClassName="p-0"
+      >
         {ordered.length === 0 ? (
           <EmptyState compact title="No homepage content — run the seed (see README)" />
         ) : (
@@ -126,6 +151,7 @@ async function Homepage({ manage }: { manage: boolean }) {
                   <p className="text-xs text-a-muted">Edited {relativeTime(s.updatedAt)}</p>
                 </div>
                 {s.content?.placeholder && <Badge tone="warning">Sample content</Badge>}
+                {drafts.has(s.key) && <Badge tone="warning">Unpublished changes</Badge>}
                 <StatusBadge map={CONTENT_STATUS} value={s.status} />
                 {manage && <SectionControls sectionKey={s.key} published={s.status === "PUBLISHED"} first={i === 0} last={i === ordered.length - 1} />}
                 <LinkButton href={`/admin/website/sections/${s.key}`} size="sm">
@@ -219,5 +245,82 @@ async function Social({ manage }: { manage: boolean }) {
         </ul>
       )}
     </Card>
+  );
+}
+
+const DESTINATIONS = [
+  { value: "/", label: "Home" },
+  { value: "/about", label: "About" },
+  { value: "/services", label: "Services" },
+  { value: "/gallery", label: "Gallery" },
+  { value: "/catalogue", label: "Catalogue" },
+  { value: "/contact", label: "Contact" },
+  { value: "/inquiry", label: "Inquiry form" },
+  { value: "/#packages", label: "Homepage — Packages" },
+];
+
+async function ContactAndMenu({ manage }: { manage: boolean }) {
+  const [business, nav, services] = await Promise.all([
+    loadEditable("setting", "business"),
+    loadEditable("setting", "navigation"),
+    many<{ slug: string; name: string }>(adminDb.from(tbl(schema.services)).select("slug,name").eq("status", "PUBLISHED").order("position")),
+  ]);
+  type Biz = Partial<typeof defaultSite> & { hours?: string; mapUrl?: string };
+  const b = { ...defaultSite, ...((business.draft?.content ?? business.published?.content ?? {}) as Biz) };
+  const n = (nav.draft?.content ?? nav.published?.content ?? null) as { links?: { label: string; href: string }[]; footerText?: string; copyright?: string } | null;
+  const destinations = [...DESTINATIONS, ...services.map((s) => ({ value: `/services/${s.slug}`, label: `Service — ${s.name}` }))];
+  const panel = (key: "business" | "navigation", state: typeof business) => (
+    <PublishPanel
+      scope="setting"
+      contentKey={key}
+      manage={manage}
+      stale={state.stale}
+      draft={state.draft ? { updatedAt: state.draft.updatedAt.toISOString(), editor: state.draft.editor } : null}
+      previewHref="/preview"
+      revisions={revisionRows(state.revisions)}
+    />
+  );
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <Card title="Contact details" description="Shown in the header, footer, contact page and Google's business listing.">
+          {manage ? (
+            <ContactForm
+              key={business.draft?.updatedAt.toISOString() ?? "live"}
+              values={{
+                name: b.name,
+                email: b.email,
+                phones: (b.phones ?? []).map((p) => (p.e164 && p.e164 !== `+977${p.label.replace(/\D/g, "")}` ? `${p.label} | ${p.e164}` : p.label)).join("\n"),
+                whatsapp: b.whatsapp ?? "",
+                street: b.address?.street ?? "",
+                city: b.address?.city ?? "",
+                postalCode: b.address?.postalCode ?? "",
+                hours: b.hours ?? "",
+                mapUrl: b.mapUrl ?? "",
+              }}
+            />
+          ) : (
+            <p className="text-[13px]">
+              {b.name} · {b.email}
+            </p>
+          )}
+        </Card>
+        {panel("business", business)}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        <Card title="Menu & footer" description="The links in the header and footer, the footer text and the copyright line. Social links are on the Social links tab.">
+          {manage ? (
+            <NavigationForm
+              key={nav.draft?.updatedAt.toISOString() ?? "live"}
+              destinations={destinations}
+              values={{ links: n?.links?.length ? n.links : navLinks, footerText: n?.footerText ?? "", copyright: n?.copyright ?? "" }}
+            />
+          ) : (
+            <p className="text-[13px]">{(n?.links?.length ? n.links : navLinks).map((l) => l.label).join(" · ")}</p>
+          )}
+        </Card>
+        {panel("navigation", nav)}
+      </div>
+    </div>
   );
 }

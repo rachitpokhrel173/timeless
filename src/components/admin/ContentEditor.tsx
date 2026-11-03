@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, ImageIcon, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, Dialog, inputClass, useRun } from "./interactive";
@@ -44,15 +44,26 @@ export default function ContentEditor({
   media,
   onSave,
   saveLabel = "Save",
+  successMessage = "Saved — the website is updated",
+  onSaved,
 }: {
   initial: Json;
   media: MediaOption[];
   onSave: (json: string) => Promise<ActionResult<unknown>>;
   saveLabel?: string;
+  successMessage?: string;
+  onSaved?: () => void;
 }) {
   const [value, setValue] = useState<Json>(initial);
   const [dirty, setDirty] = useState(false);
   const { run, pending } = useRun();
+  // Warn before leaving the page with unsaved edits
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const set = (v: Json) => {
     setValue(v);
     setDirty(true);
@@ -62,7 +73,7 @@ export default function ContentEditor({
       <Node value={value} onChange={set} media={media} path="" />
       <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-2 border-t border-a-border bg-a-surface px-4 py-3">
         {dirty && <span className="mr-auto text-xs text-a-warning">Unsaved changes</span>}
-        <Button variant="primary" pending={pending} disabled={!dirty} onClick={() => run(() => onSave(JSON.stringify(value)), { success: "Saved — the website is updated", onSuccess: () => setDirty(false) })}>
+        <Button variant="primary" pending={pending} disabled={!dirty} onClick={() => run(() => onSave(JSON.stringify(value)), { success: successMessage, onSuccess: () => (setDirty(false), onSaved?.()) })}>
           {saveLabel}
         </Button>
       </div>

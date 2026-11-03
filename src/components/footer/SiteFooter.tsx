@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { LockKeyhole, Mail, MapPin, Phone } from "lucide-react";
-import { legalLinks, navLinks } from "@/data/site";
-import { getSiteSettings } from "@/lib/content";
+import { Clock, LockKeyhole, Mail, MapPin, Phone } from "lucide-react";
+import { getNavigation, getSiteSettings, type NavigationContent } from "@/lib/content";
+import type { NavLink, SiteSettings } from "@/types";
 import { mailHref, telHref } from "@/lib/utils";
 import Logo from "@/components/brand/Logo";
 import SocialLinks from "@/components/navigation/SocialLinks";
 import BuiltBy from "./BuiltBy";
 
-export default async function SiteFooter() {
-  const site = await getSiteSettings();
+/** `site`/`nav` are passed by the draft preview; the live site reads the published settings. */
+export default async function SiteFooter(props: { site?: SiteSettings; nav?: NavigationContent & { legal: NavLink[] } }) {
+  const [site, nav] = await Promise.all([props.site ?? getSiteSettings(), props.nav ?? getNavigation()]);
+  const { links: navLinks, legal: legalLinks } = nav;
   const link = "text-ivory/75 transition-colors hover:text-ivory";
 
   return (
@@ -21,6 +23,7 @@ export default async function SiteFooter() {
               <Logo tone="ivory" size="lg" />
             </Link>
             <p className="mt-4 text-[0.8rem] text-ivory/60">{site.tagline}</p>
+            {nav.footerText && <p className="mt-3 max-w-xs text-[0.8rem] leading-relaxed text-ivory/60">{nav.footerText}</p>}
           </div>
 
           <nav aria-label="Footer" className="lg:justify-self-center">
@@ -52,12 +55,18 @@ export default async function SiteFooter() {
               <Mail className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
               {site.email}
             </a>
+            {site.hours && (
+              <p className="flex items-center gap-2.5 text-ivory/75">
+                <Clock className="size-4 shrink-0" strokeWidth={1.5} aria-hidden />
+                {site.hours}
+              </p>
+            )}
           </address>
         </div>
 
         <div className="mt-10 flex flex-col gap-4 border-t border-ivory/10 py-6 text-[0.78rem] text-ivory/55 md:flex-row md:items-center md:justify-between md:pr-20">
           <p>
-            &copy; {new Date().getFullYear()} {site.name}. All rights reserved.
+            {nav.copyright ? nav.copyright.replace("{year}", String(new Date().getFullYear())) : <>&copy; {new Date().getFullYear()} {site.name}. All rights reserved.</>}
           </p>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
             <ul className="flex gap-6">

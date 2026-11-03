@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Sparkles } from "lucide-react";
+import { Eye, Sparkles } from "lucide-react";
 import { adminDb, all, cols, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
+import { npr } from "@/lib/format";
 import { eventTypeName, eventTypeOptions, mediaOptions } from "@/server/lookups";
 import { CONTENT_STATUS, StatusBadge } from "@/components/admin/status";
-import { Badge, Card, EmptyState, PageHeader } from "@/components/admin/ui";
-import { DeleteServiceItemButton, ServiceButton, ServiceItemButton } from "./ServiceClient";
+import { Badge, buttonClass, Card, EmptyState, PageHeader } from "@/components/admin/ui";
+import { DeleteServiceItemButton, ServiceButton, ServiceItemButton, ServiceStatusControls } from "./ServiceClient";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -22,14 +23,18 @@ export default async function ServicesPage() {
 
   return (
     <>
-      <PageHeader title="Services" description="The decoration services on the Services page — weddings, engagements, birthdays, corporate and more." actions={manage && <ServiceButton media={media} eventTypes={eventTypes} />} />
+      <PageHeader
+        title="Services"
+        description="The decoration services on the Services page, each with its own page at /services/…. New services start as drafts: preview, then publish."
+        actions={manage && <ServiceButton media={media} eventTypes={eventTypes} />}
+      />
       {services.length === 0 ? (
         <Card>
           <EmptyState icon={Sparkles} title="No services yet" />
         </Card>
       ) : (
         <div className="space-y-4">
-          {services.map((s) => {
+          {services.map((s, idx) => {
             const mine = items.filter((i) => i.serviceId === s.id);
             return (
               <Card key={s.id} bodyClassName="p-0">
@@ -45,16 +50,24 @@ export default async function ServicesPage() {
                       <h2 className="font-serif text-xl font-medium">{s.name}</h2>
                       <StatusBadge map={CONTENT_STATUS} value={s.status} />
                       {s.featured && <Badge tone="gold">Featured</Badge>}
-                      {manage && (
-                        <span className="ml-auto">
-                          <ServiceButton values={s} media={media} eventTypes={eventTypes} />
-                        </span>
-                      )}
+                      {!s.image?.url && <Badge tone="warning">No cover image</Badge>}
+                      <span className="ml-auto flex flex-wrap items-center gap-1">
+                        <a href={s.status === "PUBLISHED" ? `/services/${s.slug}` : `/preview/services/${s.slug}`} target="_blank" rel="noreferrer" className={buttonClass("ghost", "sm")}>
+                          <Eye className="size-4" aria-hidden /> {s.status === "PUBLISHED" ? "View" : "Preview"}
+                        </a>
+                        {manage && <ServiceButton values={s} media={media} eventTypes={eventTypes} />}
+                      </span>
                     </div>
                     <p className="mt-1 text-[13px] text-a-muted">
-                      {s.summary} · {eventTypeName(eventTypes, s.eventType)}
+                      {s.summary} · {s.category ?? eventTypeName(eventTypes, s.eventType)}
+                      {s.startingPrice ? ` · from ${npr(s.startingPrice)}` : ""} · /services/{s.slug}
                     </p>
                     <p className="mt-2 line-clamp-3 text-[13px]">{s.description}</p>
+                    {manage && (
+                      <div className="mt-3">
+                        <ServiceStatusControls id={s.id} status={s.status} first={idx === 0} last={idx === services.length - 1} />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="border-t border-a-border px-4 py-3">

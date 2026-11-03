@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { adminDb, maybe, schema, tbl } from "@/db";
 import { requirePage } from "@/lib/auth/session";
+import { loadEditable } from "@/server/cms";
 import { mediaOptions } from "@/server/lookups";
-import { Card, Notice, PageHeader } from "@/components/admin/ui";
+import { Badge, Card, Notice, PageHeader } from "@/components/admin/ui";
 import { SettingEditor } from "../../WebsiteClient";
+import { PublishPanel } from "../../PublishPanel";
+import { revisionRows } from "../../revisions";
 
 export const metadata: Metadata = { title: "Edit website content" };
 
 const KEYS = {
-  about: { label: "About page", fallback: {} },
-  faqs: { label: "FAQs", fallback: [{ q: "", a: "" }] },
-  inquiry_options: { label: "Inquiry form options", fallback: { services: [], decorationOptions: [], guestCounts: [], budgets: [] } },
-  catalogue_meta: { label: "Catalogue intro", fallback: { offerings: [], priceNote: "" } },
+  about: { label: "About page", fallback: {}, preview: "/preview/about" },
+  faqs: { label: "FAQs", fallback: [{ q: "", a: "" }], preview: undefined },
+  inquiry_options: { label: "Inquiry form options", fallback: { services: [], decorationOptions: [], guestCounts: [], budgets: [] }, preview: undefined },
+  catalogue_meta: { label: "Catalogue intro", fallback: { offerings: [], priceNote: "" }, preview: undefined },
 } as const;
 
 export default async function ContentPage({ params }: PageProps<"/admin/website/content/[key]">) {
@@ -21,19 +23,38 @@ export default async function ContentPage({ params }: PageProps<"/admin/website/
   const { key } = await params;
   if (!(key in KEYS)) notFound();
   const k = key as keyof typeof KEYS;
-  const row = await maybe<{ value: Parameters<typeof SettingEditor>[0]["initial"] }>(adminDb.from(tbl(schema.siteSettings)).select("value").eq("key", k));
   const manage = user.permissions.has("cms.manage");
-  const media = manage ? await mediaOptions() : [];
+  const [state, media] = await Promise.all([loadEditable("setting", k), manage ? mediaOptions() : []]);
+  const initial = (state.draft?.content ?? state.published?.content ?? KEYS[k].fallback) as Parameters<typeof SettingEditor>[0]["initial"];
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader back={{ href: "/admin/website?tab=content", label: "Website CMS" }} title={KEYS[k].label} />
-      {!manage ? (
-        <Notice tone="info">You can view website content but not edit it.</Notice>
-      ) : (
-        <Card>
-          <SettingEditor settingKey={k} initial={row?.value ?? (KEYS[k].fallback as Parameters<typeof SettingEditor>[0]["initial"])} media={media} />
-        </Card>
-      )}
+    <div className="mx-auto max-w-6xl">
+      <PageHeader
+        back={{ href: "/admin/website?tab=content", label: "Website CMS" }}
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            {KEYS[k].label} {state.draft && <Badge tone="warning">Unpublished changes</Badge>}
+          </span>
+        }
+        description="Saving keeps your changes as a draft until you publish them."
+      />
+      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+        {!manage ? (
+          <Notice tone="info">You can view website content but not edit it.</Notice>
+        ) : (
+          <Card>
+            <SettingEditor key={state.draft?.updatedAt.toISOString() ?? "live"} settingKey={k} initial={initial} media={media} />
+          </Card>
+        )}
+        <PublishPanel
+          scope="setting"
+          contentKey={k}
+          manage={manage}
+          stale={state.stale}
+          draft={state.draft ? { updatedAt: state.draft.updatedAt.toISOString(), editor: state.draft.editor } : null}
+          previewHref={KEYS[k].preview}
+          revisions={revisionRows(state.revisions)}
+        />
+      </div>
     </div>
   );
 }

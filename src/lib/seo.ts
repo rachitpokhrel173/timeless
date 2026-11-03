@@ -25,6 +25,7 @@ export async function pageMetadata({
   path,
   image: defaultImage,
   absoluteTitle,
+  noindex,
 }: {
   title: string;
   description: string;
@@ -33,29 +34,33 @@ export async function pageMetadata({
   image?: ImageAsset;
   /** Skip the "%s | Site" template (the home page title already contains the brand). */
   absoluteTitle?: boolean;
+  /** Keep the page out of search results (e.g. a page with nothing published yet). */
+  noindex?: boolean;
 }): Promise<Metadata> {
   const [site, override] = await Promise.all([getSiteSettings(), getPageSeo(path)]);
   const title = override?.title || defaultTitle;
   const description = override?.description || defaultDescription;
   const image = override?.image ?? defaultImage;
   // <title> gets the brand from the layout template; share cards need it spelled out
-  const shareTitle = title.includes(site.shortName) ? title : `${title} | ${site.shortName}`;
+  const ogTitle = override?.ogTitle || title;
+  const shareTitle = ogTitle.includes(site.shortName) ? ogTitle : `${ogTitle} | ${site.shortName}`;
+  const shareDescription = override?.ogDescription || description;
   const shareImage = image ? { url: image.src, width: image.width, height: image.height, alt: image.alt } : defaultShareImage(site);
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description,
-    ...(override?.noindex && { robots: { index: false, follow: true } }),
-    alternates: { canonical: path },
+    ...((override?.noindex || noindex) && { robots: { index: false, follow: true } }),
+    alternates: { canonical: override?.canonicalPath || path },
     openGraph: {
       title: shareTitle,
-      description,
-      url: path,
+      description: shareDescription,
+      url: override?.canonicalPath || path,
       siteName: site.name,
       locale: site.locale,
       type: "website",
       images: [shareImage],
     },
-    twitter: { card: "summary_large_image", title: shareTitle, description, images: [shareImage] },
+    twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: [shareImage] },
   };
 }
 
@@ -73,7 +78,7 @@ export const localBusinessJsonLd = (services: Service[], site: SiteSettings) => 
   // Google wants real photos of the business here, and a raster (not SVG) logo
   image: [absolute("/opengraph-image"), ...services.slice(0, 4).map((s) => absolute(s.image.src))],
   logo: absolute(site.logo?.src ?? "/apple-icon.png"),
-  hasMap: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  hasMap: site.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${site.name}, ${site.address.street}, ${site.address.city}`,
   )}`,
   email: site.email,

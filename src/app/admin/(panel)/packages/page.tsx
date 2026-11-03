@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Package } from "lucide-react";
-import { adminDb, all, schema, tbl } from "@/db";
+import { adminDb, all, many, schema, tbl } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { npr } from "@/lib/format";
 import { eventTypeOptions, mediaOptions } from "@/server/lookups";
 import { CONTENT_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/admin/ui";
-import { NewPackageButton } from "./PackageClient";
+import { NewPackageButton, PackageOrder } from "./PackageClient";
 
 export const metadata: Metadata = { title: "Packages" };
 
@@ -16,7 +16,7 @@ export default async function PackagesPage() {
   const can = (p: Parameters<typeof user.permissions.has>[0]) => user.permissions.has(p);
   if (!can("cms.view") && !can("inventory.view")) await requirePage("cms.view");
   const manage = can("cms.manage") || can("inventory.update");
-  const [packages, bookings, media, eventTypes] = await Promise.all([
+  const [packages, bookings, media, eventTypes, services] = await Promise.all([
     all<{ id: string; name: string; tier: string | null; summary: string | null; price: number; priceFrom: boolean; status: string; featured: boolean; image: { url: string | null } | null; items: { inventoryItemId: string | null }[] }>(() =>
       adminDb
         .from(tbl(schema.packages))
@@ -27,14 +27,15 @@ export default async function PackagesPage() {
     all<{ packageId: string }>(() => adminDb.from(tbl(schema.bookings)).select("packageId:package_id").not("package_id", "is", null).neq("status", "CANCELLED").order("id")),
     manage ? mediaOptions() : [],
     eventTypeOptions(),
+    manage ? many<{ value: string; label: string }>(adminDb.from(tbl(schema.services)).select("value:id,label:name").neq("status", "ARCHIVED").order("position")) : [],
   ]);
 
   return (
     <>
       <PageHeader
         title="Packages"
-        description="Your Essential, Signature and Bespoke offers. Each package lists what's included; items linked to inventory are reserved when it's booked."
-        actions={manage && <NewPackageButton media={media} eventTypes={eventTypes} />}
+        description="Your Essential, Signature and Bespoke offers. Each package lists what's included; items linked to inventory are reserved when it's booked. Quotations keep a copy of the package, so later edits never change them."
+        actions={manage && <NewPackageButton media={media} eventTypes={eventTypes} services={services} />}
       />
       {packages.length === 0 ? (
         <Card>
@@ -42,8 +43,14 @@ export default async function PackagesPage() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {packages.map((p) => (
-            <Link key={p.id} href={`/admin/packages/${p.id}`} className="group overflow-hidden rounded-xl border border-a-border bg-a-surface hover:border-a-strong">
+          {packages.map((p, i) => (
+            <div key={p.id} className="relative">
+            {manage && (
+              <div className="absolute top-2 right-2 z-10 rounded-md bg-a-surface/90">
+                <PackageOrder id={p.id} first={i === 0} last={i === packages.length - 1} />
+              </div>
+            )}
+            <Link href={`/admin/packages/${p.id}`} className="group block overflow-hidden rounded-xl border border-a-border bg-a-surface hover:border-a-strong">
               <div className="aspect-[16/9] bg-a-subtle">
                 {p.image?.url && (
                   // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail
@@ -64,6 +71,7 @@ export default async function PackagesPage() {
                 </div>
               </div>
             </Link>
+            </div>
           ))}
         </div>
       )}

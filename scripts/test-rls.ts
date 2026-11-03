@@ -60,7 +60,8 @@ async function main() {
       const [inv] = await tx`insert into public.invoices (number, booking_id, customer_id, status, total, due_date) values ('INV-T-1', ${bk.id}, ${ca.id}, 'SENT', 100000, current_date + 10) returning id`;
       await tx`insert into public.internal_notes (entity_type, entity_id, body) values ('customer', ${ca.id}, 'secret')`;
       await tx`insert into public.services (slug, name, summary, description, status) values ('rls-pub', 'Pub', 's', 'd', 'PUBLISHED'), ('rls-draft', 'Draft', 's', 'd', 'DRAFT')`;
-      await tx`insert into public.testimonials (customer_name, event_type, quote, status, consent) values ('A', 'Wedding', 'ok', 'PUBLISHED', true), ('B', 'Wedding', 'no consent', 'PUBLISHED', false), ('C', 'Wedding', 'draft', 'DRAFT', true)`;
+      // Since 00025 the database refuses to publish without approval + consent (see scripts/test-phase5.ts)
+      await tx`insert into public.testimonials (customer_name, event_type, quote, status, consent, review_status) values ('A', 'Wedding', 'ok', 'PUBLISHED', true, 'APPROVED'), ('B', 'Wedding', 'no consent', 'DRAFT', false, 'APPROVED'), ('C', 'Wedding', 'draft', 'DRAFT', true, 'PENDING')`;
       await tx`insert into public.site_settings (key, value, is_public) values ('rls-public', '{}'::jsonb, true), ('rls-private', '{}'::jsonb, false)`;
       // Rows in every private table, so "cannot read" checks are meaningful
       await tx`insert into public.inquiries (number, name, phone, event_type) values ('IQ-T-1', 'Inq', '9800000004', 'wedding')`;

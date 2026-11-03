@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Mail, MapPin, Phone, Plus } from "lucide-react";
+import { Clock, Mail, MapPin, Phone, Plus } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import SocialLinks from "@/components/navigation/SocialLinks";
 import { WhatsAppIcon } from "@/components/ui/BrandIcons";
@@ -73,8 +73,19 @@ export default async function ContactPage({ searchParams }: PageProps<"/contact"
               <MapPin className="mt-1 size-5 shrink-0 text-gold-deep" strokeWidth={1.5} aria-hidden />
               <p className="py-1">
                 {site.address.street}, {site.address.city} {site.address.postalCode}, {site.address.country}
+                {site.mapUrl && (
+                  <a href={site.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-1 block text-sm text-gold-deep hover:underline">
+                    Open in Google Maps
+                  </a>
+                )}
               </p>
             </li>
+            {site.hours && (
+              <li className="flex gap-4">
+                <Clock className="mt-1 size-5 shrink-0 text-gold-deep" strokeWidth={1.5} aria-hidden />
+                <p className="py-1">{site.hours}</p>
+              </li>
+            )}
           </ul>
           <SocialLinks />
 

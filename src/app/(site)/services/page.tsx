@@ -44,13 +44,18 @@ export default async function ServicesPage() {
               <span className="font-serif text-lg text-gold-deep">{pad2(i + 1)}</span>
               <h2 className="mt-3 font-serif text-4xl leading-tight font-medium md:text-5xl">{s.name}</h2>
               <p className="mt-5 text-lg leading-relaxed text-muted">{s.description}</p>
-              <Link
-                href="/contact#inquiry"
-                className="group mt-8 inline-flex items-center gap-2 border-b border-ink/30 pb-1 text-sm font-medium tracking-wide hover:border-gold-deep hover:text-gold-deep"
-              >
-                Ask about {s.name.toLowerCase()}
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
-              </Link>
+              <div className="mt-8 flex flex-wrap items-center gap-x-8 gap-y-4">
+                <Link
+                  href="/contact#inquiry"
+                  className="group inline-flex items-center gap-2 border-b border-ink/30 pb-1 text-sm font-medium tracking-wide hover:border-gold-deep hover:text-gold-deep"
+                >
+                  Ask about {s.name.toLowerCase()}
+                  <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
+                </Link>
+                <Link href={`/services/${s.slug}`} className="text-sm text-muted hover:text-gold-deep">
+                  More about {s.name.toLowerCase()}
+                </Link>
+              </div>
             </div>
           </article>
         ))}

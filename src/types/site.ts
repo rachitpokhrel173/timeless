@@ -49,6 +49,10 @@ export type SiteSettings = {
   geo: { lat: number; lng: number };
   areaServed: string[];
   announcement: string;
+  /** Opening hours shown on the contact page and footer, e.g. "Sun–Fri 10am–6pm" (Website CMS → Contact). */
+  hours?: string;
+  /** Google Maps link for the office (Website CMS → Contact). */
+  mapUrl?: string;
   socials: SocialLink[];
 };
 
