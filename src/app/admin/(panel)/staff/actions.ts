@@ -7,7 +7,7 @@ import { audit } from "@/lib/audit";
 import { getCurrentUser, type SessionUser } from "@/lib/auth/session";
 import { storeUpload, UploadError } from "@/server/media";
 import { notify } from "@/server/notifications";
-import { provisionLogin, replaceRole, resendInvitation, type StepResult } from "@/server/staff-accounts";
+import { provisionLogin, replaceRole, resendInvitation, syncAuthBan, type StepResult } from "@/server/staff-accounts";
 import { deleteStoredFile } from "@/server/storage";
 
 const time = () =>
@@ -225,6 +225,7 @@ export const unlinkStaffLogin = adminAction(["staff.invite", "users.manage"], z.
 export const setStaffLoginActive = adminAction(["staff.invite", "users.manage"], z.object({ staffId: zs.uuid(), active: z.boolean() }), async ({ staffId, active }, user) => {
   const s = await staffName(staffId);
   const userId = await dbStep(() => rpc<string>(db, "set_staff_login_active", { p_staff: staffId, p_active: active }));
+  await syncAuthBan(userId, active);
   await audit(user, active ? "activate" : "suspend", "staff", staffId, `${active ? "Reactivated" : "Suspended"} the login of ${s.name}`, { userId });
   if (active) await notify({ type: "account.reactivated", title: "Your account has been reactivated", userId, href: "/admin" });
 });

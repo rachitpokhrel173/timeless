@@ -15,6 +15,12 @@ const nextConfig: NextConfig = {
   },
   // Staff video manual (public/manual/index.html): reachable only by its direct link. It isn't in
   // the nav or the sitemap, and these headers keep search engines from indexing it.
+  // Invitation and reset emails build links from Supabase's Site URL. If that is ever set to
+  // ".../admin", links arrive as /admin/admin/...; send them to the right page, keeping the
+  // query (one-time token) — the browser keeps any #fragment across the redirect.
+  async redirects() {
+    return [{ source: "/admin/admin/:path*", destination: "/admin/:path*", permanent: false }];
+  },
   async rewrites() {
     return [{ source: "/manual", destination: "/manual/index.html" }];
   },

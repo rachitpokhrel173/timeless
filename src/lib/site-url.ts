@@ -14,7 +14,14 @@ const LOCAL_HOST = /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]
  * into invitation emails.
  */
 export function resolveSiteUrl() {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "") || "";
+  // Origin only: a value like "https://example.com/admin" would otherwise double up email-link paths
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "";
+  let configured = "";
+  try {
+    configured = raw ? new URL(raw).origin : "";
+  } catch {
+    configured = "";
+  }
   const deployedProduction = process.env.VERCEL_ENV === "production" || process.env.NEXT_PUBLIC_VERCEL_ENV === "production";
   // NEXT_PUBLIC_SITE_URL set to the bare domain would point every canonical at a redirect
   if (configured.replace(/^https?:\/\//, "") === BARE_DOMAIN) return PRODUCTION_ORIGIN;

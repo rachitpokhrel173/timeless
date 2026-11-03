@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, MailPlus, Pencil, Plus, Trash2, UserCheck, UserX } from "lucide-react";
+import { KeyRound, Link2, MailPlus, Pencil, Plus, Trash2, UserCheck, UserPen, UserX } from "lucide-react";
 import { ActionButton, ActionForm, Button, CheckboxGroup, ConfirmButton, DialogButton, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
-import { deleteRole, inviteUser, linkStaff, resendUserInvitation, saveRole, setRolePermissions, setUserActive, setUserRoles } from "./actions";
+import { deleteRole, inviteUser, linkStaff, resendUserInvitation, saveRole, setRolePermissions, setUserActive, setUserRoles, updateUserDetails } from "./actions";
 
 export function InviteButton({ roles, staff }: { roles: Option[]; staff: Option[] }) {
   return (
@@ -35,10 +35,23 @@ export function UserRolesButton({ userId, roles, current }: { userId: string; ro
 
 export function LinkStaffButton({ userId, staff, current }: { userId: string; staff: Option[]; current: string | null }) {
   return (
-    <DialogButton label={<span className="sr-only">Team member link</span>} icon={Pencil} size="icon-sm" variant="ghost" title="Linked team member">
+    <DialogButton label={<span className="sr-only">Team member link</span>} icon={Link2} size="icon-sm" variant="ghost" title="Linked team member">
       {(close) => (
         <ActionForm action={linkStaff} extra={{ userId }} success="Saved" onSuccess={close} onCancel={close}>
           <SelectField label="Team member" name="staffId" options={staff} placeholder="None" defaultValue={current ?? ""} />
+        </ActionForm>
+      )}
+    </DialogButton>
+  );
+}
+
+export function EditUserButton({ userId, fullName, phone }: { userId: string; fullName: string; phone: string | null }) {
+  return (
+    <DialogButton label={<span className="sr-only">Edit details</span>} icon={UserPen} size="icon-sm" variant="ghost" title="Edit details" description="The email address is their sign-in and can't be changed here.">
+      {(close) => (
+        <ActionForm action={updateUserDetails} extra={{ userId }} success="Saved" onSuccess={close} onCancel={close}>
+          <TextField label="Name" name="fullName" required defaultValue={fullName} />
+          <TextField label="Phone" name="phone" type="tel" defaultValue={phone ?? ""} />
         </ActionForm>
       )}
     </DialogButton>

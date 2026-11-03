@@ -8,7 +8,7 @@ import { ALL_PERMISSIONS, type Permission } from "@/lib/auth/permissions";
 import { invitationRedirectUrl } from "@/lib/auth/redirects";
 import { serviceRoleConfigured, supabaseAdmin } from "@/lib/supabase/admin";
 import { notify } from "@/server/notifications";
-import { resendInvitation } from "@/server/staff-accounts";
+import { resendInvitation, syncAuthBan } from "@/server/staff-accounts";
 
 const roleById = (id: string) => maybe<{ id: string; key: string; name: string; isSystem: boolean }>(db.from(tbl(schema.roles)).select("id,key,name,isSystem:is_system").eq("id", id));
 
@@ -36,7 +36,8 @@ export const inviteUser = adminAction(
     const isCustomer = await maybe(adminDb.from(tbl(schema.customers)).select("id").eq("auth_user_id", profile.id).limit(1));
     if (isCustomer) throw new UserError("That email is a client-portal login. Use a different email for staff.");
     await exec(adminDb.from(tbl(schema.profiles)).update({ full_name: fullName, active: true }).eq("id", profile.id));
-    await exec(db.from(tbl(schema.userRoles)).upsert({ user_id: profile.id, role_id: roleId }, { onConflict: "user_id,role_id", ignoreDuplicates: true }));
+    if (profile.id === user.id) throw new UserError("You can't invite yourself.");
+    await checked(() => exec(db.from(tbl(schema.userRoles)).upsert({ user_id: profile.id, role_id: roleId }, { onConflict: "user_id,role_id", ignoreDuplicates: true })));
     // One login per team member, never a client login, never an archived record (checked by the database)
     if (staffId) await checked(() => rpc(db, "link_staff_login", { p_staff: staffId, p_user: profile.id, p_role: null }));
     await audit(user, "role_grant", "user", profile.id, `Invited ${email} as ${role.name}`);
@@ -50,14 +51,13 @@ export const setUserRoles = adminAction("users.manage", z.object({ userId: zs.uu
   const remove = current.filter((c) => !roleIds.includes(c.roleId));
   for (const id of add) guardSuper(roles.find((r) => r.id === id) ?? { key: "" }, user);
   for (const c of remove) guardSuper(c.r, user);
-  if (userId === user.id && remove.some((c) => c.r.key === "SUPER_ADMIN" || c.r.key === "ADMIN") && !roleIds.length) throw new UserError("You can't remove all of your own admin access.");
-  // Never leave the business without a Super Admin
-  if (remove.some((c) => c.r.key === "SUPER_ADMIN")) {
-    const supers = await many<{ userId: string }>(db.from(tbl(schema.userRoles)).select("userId:user_id,r:roles!inner(key)").eq("r.key", "SUPER_ADMIN"));
-    if (supers.filter((s) => s.userId !== userId).length === 0) throw new UserError("Keep at least one Super Admin.");
-  }
-  if (remove.length) await exec(db.from(tbl(schema.userRoles)).delete().eq("user_id", userId).in("role_id", remove.map((c) => c.roleId)));
-  if (add.length) await exec(db.from(tbl(schema.userRoles)).insert(add.map((roleId) => ({ user_id: userId, role_id: roleId }))));
+  // Only a Super Admin changes their own roles (also enforced by the database, 00026)
+  if (userId === user.id && !user.roleKeys.includes("SUPER_ADMIN") && (add.length || remove.length)) throw new UserError("You can't change your own roles — ask another administrator.");
+  if (current.length && !roleIds.length) throw new UserError("Keep at least one role — suspend the account instead to stop access.");
+  // The database also refuses roles carrying permissions you don't hold, and keeps one active Super Admin.
+  // Add first, then remove, so a failure never leaves the login without a role.
+  if (add.length) await checked(() => exec(db.from(tbl(schema.userRoles)).insert(add.map((roleId) => ({ user_id: userId, role_id: roleId })))));
+  if (remove.length) await checked(() => exec(db.from(tbl(schema.userRoles)).delete().eq("user_id", userId).in("role_id", remove.map((c) => c.roleId))));
   if (add.length || remove.length) await notify({ type: "account.role", title: "Your access has changed", body: `Roles now: ${roleIds.map((id) => roles.find((r) => r.id === id)?.name).filter(Boolean).join(", ") || "none"}`, userId, href: "/admin" });
   await audit(user, "role_change", "user", userId, `Roles changed: +${add.map((id) => roles.find((r) => r.id === id)?.name).join(", ") || "none"} / −${remove.map((c) => c.r.name).join(", ") || "none"}`);
 });
@@ -66,10 +66,25 @@ export const setUserActive = adminAction("users.manage", z.object({ userId: zs.u
   if (userId === user.id && !active) throw new UserError("You can't deactivate your own account.");
   const target = await many<{ r: { key: string } }>(db.from(tbl(schema.userRoles)).select("r:roles!inner(key)").eq("user_id", userId));
   if (target.some((t) => t.r.key === "SUPER_ADMIN") && !user.roleKeys.includes("SUPER_ADMIN")) throw new UserError("Only a Super Admin can deactivate a Super Admin.");
-  const p = await one<{ email: string }>(db.from(tbl(schema.profiles)).update({ active }).eq("id", userId).select("email"));
-  // Inactive profiles are rejected on every request (loadUser), so access stops immediately
+  // The database keeps at least one active Super Admin (00026)
+  const p = await checked(() => one<{ email: string }>(db.from(tbl(schema.profiles)).update({ active }).eq("id", userId).select("email")));
+  // Inactive profiles are refused on every request (loadUser) and by every RLS check, so access
+  // stops immediately; the Auth ban also stops new sign-ins and session refreshes.
+  await syncAuthBan(userId, active);
   await audit(user, active ? "activate" : "deactivate", "user", userId, `${active ? "Reactivated" : "Deactivated"} ${p.email}`);
+  if (active) await notify({ type: "account.reactivated", title: "Your account has been reactivated", userId, href: "/admin" });
 });
+
+export const updateUserDetails = adminAction(
+  "users.manage",
+  z.object({ userId: zs.uuid(), fullName: zs.required("Name", 120), phone: zs.optional(40) }),
+  async ({ userId, fullName, phone }, user) => {
+    const target = await many<{ r: { key: string } }>(db.from(tbl(schema.userRoles)).select("r:roles!inner(key)").eq("user_id", userId));
+    if (target.some((t) => t.r.key === "SUPER_ADMIN") && !user.roleKeys.includes("SUPER_ADMIN") && userId !== user.id) throw new UserError("Only a Super Admin can edit a Super Admin.");
+    const p = await one<{ email: string }>(db.from(tbl(schema.profiles)).update({ full_name: fullName, phone }).eq("id", userId).select("email"));
+    await audit(user, "update", "user", userId, `Updated the details of ${p.email}`);
+  },
+);
 
 /** Readable messages from the account functions (00021); everything else stays masked. */
 async function checked<T>(fn: () => Promise<T>) {
@@ -123,8 +138,13 @@ export const setRolePermissions = adminAction(
     const current = (await many<{ key: string }>(db.from(tbl(schema.rolePermissions)).select("key:permission_key").eq("role_id", roleId))).map((r) => r.key);
     const add = wanted.filter((p) => !current.includes(p));
     const remove = current.filter((p) => !wanted.includes(p as Permission));
-    if (remove.length) await exec(db.from(tbl(schema.rolePermissions)).delete().eq("role_id", roleId).in("permission_key", remove));
-    if (add.length) await exec(db.from(tbl(schema.rolePermissions)).insert(add.map((k) => ({ role_id: roleId, permission_key: k }))));
+    // You can only grant or remove permissions you hold yourself (also enforced by the database, 00026)
+    if (!user.roleKeys.includes("SUPER_ADMIN")) {
+      const outside = [...add, ...remove].filter((k) => !user.permissions.has(k as Permission));
+      if (outside.length) throw new UserError(`You can only change permissions you have yourself (${outside.join(", ")}).`);
+    }
+    if (remove.length) await checked(() => exec(db.from(tbl(schema.rolePermissions)).delete().eq("role_id", roleId).in("permission_key", remove)));
+    if (add.length) await checked(() => exec(db.from(tbl(schema.rolePermissions)).insert(add.map((k) => ({ role_id: roleId, permission_key: k })))));
     await audit(user, "role_change", "role", roleId, `Permissions for ${role.name}: +${add.length} / −${remove.length}`, { add, remove });
   },
 );
@@ -134,6 +154,6 @@ export const deleteRole = adminAction("users.manage", z.object({ id: zs.uuid() }
   if (!role) throw new UserError("Role not found.");
   if (role.isSystem) throw new UserError("Built-in roles can't be deleted — remove their permissions instead.");
   if (await maybe(db.from(tbl(schema.userRoles)).select("user_id").eq("role_id", id).limit(1))) throw new UserError("Someone still has this role. Change their roles first.");
-  await exec(db.from(tbl(schema.roles)).delete().eq("id", id));
+  await checked(() => exec(db.from(tbl(schema.roles)).delete().eq("id", id)));
   await audit(user, "delete", "role", id, `Deleted role ${role.name}`);
 });

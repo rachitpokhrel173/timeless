@@ -46,6 +46,23 @@ export async function authInfo(userIds: string[]): Promise<Map<string, AuthInfo>
   return out;
 }
 
+/**
+ * Mirror a suspension in Supabase Auth: a banned user can't sign in or refresh their session.
+ * profiles.active stays the source of truth — every request and RLS check already refuses an
+ * inactive profile — so a failure here is logged, not fatal. Returns whether Auth was updated.
+ */
+export async function syncAuthBan(userId: string, active: boolean): Promise<boolean> {
+  if (!serviceRoleConfigured()) return false;
+  try {
+    const { error } = await supabaseAdmin().auth.admin.updateUserById(userId, { ban_duration: active ? "none" : "876000h" });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error(`[staff-accounts] couldn't ${active ? "lift" : "apply"} the Auth ban:`, (error as Error).message);
+    return false;
+  }
+}
+
 export type AccountStatus = "NONE" | "INVITE_FAILED" | "PENDING" | "EXPIRED" | "ACTIVE" | "SUSPENDED";
 
 export const ACCOUNT_STATUS: Record<AccountStatus, { label: string; tone: "neutral" | "success" | "warning" | "danger" | "info" }> = {
@@ -104,8 +121,8 @@ export async function replaceRole(userId: string, roleKey: string, user: Session
   if (userId === user.id) throw new UserError("You can't change your own role here — ask another administrator.");
   if (current.length === 1 && current[0]!.roleId === role.id) return { changed: false, from: current.map((c) => c.r.name), to: role.name };
   if (current.some((c) => c.r.key === "SUPER_ADMIN") && role.key !== "SUPER_ADMIN") {
-    const supers = await many<{ userId: string }>(db.from(tbl(schema.userRoles)).select("userId:user_id,r:roles!inner(key)").eq("r.key", "SUPER_ADMIN"));
-    if (supers.filter((s) => s.userId !== userId).length === 0) throw new UserError("Keep at least one Super Admin.");
+    const supers = await many<{ userId: string }>(db.from(tbl(schema.userRoles)).select("userId:user_id,r:roles!inner(key),p:profiles!inner(active)").eq("r.key", "SUPER_ADMIN").eq("p.active", true));
+    if (supers.filter((s) => s.userId !== userId).length === 0) throw new UserError("Keep at least one active Super Admin.");
   }
   // Add first, then remove the rest, so the login is never left without a role
   if (!current.some((c) => c.roleId === role.id)) await exec(db.from(tbl(schema.userRoles)).insert({ user_id: userId, role_id: role.id }));

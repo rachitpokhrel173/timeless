@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { adminDb, all, cols, many, schema, tbl, type Row } from "@/db";
-import { PERMISSIONS } from "@/lib/auth/permissions";
+import { PERMISSIONS, type Permission } from "@/lib/auth/permissions";
 import { requirePage } from "@/lib/auth/session";
-import { relativeTime } from "@/lib/format";
+import { fmtDate, relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { staffOptions } from "@/server/lookups";
 import { ACCOUNT_STATUS, accountStatus, authInfo, inviteIsOpen } from "@/server/staff-accounts";
 import { FilterSelect } from "@/components/admin/interactive";
 import { Avatar, Badge, Card, Notice, PageHeader, Table, Tabs, Td, Th } from "@/components/admin/ui";
-import { ActiveButton, DeleteRoleButton, InviteButton, LinkStaffButton, PermissionEditor, ResendButton, RoleButton, UserRolesButton } from "./UsersClient";
+import { ActiveButton, DeleteRoleButton, EditUserButton, InviteButton, LinkStaffButton, PermissionEditor, ResendButton, RoleButton, UserRolesButton } from "./UsersClient";
 
 export const metadata: Metadata = { title: "Users & Roles" };
 
@@ -22,7 +22,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
     all<{ userId: string; roleId: string }>(() => adminDb.from(tbl(schema.userRoles)).select("userId:user_id,roleId:role_id").order("user_id")),
     staffOptions(),
   ]);
-  const roleOptions = roles.filter((r) => r.key !== "SUPER_ADMIN" || me.roleKeys.includes("SUPER_ADMIN")).map((r) => ({ value: r.id, label: r.name }));
+  // Only roles whose permissions you hold yourself (the database refuses the rest — 00026)
+  const isSuper = me.roleKeys.includes("SUPER_ADMIN");
+  const roleOptions = roles
+    .filter((r) => isSuper || (r.key !== "SUPER_ADMIN" && r.perms.every((p) => me.permissions.has(p.key as Permission))))
+    .map((r) => ({ value: r.id, label: r.name }));
 
   return (
     <>
@@ -34,7 +38,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
           { key: "roles", label: "Roles & permissions", href: "/admin/users?tab=roles" },
         ]}
       />
-      {tab === "users" ? <Users roles={roles} links={links} roleOptions={roleOptions} staff={staff} meId={me.id} filter={str("filter") ?? ""} /> : <Roles roles={roles} links={links} />}
+      {tab === "users" ? (
+        <Users roles={roles} links={links} roleOptions={roleOptions} staff={staff} meId={me.id} meSuper={isSuper} filter={str("filter") ?? ""} />
+      ) : (
+        <Roles roles={roles} links={links} canEdit={(r) => isSuper || (r.key !== "SUPER_ADMIN" && r.perms.every((p) => me.permissions.has(p.key as Permission)))} />
+      )}
     </>
   );
 }
@@ -45,6 +53,7 @@ async function Users({
   roleOptions,
   staff,
   meId,
+  meSuper,
   filter,
 }: {
   roles: (Row<typeof schema.roles> & { perms: { key: string }[] })[];
@@ -52,6 +61,7 @@ async function Users({
   roleOptions: { value: string; label: string }[];
   staff: { value: string; label: string }[];
   meId: string;
+  meSuper: boolean;
   filter: string;
 }) {
   const staffUserIds = [...new Set(links.map((l) => l.userId))];
@@ -97,6 +107,7 @@ async function Users({
             <Th>Team member</Th>
             <Th>Account</Th>
             <Th>Last sign-in</Th>
+            <Th>Created</Th>
             <Th />
           </tr>
         </thead>
@@ -132,10 +143,12 @@ async function Users({
                   {info?.invitedAt && inviteIsOpen(status) && <span className="mt-0.5 block text-xs text-a-muted">Invited {relativeTime(info.invitedAt)}</span>}
                 </Td>
                 <Td className="text-xs">{info?.lastSignInAt ? relativeTime(info.lastSignInAt) : u.lastSeenAt ? `Active ${relativeTime(u.lastSeenAt)}` : "Never"}</Td>
+                <Td className="text-xs whitespace-nowrap">{fmtDate(u.createdAt)}</Td>
                 <Td className="text-right">
                   <span className="inline-flex">
                     {inviteIsOpen(status) && <ResendButton userId={u.id} />}
-                    <UserRolesButton userId={u.id} roles={roleOptions} current={mine.map((r) => r.id)} />
+                    {(meSuper || u.id === meId || !mine.some((r) => r.key === "SUPER_ADMIN")) && <EditUserButton userId={u.id} fullName={u.fullName} phone={u.phone} />}
+                    {(meSuper || u.id !== meId) && <UserRolesButton userId={u.id} roles={roleOptions} current={mine.map((r) => r.id)} />}
                     <LinkStaffButton userId={u.id} staff={staff} current={u.staffId} />
                     {u.id !== meId && <ActiveButton userId={u.id} active={u.active} />}
                   </span>
@@ -152,7 +165,9 @@ async function Users({
   );
 }
 
-function Roles({ roles, links }: { roles: (Row<typeof schema.roles> & { perms: { key: string }[] })[]; links: { userId: string; roleId: string }[] }) {
+type RoleRow = Row<typeof schema.roles> & { perms: { key: string }[] };
+
+function Roles({ roles, links, canEdit }: { roles: RoleRow[]; links: { userId: string; roleId: string }[]; canEdit: (r: RoleRow) => boolean }) {
   const groups = Object.entries(
     Object.entries(PERMISSIONS).reduce<Record<string, { key: string; label: string }[]>>((acc, [key, p]) => {
       (acc[p.group] ??= []).push({ key, label: p.label });
@@ -161,7 +176,9 @@ function Roles({ roles, links }: { roles: (Row<typeof schema.roles> & { perms: {
   ).map(([group, items]) => ({ group, items }));
   return (
     <div className="space-y-4">
-      <Notice tone="info">Permission changes apply on each user&rsquo;s next page load. The database checks the same permissions for every read and write.</Notice>
+      <Notice tone="info">
+        Permission changes apply on each user&rsquo;s next page load. The database checks the same permissions for every read and write. You can only grant or remove permissions you hold yourself, and nobody but a Super Admin changes their own roles.
+      </Notice>
       {roles.map((r) => (
         <details key={r.id} className="group rounded-xl border border-a-border bg-a-surface">
           <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
@@ -178,7 +195,8 @@ function Roles({ roles, links }: { roles: (Row<typeof schema.roles> & { perms: {
             {!r.isSystem && <DeleteRoleButton id={r.id} />}
           </summary>
           <div className="border-t border-a-border p-4">
-            <PermissionEditor roleId={r.id} groups={groups} current={r.perms.map((p) => p.key)} locked={r.key === "SUPER_ADMIN"} />
+            <PermissionEditor roleId={r.id} groups={groups} current={r.perms.map((p) => p.key)} locked={r.key === "SUPER_ADMIN" || !canEdit(r)} />
+            {r.key !== "SUPER_ADMIN" && !canEdit(r) && <p className="mt-3 text-xs text-a-muted">This role has permissions you don&rsquo;t hold, so only a Super Admin can change it.</p>}
           </div>
         </details>
       ))}
