@@ -150,7 +150,10 @@ export async function proofPhotos(ids: string[]) {
   const out = new Map<string, { src: string; alt: string }>();
   const unique = [...new Set(ids)];
   if (!unique.length) return out;
-  const media = await many<{ id: string; bucket: string; path: string; filename: string }>(adminDb.from(tbl(schema.media)).select("id,bucket,path,filename").in("id", unique).is("deleted_at", null));
+  // Task photos live in event-media only: never sign a row that points into another bucket
+  const media = await many<{ id: string; bucket: string; path: string; filename: string }>(
+    adminDb.from(tbl(schema.media)).select("id,bucket,path,filename").in("id", unique).eq("bucket", "event-media").is("deleted_at", null),
+  );
   await Promise.all(
     media.map(async (m) => {
       const src = await signedUrl(m.bucket, m.path, 3600).catch(() => null);

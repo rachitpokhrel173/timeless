@@ -82,6 +82,9 @@ export async function unreadCount(user: SessionUser) {
   return visible.filter((n) => !read.has(n.id)).length;
 }
 
+/** A same-site path ("/admin/…") or null — never "//host", "\\host" or an absolute URL. */
+export const sameSiteHref = (href: string | null) => (href && href.startsWith("/") && !href.startsWith("//") && !href.includes("\\") ? href : null);
+
 export async function listNotifications(user: SessionUser, opts: { onlyUnread?: boolean; limit?: number; offset?: number } = {}) {
   const limit = opts.limit ?? 50;
   const offset = opts.offset ?? 0;
@@ -100,7 +103,8 @@ export async function listNotifications(user: SessionUser, opts: { onlyUnread?: 
       .order("created_at", { ascending: false })
       .range(opts.onlyUnread ? 0 : offset, opts.onlyUnread ? 999 : offset + limit - 1),
   );
-  const list = rows.map(({ reads, ...n }) => ({ ...n, readAt: reads[0]?.readAt ?? null }));
+  // Links stay inside this site: an off-site href (e.g. from an injected row) is dropped
+  const list = rows.map(({ reads, ...n }) => ({ ...n, href: sameSiteHref(n.href), readAt: reads[0]?.readAt ?? null }));
   return opts.onlyUnread ? list.filter((n) => !n.readAt).slice(offset, offset + limit) : list;
 }
 
