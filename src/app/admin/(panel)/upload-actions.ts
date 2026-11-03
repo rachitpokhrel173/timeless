@@ -302,3 +302,21 @@ export async function removeTaskReference(taskId: string, mediaId: string): Prom
     return { ok: false, error: "Couldn't remove that image." };
   }
 }
+
+/** A task comment with photos (on-site progress, a problem to show the planners). */
+export async function uploadTaskComment(form: FormData) {
+  return upload(["events.update", "tasks.update"], form, async (files, user) => {
+    const taskId = uuid(form.get("taskId"));
+    if (!taskId) throw new UserError("Choose a task.");
+    if (files.length > PROOF_LIMIT) throw new UserError(`Up to ${PROOF_LIMIT} photos per comment.`);
+    for (const f of files) if (!QUOTE_IMAGE_TYPES.includes(f.type)) throw new UserError(`“${f.name}” isn't a PNG, JPG or WEBP image.`);
+    const task = await maybe<{ eventId: string | null }>(db.from(tbl(schema.eventTasks)).select("eventId:event_id").eq("id", taskId));
+    if (!task) throw new UserError("Task not found.");
+    const ids: string[] = [];
+    for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: task.eventId ? `events/${task.eventId}/work` : "tasks", uploadedBy: user.id, imagesOnly: true })).id);
+    // Row Level Security decides who may comment (planners and the people on the task)
+    const body = text(form.get("body"), 2000) || `${ids.length} photo${ids.length === 1 ? "" : "s"}`;
+    await exec(db.from(tbl(schema.eventTaskComments)).insert(vals(schema.eventTaskComments, { taskId, body, mediaIds: ids, authorId: user.id })));
+    return { count: ids.length };
+  });
+}

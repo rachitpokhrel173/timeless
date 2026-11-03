@@ -81,8 +81,8 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
     many<{ id: string; label: string; doneAt: Date | null; doneBy: string | null }>(
       adminDb.from(tbl(schema.eventTaskChecklistItems)).select("id,label,doneAt:done_at,doneBy:done_by").eq("task_id", taskId).order("position"),
     ),
-    many<{ id: string; body: string; authorId: string | null; createdAt: Date; p: { fullName: string } | null }>(
-      adminDb.from(tbl(schema.eventTaskComments)).select("id,body,authorId:author_id,createdAt:created_at,p:profiles(fullName:full_name)").eq("task_id", taskId).is("deleted_at", null).order("created_at"),
+    many<{ id: string; body: string; mediaIds: string[]; authorId: string | null; createdAt: Date; p: { fullName: string } | null }>(
+      adminDb.from(tbl(schema.eventTaskComments)).select("id,body,mediaIds:media_ids,authorId:author_id,createdAt:created_at,p:profiles(fullName:full_name)").eq("task_id", taskId).is("deleted_at", null).order("created_at"),
     ),
     task.workOrderId
       ? maybe<{ title: string; instructions: string | null; requiredMaterials: string | null; status: string }>(
@@ -90,6 +90,7 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
         )
       : null,
   ]);
+  const commentPhotos = await proofPhotos(comments.flatMap((c) => c.mediaIds));
   const myProof = mine?.proofMediaIds ?? (mine ? [] : task.proofMediaIds);
   const photos = await proofPhotos([...task.referenceMediaIds, ...myProof, ...(planner ? team.flatMap((a) => a.proofMediaIds) : [])]);
   const refs = task.referenceMediaIds.map((id) => photos.get(id)).filter((p): p is { src: string; alt: string } => !!p);
@@ -183,7 +184,14 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
             <TaskComments
               taskId={task.id}
               canComment={canAct}
-              comments={comments.map((c) => ({ id: c.id, body: c.body, author: c.p?.fullName ?? "Team", mine: c.authorId === user.id, createdAt: fmtDateTime(c.createdAt) }))}
+              comments={comments.map((c) => ({
+                id: c.id,
+                body: c.body,
+                author: c.p?.fullName ?? "Team",
+                mine: c.authorId === user.id,
+                createdAt: fmtDateTime(c.createdAt),
+                photos: c.mediaIds.map((m) => commentPhotos.get(m)).filter((x): x is { src: string; alt: string } => !!x),
+              }))}
             />
           </Card>
         </div>
