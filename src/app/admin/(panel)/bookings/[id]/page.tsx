@@ -46,7 +46,8 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
   const event = first(booking.event);
   const tab = ["overview", "payments", "invoices"].includes(str("tab") ?? "") ? str("tab")! : "overview";
 
-  const [items, payments, invoices, types, work, fin, payable] = await Promise.all([
+  const editItems = can("bookings.update") && booking.status !== "CANCELLED" && booking.status !== "COMPLETED";
+  const [items, payments, invoices, types, work, fin, payable, stockRows] = await Promise.all([
     many<Row<typeof schema.bookingItems>>(adminDb.from(tbl(schema.bookingItems)).select(cols(schema.bookingItems)).eq("booking_id", id).order("position")),
     can("payments.view") ? ledger({ bookingId: id }) : [],
     can("invoices.view") ? many<Row<typeof schema.invoices>>(adminDb.from(tbl(schema.invoices)).select(cols(schema.invoices)).eq("booking_id", id).order("created_at", { ascending: false })) : [],
@@ -56,13 +57,13 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       : null,
     bookingFinance(id),
     can("payments.create") ? payableCustomer(booking.customerId) : null,
+    editItems
+      ? all<{ id: string; name: string; sku: string; rentalPrice: number; unit: string }>(() =>
+          adminDb.from(tbl(schema.inventoryItems)).select("id,name,sku,rentalPrice:rental_price,unit").is("archived_at", null).order("name").order("id"),
+        )
+      : [],
   ]);
-  const editItems = can("bookings.update") && booking.status !== "CANCELLED" && booking.status !== "COMPLETED";
-  const stock = editItems
-    ? (await all<{ id: string; name: string; sku: string; rentalPrice: number; unit: string }>(() =>
-        adminDb.from(tbl(schema.inventoryItems)).select("id,name,sku,rentalPrice:rental_price,unit").is("archived_at", null).order("name").order("id"),
-      )).map((s) => ({ value: s.id, label: `${s.name} (${s.sku})`, name: s.name, price: s.rentalPrice, unit: s.unit }))
-    : [];
+  const stock = stockRows.map((s) => ({ value: s.id, label: `${s.name} (${s.sku})`, name: s.name, price: s.rentalPrice, unit: s.unit }));
   const openInvoice = invoices.find((i) => i.status !== "CANCELLED");
   const itemsTotal = items.reduce((t, l) => t + l.amount, 0);
   const workOk = workEligibility({ status: booking.status, quoteStatus: booking.quote?.status ?? null, hasEvent: !!event });
