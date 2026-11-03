@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, Copy, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
-import { ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
-import UploadButton from "@/components/admin/Upload";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Copy, ImagePlus, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, useToast, type Option } from "@/components/admin/interactive";
+import UploadButton, { shrink } from "@/components/admin/Upload";
 import { Avatar } from "@/components/admin/ui";
 import { cn } from "@/lib/utils";
 import { taskOptions, type TaskStatus } from "@/lib/task-status";
@@ -109,7 +109,66 @@ export type TaskValues = {
   staffIds: string[];
 };
 
-export function TaskFormButton({ bookingId, staff, values, eventDate, label, variant = "secondary" }: { bookingId: string; staff: PickerStaff[]; values?: TaskValues; eventDate?: string; label?: string; variant?: "primary" | "secondary" | "ghost" }) {
+const REFERENCE_LIMIT = 12;
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+/** Reference images picked in the task form; uploaded once the task is saved. */
+function ReferencePicker({ files, onChange, max }: { files: File[]; onChange: (f: File[]) => void; max: number }) {
+  const previews = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files]);
+  useEffect(() => () => previews.forEach((u) => URL.revokeObjectURL(u)), [previews]);
+  const toast = useToast();
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-[13px] font-medium">
+        Reference images
+        <span className="font-normal text-a-muted">{files.length ? `${files.length} of ${max}` : `Up to ${max}`}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {files.map((f, i) => (
+          <div key={previews[i]} className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local preview */}
+            <img src={previews[i]} alt={f.name} className="size-20 rounded-md border border-a-border object-cover" />
+            <button
+              type="button"
+              onClick={() => onChange(files.filter((_, j) => j !== i))}
+              className="absolute -top-1.5 -right-1.5 rounded-full border border-a-border bg-a-surface p-0.5 text-a-muted shadow hover:text-a-danger"
+              aria-label={`Remove ${f.name}`}
+            >
+              <X className="size-3" />
+            </button>
+          </div>
+        ))}
+        {files.length < max && (
+          <label className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-a-border text-xs text-a-muted hover:bg-a-hover">
+            <ImagePlus className="size-5" aria-hidden />
+            Add
+            <input
+              type="file"
+              accept={IMAGE_TYPES.join(",")}
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                const ok = picked.filter((f) => IMAGE_TYPES.includes(f.type));
+                if (ok.length < picked.length) toast("error", "Only PNG, JPG or WEBP images.");
+                const next = [...files, ...ok];
+                if (next.length > max) toast("error", `Only ${max} more reference image${max === 1 ? "" : "s"} fit on this task.`);
+                onChange(next.slice(0, max));
+              }}
+            />
+          </label>
+        )}
+      </div>
+      <p className="text-xs text-a-muted">Designs, sketches or photos of the look you want — shown to the people assigned.</p>
+    </div>
+  );
+}
+
+type TaskFormProps = { bookingId: string; staff: PickerStaff[]; values?: TaskValues; eventDate?: string; referenceCount?: number };
+
+export function TaskFormButton({ label, variant = "secondary", ...props }: TaskFormProps & { label?: string; variant?: "primary" | "secondary" | "ghost" }) {
+  const { values } = props;
   return (
     <DialogButton
       label={label ?? (values ? "Edit" : "Add task")}
@@ -120,27 +179,65 @@ export function TaskFormButton({ bookingId, staff, values, eventDate, label, var
       description={values ? values.title : "A piece of the decoration work, handed to one or more people."}
       dialogSize="lg"
     >
-      {(close) => (
-        <ActionForm action={saveWorkTask} extra={{ id: values?.id, bookingId }} success={values ? "Task saved" : "Task added — the team has been told"} onSuccess={close} onCancel={close}>
-          <TextField label="Task" name="title" required maxLength={200} defaultValue={values?.title} placeholder="Stage decoration, entrance arch, lighting…" />
-          <TextArea label="What needs doing" name="description" rows={4} maxLength={4000} defaultValue={values?.description ?? ""} placeholder="Designs, items and quantities from the approved quotation, colours, measurements…" />
-          <div className="grid gap-4 sm:grid-cols-3">
-            <TextField label="Start" name="startDate" type="date" defaultValue={values?.startDate ?? ""} max={eventDate} />
-            <TextField label="Deadline" name="dueAt" type="datetime-local" defaultValue={localInput(values?.dueAt)} />
-            <SelectField label="Priority" name="priority" options={PRIORITIES} defaultValue={values?.priority ?? "MEDIUM"} />
-          </div>
-          <TextArea label="Instructions for the team" name="staffInstructions" rows={3} maxLength={2000} defaultValue={values?.staffInstructions ?? ""} hint="Shown to the people assigned." placeholder="Venue access from 6 am, handle the chandelier with care…" />
-          <TextArea label="Internal notes" name="internalNotes" rows={2} maxLength={2000} defaultValue={values?.internalNotes ?? ""} hint="Planners only — never shown to the team." />
-          <CheckboxField
-            name="reviewRequired"
-            label="Needs a manager's approval"
-            defaultChecked={values?.reviewRequired ?? false}
-            hint="The team submits it for review with their photos instead of marking it done; a planner approves it or asks for changes."
-          />
-          <StaffPicker staff={staff} selected={values?.staffIds} />
-        </ActionForm>
-      )}
+      {(close) => <TaskForm {...props} close={close} />}
     </DialogButton>
+  );
+}
+
+function TaskForm({ bookingId, staff, values, eventDate, referenceCount = 0, close }: TaskFormProps & { close: () => void }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const toast = useToast();
+  const room = Math.max(0, REFERENCE_LIMIT - referenceCount);
+
+  /** Save the task, then upload the picked images one per request (keeps each under the body limit). */
+  const save = async (input: Parameters<typeof saveWorkTask>[0]) => {
+    const r = await saveWorkTask(input);
+    if (!r.ok || !files.length) return r;
+    let failed = 0;
+    let error = "";
+    for (const f of files) {
+      const form = new FormData();
+      form.set("taskId", r.data.id);
+      form.append("file", await shrink(f));
+      try {
+        const u = await uploadTaskReference(form);
+        if (!u.ok) {
+          failed++;
+          error = u.error;
+        }
+      } catch {
+        failed++;
+        error = "The upload failed — the file may be too large (max 15 MB).";
+      }
+    }
+    if (failed) toast("error", `Task saved, but ${failed} image${failed === 1 ? "" : "s"} didn't upload: ${error}`);
+    return r;
+  };
+
+  return (
+    <ActionForm action={save} extra={{ id: values?.id, bookingId }} success={values ? "Task saved" : "Task added — the team has been told"} onSuccess={close} onCancel={close}>
+      <TextField label="Task" name="title" required maxLength={200} defaultValue={values?.title} placeholder="Stage decoration, entrance arch, lighting…" />
+      <TextArea label="What needs doing" name="description" rows={4} maxLength={4000} defaultValue={values?.description ?? ""} placeholder="Designs, items and quantities from the approved quotation, colours, measurements…" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <TextField label="Start" name="startDate" type="date" defaultValue={values?.startDate ?? ""} max={eventDate} />
+        <TextField label="Deadline" name="dueAt" type="datetime-local" defaultValue={localInput(values?.dueAt)} />
+        <SelectField label="Priority" name="priority" options={PRIORITIES} defaultValue={values?.priority ?? "MEDIUM"} />
+      </div>
+      <TextArea label="Instructions for the team" name="staffInstructions" rows={3} maxLength={2000} defaultValue={values?.staffInstructions ?? ""} hint="Shown to the people assigned." placeholder="Venue access from 6 am, handle the chandelier with care…" />
+      <TextArea label="Internal notes" name="internalNotes" rows={2} maxLength={2000} defaultValue={values?.internalNotes ?? ""} hint="Planners only — never shown to the team." />
+      <CheckboxField
+        name="reviewRequired"
+        label="Needs a manager's approval"
+        defaultChecked={values?.reviewRequired ?? false}
+        hint="The team submits it for review with their photos instead of marking it done; a planner approves it or asks for changes."
+      />
+      {room > 0 ? (
+        <ReferencePicker files={files} onChange={setFiles} max={room} />
+      ) : (
+        <p className="text-xs text-a-muted">This task already has {REFERENCE_LIMIT} reference images — remove one to add another.</p>
+      )}
+      <StaffPicker staff={staff} selected={values?.staffIds} />
+    </ActionForm>
   );
 }
 

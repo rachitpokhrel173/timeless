@@ -388,6 +388,7 @@ function TaskCard({
             staff={staff}
             eventDate={eventDate}
             variant="ghost"
+            referenceCount={t.referenceMediaIds.length}
             values={{
               id: t.id,
               title: t.title,
