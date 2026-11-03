@@ -14,6 +14,7 @@ export type LeadFormValues = {
   location?: string | null;
   guestCount?: string | null;
   budget?: string | null;
+  requirements?: string | null;
   sourceKey?: string;
   priority?: string;
   assignedTo?: string | null;
@@ -52,6 +53,7 @@ export default function LeadForm({ values = {}, opts, onDone }: { values?: LeadF
         <SelectField label="Priority" name="priority" options={PRIORITIES} defaultValue={values.priority ?? "MEDIUM"} required />
         <SelectField label="Assigned to" name="assignedTo" options={opts.users} placeholder="Unassigned" defaultValue={values.assignedTo ?? ""} />
         <SelectField label="Campaign" name="campaignId" options={opts.campaigns} placeholder="None" defaultValue={values.campaignId ?? ""} />
+        <TextArea label="Requirements" name="requirements" rows={3} defaultValue={values.requirements ?? ""} wrapClassName="sm:col-span-2" placeholder="What they want: décor areas, theme, flowers, special requests." hint="Copied into the inquiry when you create one from this lead." />
         {!editing && <TextArea label="First note" name="notes" rows={3} wrapClassName="sm:col-span-2" placeholder="What did they ask for? Visible to your team only." />}
       </div>
     </ActionForm>

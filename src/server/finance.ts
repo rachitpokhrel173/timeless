@@ -1,158 +1,321 @@
 import "server-only";
-import { adminDb, all, cols, exec, many, maybe, one, schema, tbl, vals, type DB, type Row } from "@/db";
+import { adminDb, all, many, maybe, rpc, schema, tbl, type DB } from "@/db";
 import { UserError } from "@/lib/actions";
-import { todayISO } from "@/lib/format";
-import { nextNumber } from "./numbering";
+import { ALL_METHODS, type PaymentMethod } from "@/lib/finance";
 
 /*
- * Money rules
- * - Booking and invoice "amount paid" are maintained by database triggers on payments
- *   (supabase/migrations/00009_finance.sql), in the same statement as the payment.
- * - Payments are voided, never deleted. Invoices are cancelled, never deleted.
+ * Finance service — the only place the app records or reads money.
+ *
+ * Writes go through database functions (supabase/migrations/00023_phase4_finance.sql), each one
+ * transaction with its own locks, limits and permission checks:
+ *   record_payment · allocate_payment · release_allocation · create_booking_invoice ·
+ *   cancel_invoice · reverse_payment · refund_payment · assign_payment_booking
+ * Every entry point in the app (customer, booking, event, invoice, finance pages) calls these —
+ * there is one payment workflow, not one per page.
+ *
+ * Reads come from the views payment_ledger, booking_finance and customer_finance, so every page
+ * shows the same received / outstanding / credit figures. Invoice and booking "amount paid" are
+ * maintained by database triggers from allocations, payments, refunds and reversals.
+ *
+ * Rules: payments are reversed or refunded, never edited or deleted; issued invoices are revised
+ * or cancelled, never rewritten; allocations are reversed and re-made, never edited.
  */
 
-type Actor = { id: string; name: string } | null;
 type Conn = DB;
-type Booking = Row<typeof schema.bookings>;
-type Invoice = Row<typeof schema.invoices>;
-const bt = tbl(schema.bookings);
-const pt = tbl(schema.payments);
-const it = tbl(schema.invoices);
-const getBooking = (conn: Conn, id: string) => maybe<Booking>(conn.from(bt).select(cols(schema.bookings)).eq("id", id));
-
-export const PAYMENT_METHODS = schema.paymentMethod.enumValues;
+export const PAYMENT_METHODS = ALL_METHODS;
+export { type PaymentMethod };
 
 export const balanceOf = (booking: { totalAmount: number; amountPaid: number }) => Math.max(0, booking.totalAmount - booking.amountPaid);
 
-/**
- * Record a customer payment against a booking (and its open invoice). It can't exceed the
- * outstanding balance. A pending booking is confirmed once its deposit is covered.
- */
-export async function recordPayment(
-  conn: Conn,
-  input: {
-    bookingId: string;
-    amount: number;
-    method: (typeof PAYMENT_METHODS)[number];
-    paidAt: string;
-    reference?: string | null;
-    notes?: string | null;
-    invoiceId?: string | null;
-  },
-  actor: Actor,
-) {
-  const booking = await getBooking(conn, input.bookingId);
-  if (!booking) throw new UserError("Booking not found.");
-  if (booking.status === "CANCELLED") throw new UserError("This booking is cancelled.");
-  if (input.amount <= 0) throw new UserError("Enter an amount above zero.", { amount: "Must be more than 0." });
-  const balance = balanceOf(booking);
-  if (input.amount > balance) throw new UserError(`That's more than the outstanding balance (NPR ${balance.toLocaleString("en-IN")}).`, { amount: "More than the balance." });
-  if (input.paidAt > todayISO(1)) throw new UserError("The payment date can't be in the future.", { paidAt: "In the future." });
+/* ───────── Writes ───────── */
 
-  let invoiceId = input.invoiceId ?? null;
-  if (invoiceId) {
-    const inv = await maybe<{ status: string }>(conn.from(it).select("status").eq("id", invoiceId).eq("booking_id", booking.id));
-    if (!inv || inv.status === "CANCELLED") throw new UserError("Choose an active invoice for this booking.");
-  } else {
-    const open = await maybe<{ id: string }>(conn.from(it).select("id").eq("booking_id", booking.id).not("status", "in", "(CANCELLED,PAID,DRAFT)").order("created_at").limit(1));
-    invoiceId = open?.id ?? null;
-  }
+export type RecordPaymentInput = {
+  customerId?: string | null;
+  bookingId?: string | null;
+  invoiceId?: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  paymentType: "ADVANCE" | "PAYMENT";
+  reference?: string | null;
+  receivedBy?: string | null;
+  notes?: string | null;
+  idempotencyKey?: string | null;
+  allowOverpayment?: boolean;
+};
+export type RecordPaymentResult = {
+  paymentId: string;
+  number: string;
+  existed: boolean;
+  customerId?: string;
+  bookingId?: string | null;
+  bookingNumber?: string | null;
+  invoiceId?: string | null;
+  invoiceStatus?: string | null;
+  excess?: number;
+  balance?: number;
+  autoConfirmed?: boolean;
+  needsAllocation?: boolean;
+};
 
-  const payment = await one<Row<typeof schema.payments>>(
-    conn
-      .from(pt)
-      .insert(vals(schema.payments, { ...input, invoiceId, number: await nextNumber("RC", conn), customerId: booking.customerId, recordedBy: actor?.id }))
-      .select(cols(schema.payments)),
-  );
-
-  const after = await one<{ amountPaid: number; status: string; depositAmount: number }>(
-    conn.from(bt).select("amountPaid:amount_paid,status,depositAmount:deposit_amount").eq("id", booking.id),
-  );
-  let autoConfirmed = false;
-  if (after.status === "PENDING" && after.amountPaid >= after.depositAmount) {
-    await exec(conn.from(bt).update({ status: "CONFIRMED", confirmed_at: new Date().toISOString() }).eq("id", booking.id));
-    autoConfirmed = true;
-  }
-  return { payment, booking, paid: after.amountPaid, balance: Math.max(0, booking.totalAmount - after.amountPaid), autoConfirmed };
-}
-
-export async function voidPayment(conn: Conn, id: string, reason: string) {
-  const payment = await maybe<Row<typeof schema.payments>>(conn.from(pt).select(cols(schema.payments)).eq("id", id));
-  if (!payment) throw new UserError("Payment not found.");
-  if (payment.voidedAt) throw new UserError("This payment is already void.");
-  await exec(conn.from(pt).update({ voided_at: new Date().toISOString(), void_reason: reason }).eq("id", id));
-  return payment;
-}
-
-/** Invoice for a booking, itemised from its booked items (or a single line for the contract value). */
-export async function createInvoice(conn: Conn, bookingId: string, actor: Actor, opts: { dueDate?: string | null; notes?: string | null; send?: boolean } = {}) {
-  const booking = await getBooking(conn, bookingId);
-  if (!booking) throw new UserError("Booking not found.");
-  if (booking.status === "CANCELLED") throw new UserError("This booking is cancelled.");
-  const event = await maybe<{ title: string; date: string }>(conn.from(tbl(schema.events)).select("title,date:event_date").eq("booking_id", bookingId).limit(1));
-  const booked = await many<Row<typeof schema.bookingItems>>(conn.from(tbl(schema.bookingItems)).select(cols(schema.bookingItems)).eq("booking_id", bookingId).order("position"));
-
-  let items = booked.map((l) => ({ description: l.description, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount }));
-  let subtotal = items.reduce((s, l) => s + l.amount, 0);
-  let discountAmount = 0;
-  let taxAmount = 0;
-  if (booking.quotationId) {
-    const quote = await maybe<{ total: number; subtotal: number; discountAmount: number; taxAmount: number }>(
-      conn.from(tbl(schema.quotations)).select("total,subtotal,discountAmount:discount_amount,taxAmount:tax_amount").eq("id", booking.quotationId),
-    );
-    if (quote && quote.total === booking.totalAmount && quote.subtotal === subtotal) {
-      discountAmount = quote.discountAmount;
-      taxAmount = quote.taxAmount;
-    }
-  }
-  // Items no longer add up to the contract (price changed after booking): bill the contract value
-  if (!items.length || subtotal - discountAmount + taxAmount !== booking.totalAmount) {
-    items = [{ description: `Event décor — ${event?.title ?? booking.number}`, quantity: 1, unitPrice: booking.totalAmount, amount: booking.totalAmount }];
-    subtotal = booking.totalAmount;
-    discountAmount = 0;
-    taxAmount = 0;
-  }
-
-  const invoiceValues = vals(schema.invoices, {
-    number: await nextNumber("INV", conn),
-    bookingId,
-    customerId: booking.customerId,
-    dueDate: opts.dueDate ?? booking.balanceDueDate ?? event?.date,
-    status: opts.send ? "SENT" : "DRAFT",
-    sentAt: opts.send ? new Date() : null,
-    subtotal,
-    discountAmount,
-    taxAmount,
-    total: booking.totalAmount,
-    notes: opts.notes,
-    createdBy: actor?.id,
+export async function recordPayment(conn: Conn, input: RecordPaymentInput) {
+  if (!input.customerId && !input.bookingId) throw new UserError("Choose the customer or booking this payment is for.");
+  return rpc<RecordPaymentResult>(conn, "record_payment", {
+    p_customer: input.customerId ?? null,
+    p_booking: input.bookingId ?? null,
+    p_invoice: input.invoiceId ?? null,
+    p_amount: input.amount,
+    p_method: input.method,
+    p_paid_at: input.paidAt,
+    p_type: input.paymentType,
+    p_reference: input.reference ?? null,
+    p_received_by: input.receivedBy ?? null,
+    p_notes: input.notes ?? null,
+    p_idempotency_key: input.idempotencyKey ?? null,
+    p_allow_overpayment: !!input.allowOverpayment,
   });
-  const invoice = await one<Invoice>(conn.from(it).insert(invoiceValues).select(cols(schema.invoices)));
-  await exec(
-    conn.from(tbl(schema.invoiceItems)).insert(
-      vals(
-        schema.invoiceItems,
-        items.map((line, position) => ({ ...line, invoiceId: invoice.id, position })),
-      ),
-    ),
-  );
-  // Payments already made on the booking count towards this invoice (trigger recalculates the balance)
-  await exec(conn.from(pt).update({ invoice_id: invoice.id }).eq("booking_id", bookingId).is("invoice_id", null));
-  return invoice;
 }
 
-export async function setInvoiceStatus(conn: Conn, id: string, action: "SEND" | "CANCEL") {
-  const inv = await maybe<Invoice>(conn.from(it).select(cols(schema.invoices)).eq("id", id));
+export const allocatePayment = (conn: Conn, paymentId: string, invoiceId: string, amount?: number | null) =>
+  rpc<{ allocationId: string; existed: boolean; amount?: number; paymentNumber?: string; invoiceNumber?: string }>(conn, "allocate_payment", {
+    p_payment: paymentId,
+    p_invoice: invoiceId,
+    p_amount: amount ?? null,
+  });
+
+export const releaseAllocation = (conn: Conn, allocationId: string, reason: string) =>
+  rpc<{ allocationId: string; existed: boolean; invoiceId?: string; paymentId?: string; amount?: number }>(conn, "release_allocation", { p_allocation: allocationId, p_reason: reason });
+
+export const reversePayment = (conn: Conn, paymentId: string, reason: string) =>
+  rpc<{ paymentId: string; number: string; existed: boolean; paymentNumber?: string; amount?: number; bookingId?: string | null; customerId?: string }>(conn, "reverse_payment", {
+    p_payment: paymentId,
+    p_reason: reason,
+  });
+
+export const refundPayment = (conn: Conn, input: { paymentId: string; amount: number; refundedOn: string; method: PaymentMethod; reason: string; reference?: string | null; idempotencyKey?: string | null }) =>
+  rpc<{ adjustmentId: string; number: string; existed: boolean; paymentNumber?: string; amount?: number; bookingId?: string | null; customerId?: string }>(conn, "refund_payment", {
+    p_payment: input.paymentId,
+    p_amount: input.amount,
+    p_refunded_on: input.refundedOn,
+    p_method: input.method,
+    p_reason: input.reason,
+    p_reference: input.reference ?? null,
+    p_idempotency_key: input.idempotencyKey ?? null,
+  });
+
+export const assignPaymentBooking = (conn: Conn, paymentId: string, bookingId: string) =>
+  rpc<{ paymentId: string; existed: boolean; bookingId?: string; bookingNumber?: string; paymentNumber?: string }>(conn, "assign_payment_booking", { p_payment: paymentId, p_booking: bookingId });
+
+/**
+ * Invoice for a booking, itemised from its booked services. Payments already received for the
+ * booking (the advance) are applied to it immediately. With revisionOf, the given issued invoice
+ * is cancelled (with the reason) and replaced in the same transaction.
+ */
+export const createInvoice = (conn: Conn, bookingId: string, opts: { dueDate?: string | null; notes?: string | null; send?: boolean; revisionOf?: string | null; revisionReason?: string | null } = {}) =>
+  rpc<{ invoiceId: string; number: string; applied: number; total: number; due: number; revisedNumber: string | null; released: number }>(conn, "create_booking_invoice", {
+    p_booking: bookingId,
+    p_due_date: opts.dueDate ?? null,
+    p_notes: opts.notes ?? null,
+    p_send: !!opts.send,
+    p_revision_of: opts.revisionOf ?? null,
+    p_revision_reason: opts.revisionReason ?? null,
+  });
+
+export const cancelInvoice = (conn: Conn, invoiceId: string, reason: string) =>
+  rpc<{ invoiceId: string; existed: boolean; number?: string; released?: number }>(conn, "cancel_invoice", { p_invoice: invoiceId, p_reason: reason });
+
+/** Issue a draft (status becomes Sent / Partially paid / Paid / Overdue through the balance trigger). */
+export async function issueInvoice(conn: Conn, id: string) {
+  const inv = await maybe<{ number: string; status: string }>(conn.from(tbl(schema.invoices)).select("number,status").eq("id", id));
   if (!inv) throw new UserError("Invoice not found.");
   if (inv.status === "CANCELLED") throw new UserError("This invoice is cancelled.");
-  if (action === "SEND") {
-    // Status becomes SENT / PARTIALLY_PAID / PAID / OVERDUE through the balance trigger
-    await exec(conn.from(it).update({ status: "SENT", sent_at: new Date().toISOString() }).eq("id", id));
-  } else {
-    if (inv.amountPaid > 0) throw new UserError("Void or move this invoice's payments before cancelling it.");
-    await exec(conn.from(it).update({ status: "CANCELLED", cancelled_at: new Date().toISOString() }).eq("id", id));
-  }
+  if (inv.status !== "DRAFT") return inv;
+  const res = await conn.from(tbl(schema.invoices)).update({ status: "SENT", sent_at: new Date().toISOString() }).eq("id", id);
+  if (res.error) throw new UserError(res.error.message);
   return inv;
+}
+
+/* ───────── Reads (privileged — call after a permission check) ───────── */
+
+export type LedgerRow = {
+  id: string;
+  number: string;
+  customerId: string;
+  customerName: string;
+  bookingId: string | null;
+  bookingNumber: string | null;
+  eventId: string | null;
+  eventTitle: string | null;
+  eventDate: string | null;
+  invoiceId: string | null;
+  invoiceNumbers: string | null;
+  amount: number;
+  method: string;
+  paidAt: string;
+  reference: string | null;
+  notes: string | null;
+  paymentType: "ADVANCE" | "PAYMENT";
+  receivedBy: string | null;
+  recordedByName: string | null;
+  createdAt: Date;
+  voidedAt: Date | null;
+  voidReason: string | null;
+  refunded: number;
+  netAmount: number;
+  allocated: number;
+  unallocated: number;
+  status: "VALID" | "PARTIALLY_REFUNDED" | "REFUNDED" | "REVERSED";
+  allocationState: "INVOICED" | "PARTIAL" | "BOOKING" | "UNASSIGNED" | "NONE";
+};
+export const LEDGER_COLS =
+  "id,number,customerId:customer_id,customerName:customer_name,bookingId:booking_id,bookingNumber:booking_number,eventId:event_id,eventTitle:event_title,eventDate:event_date," +
+  "invoiceId:invoice_id,invoiceNumbers:invoice_numbers,amount,method,paidAt:paid_at,reference,notes,paymentType:payment_type,receivedBy:received_by,recordedByName:recorded_by_name," +
+  "createdAt:created_at,voidedAt:voided_at,voidReason:void_reason,refunded,netAmount:net_amount,allocated,unallocated,status,allocationState:allocation_state";
+
+export type BookingFinance = {
+  bookingId: string;
+  bookingNumber: string;
+  customerId: string;
+  customerName: string;
+  status: string;
+  totalAmount: number;
+  depositAmount: number;
+  depositDueDate: string | null;
+  balanceDueDate: string | null;
+  eventId: string | null;
+  eventTitle: string | null;
+  eventDate: string | null;
+  quotationTotal: number | null;
+  received: number;
+  refunded: number;
+  advanceReceived: number;
+  unallocated: number;
+  paymentCount: number;
+  invoiced: number;
+  invoicePaid: number;
+  invoiceCount: number;
+  invoiceDueDate: string | null;
+  outstanding: number;
+  credit: number;
+  invoiceOutstanding: number;
+  paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "OVERPAID" | "CANCELLED";
+};
+export const BOOKING_FINANCE_COLS =
+  "bookingId:booking_id,bookingNumber:booking_number,customerId:customer_id,customerName:customer_name,status,totalAmount:total_amount,depositAmount:deposit_amount," +
+  "depositDueDate:deposit_due_date,balanceDueDate:balance_due_date,eventId:event_id,eventTitle:event_title,eventDate:event_date,quotationTotal:quotation_total,received,refunded," +
+  "advanceReceived:advance_received,unallocated,paymentCount:payment_count,invoiced,invoicePaid:invoice_paid,invoiceCount:invoice_count,invoiceDueDate:invoice_due_date," +
+  "outstanding,credit,invoiceOutstanding:invoice_outstanding,paymentStatus:payment_status";
+
+export type CustomerFinance = {
+  customerId: string;
+  bookings: number;
+  bookingValue: number;
+  invoiced: number;
+  received: number;
+  outstanding: number;
+  advanceReceived: number;
+  unallocated: number;
+  refunded: number;
+  credit: number;
+};
+
+export const bookingFinance = (bookingId: string) => maybe<BookingFinance>(adminDb.from("booking_finance").select(BOOKING_FINANCE_COLS).eq("booking_id", bookingId));
+
+export const customerFinance = (customerId: string) =>
+  maybe<CustomerFinance>(
+    adminDb
+      .from("customer_finance")
+      .select("customerId:customer_id,bookings,bookingValue:booking_value,invoiced,received,outstanding,advanceReceived:advance_received,unallocated,refunded,credit")
+      .eq("customer_id", customerId),
+  );
+
+type LedgerFilter = { customerId?: string; bookingId?: string; paymentId?: string };
+export function ledger(filter: LedgerFilter) {
+  let q = adminDb.from("payment_ledger").select(LEDGER_COLS);
+  if (filter.customerId) q = q.eq("customer_id", filter.customerId);
+  if (filter.bookingId) q = q.eq("booking_id", filter.bookingId);
+  if (filter.paymentId) q = q.eq("id", filter.paymentId);
+  return many<LedgerRow>(q.order("paid_at", { ascending: false }).order("created_at", { ascending: false }));
+}
+
+export type Adjustment = { id: string; number: string; kind: "REFUND" | "REVERSAL"; paymentId: string; amount: number; adjustedOn: string; method: string | null; reference: string | null; reason: string; createdAt: Date; by: { fullName: string } | null };
+export function adjustmentsFor(paymentIds: string[]) {
+  if (!paymentIds.length) return Promise.resolve([] as Adjustment[]);
+  return many<Adjustment>(
+    adminDb
+      .from(tbl(schema.paymentAdjustments))
+      .select("id,number,kind,paymentId:payment_id,amount,adjustedOn:adjusted_on,method,reference,reason,createdAt:created_at,by:profiles!payment_adjustments_recorded_by_profiles_id_fk(fullName:full_name)")
+      .in("payment_id", paymentIds)
+      .order("created_at", { ascending: false }),
+  );
+}
+
+export type Allocation = { id: string; paymentId: string; invoiceId: string; amount: number; createdAt: Date; reversedAt: Date | null; reversalReason: string | null; inv: { number: string }; pay: { number: string; paidAt: string; method: string } };
+export function allocationsFor(by: { paymentIds?: string[]; invoiceId?: string }) {
+  let q = adminDb
+    .from(tbl(schema.paymentAllocations))
+    .select("id,paymentId:payment_id,invoiceId:invoice_id,amount,createdAt:created_at,reversedAt:reversed_at,reversalReason:reversal_reason,inv:invoices!inner(number),pay:payments!inner(number,paidAt:paid_at,method)");
+  if (by.paymentIds) {
+    if (!by.paymentIds.length) return Promise.resolve([] as Allocation[]);
+    q = q.in("payment_id", by.paymentIds);
+  }
+  if (by.invoiceId) q = q.eq("invoice_id", by.invoiceId);
+  return many<Allocation>(q.order("created_at"));
+}
+
+/** Open invoices a payment can be applied to: same customer, same booking when it has one. */
+export function allocatableInvoices(p: { customerId: string; bookingId: string | null }) {
+  let q = adminDb
+    .from(tbl(schema.invoices))
+    .select("id,number,total,amountPaid:amount_paid,status,bookingId:booking_id")
+    .eq("customer_id", p.customerId)
+    .neq("status", "CANCELLED");
+  if (p.bookingId) q = q.eq("booking_id", p.bookingId);
+  return many<{ id: string; number: string; total: number; amountPaid: number; status: string; bookingId: string }>(q.order("created_at")).then((rows) => rows.filter((r) => r.amountPaid < r.total));
+}
+
+/** Business-wide figures for the Finance overview. Received money never includes reversals or refunds. */
+export async function financeOverview(today: string) {
+  const monthStart = `${today.slice(0, 8)}01`;
+  const yearAgo = `${String(Number(today.slice(0, 4)) - 1)}${today.slice(4, 8)}01`;
+  const [invoices, payments, bookings, refunds] = await Promise.all([
+    all<{ total: number; amountPaid: number; status: string; dueDate: string | null }>(() =>
+      adminDb.from(tbl(schema.invoices)).select("total,amountPaid:amount_paid,status,dueDate:due_date").not("status", "in", "(DRAFT,CANCELLED)").order("id"),
+    ),
+    all<{ netAmount: number; paidAt: string; paymentType: string; unallocated: number; bookingId: string | null }>(() =>
+      adminDb.from("payment_ledger").select("netAmount:net_amount,paidAt:paid_at,paymentType:payment_type,unallocated,bookingId:booking_id").is("voided_at", null).order("id"),
+    ),
+    all<{ outstanding: number; credit: number; status: string; invoiceCount: number }>(() =>
+      adminDb.from("booking_finance").select("outstanding,credit,status,invoiceCount:invoice_count").order("booking_id"),
+    ),
+    all<{ amount: number; adjustedOn: string }>(() => adminDb.from(tbl(schema.paymentAdjustments)).select("amount,adjustedOn:adjusted_on").eq("kind", "REFUND").order("id")),
+  ]);
+  const sum = <T>(rows: T[], f: (r: T) => number) => rows.reduce((s, r) => s + f(r), 0);
+  const overdue = invoices.filter((i) => i.amountPaid < i.total && (i.status === "OVERDUE" || (!!i.dueDate && i.dueDate < today)));
+  // Monthly money in (by payment date, net of refunds made on that payment) for the last 12 months
+  const months = new Map<string, number>();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1 - i, 1));
+    months.set(d.toISOString().slice(0, 7), 0);
+  }
+  for (const p of payments) if (p.paidAt >= yearAgo && months.has(p.paidAt.slice(0, 7))) months.set(p.paidAt.slice(0, 7), months.get(p.paidAt.slice(0, 7))! + p.netAmount);
+  return {
+    totalInvoiced: sum(invoices, (i) => i.total),
+    invoicePaid: sum(invoices, (i) => i.amountPaid),
+    invoiceOutstanding: sum(invoices, (i) => Math.max(0, i.total - i.amountPaid)),
+    totalReceived: sum(payments, (p) => p.netAmount),
+    advanceReceived: sum(payments.filter((p) => p.paymentType === "ADVANCE"), (p) => p.netAmount),
+    receivedThisMonth: sum(payments.filter((p) => p.paidAt >= monthStart), (p) => p.netAmount),
+    paymentsThisMonth: payments.filter((p) => p.paidAt >= monthStart).length,
+    bookingOutstanding: sum(bookings, (b) => b.outstanding),
+    uninvoicedOutstanding: sum(bookings.filter((b) => b.invoiceCount === 0), (b) => b.outstanding),
+    customerCredit: sum(bookings, (b) => b.credit) + sum(payments.filter((p) => !p.bookingId), (p) => p.netAmount),
+    notOnInvoice: sum(payments.filter((p) => p.bookingId), (p) => p.unallocated),
+    overdueAmount: sum(overdue, (i) => i.total - i.amountPaid),
+    overdueCount: overdue.length,
+    refundsThisMonth: sum(refunds.filter((r) => r.adjustedOn >= monthStart), (r) => r.amount),
+    trend: [...months].map(([month, value]) => ({ month, value })),
+  };
 }
 
 /* ───────── Profitability ───────── */
@@ -160,7 +323,9 @@ export async function setInvoiceStatus(conn: Conn, id: string, action: "SEND" | 
 export type EventProfit = {
   eventId: string;
   revenue: number;
+  invoiced: number;
   collected: number;
+  refunded: number;
   outstanding: number;
   estimatedCost: number;
   vendorCost: number;
@@ -170,14 +335,18 @@ export type EventProfit = {
   actualCost: number;
   grossProfit: number;
   margin: number | null;
+  /** True while the event isn't completed — expenses may still come in. */
+  provisional: boolean;
 };
 
 /**
  * Per event:
- *   revenue        booking value
+ *   revenue        confirmed booking value (what the customer owes in total)
+ *   invoiced       issued invoices for the booking
+ *   collected      money actually received, net of refunds and reversals (cash, not profit)
  *   actual cost    vendor bookings + staff days × daily rate + damaged/lost/used décor at
- *                  replacement (or purchase) cost + other expenses linked to the event
- *   gross profit   revenue − actual cost
+ *                  replacement (or purchase) cost + other expenses recorded for the event
+ *   gross profit   revenue − actual cost (an estimate until the event is completed)
  * Expenses that pay a vendor booking aren't counted twice (the vendor booking already is).
  */
 export async function eventProfits(eventIds: string[]): Promise<Map<string, EventProfit>> {
@@ -188,8 +357,8 @@ export async function eventProfits(eventIds: string[]): Promise<Map<string, Even
     return map;
   };
   const [events, vendors, staff, loss, other] = await Promise.all([
-    many<{ id: string; estimatedCost: number; booking: { totalAmount: number; amountPaid: number; status: string } | null }>(
-      adminDb.from(tbl(schema.events)).select("id,estimatedCost:estimated_cost,booking:bookings(totalAmount:total_amount,amountPaid:amount_paid,status)").in("id", eventIds),
+    many<{ id: string; estimatedCost: number; status: string; bookingId: string | null }>(
+      adminDb.from(tbl(schema.events)).select("id,estimatedCost:estimated_cost,status,bookingId:booking_id").in("id", eventIds),
     ),
     all<{ eventId: string; cost: number }>(() =>
       adminDb.from(tbl(schema.vendorAssignments)).select("eventId:event_id,cost").in("event_id", eventIds).neq("status", "CANCELLED").order("id"),
@@ -214,6 +383,13 @@ export async function eventProfits(eventIds: string[]): Promise<Map<string, Even
       adminDb.from(tbl(schema.expenses)).select("eventId:event_id,amount").in("event_id", eventIds).is("voided_at", null).is("vendor_assignment_id", null).order("id"),
     ),
   ]);
+  const bookingIds = events.map((e) => e.bookingId).filter((x): x is string => !!x);
+  const money = bookingIds.length
+    ? await many<{ bookingId: string; status: string; totalAmount: number; invoiced: number; received: number; refunded: number; outstanding: number }>(
+        adminDb.from("booking_finance").select("bookingId:booking_id,status,totalAmount:total_amount,invoiced,received,refunded,outstanding").in("booking_id", bookingIds),
+      )
+    : [];
+  const byBooking = new Map(money.map((m) => [m.bookingId, m]));
   const vendorCost = total(vendors.map((v) => [v.eventId, Number(v.cost)]));
   const staffCost = total(staff.map((x) => [x.eventId, Number(x.days) * Number(x.staff?.dailyRate ?? 0)]));
   const inventoryLoss = total(
@@ -223,38 +399,35 @@ export async function eventProfits(eventIds: string[]): Promise<Map<string, Even
     ]),
   );
   const otherExpenses = total(other.map((x) => [x.eventId, x.amount]));
-  const rows = events.map((e) => {
-    const bk = e.booking && e.booking.status !== "CANCELLED" ? e.booking : null;
-    return {
-      id: e.id,
-      revenue: bk?.totalAmount ?? 0,
-      collected: bk?.amountPaid ?? 0,
-      estimated_cost: Math.round(Number(e.estimatedCost)),
-      vendor_cost: Math.round(vendorCost.get(e.id) ?? 0),
-      staff_cost: Math.round(staffCost.get(e.id) ?? 0),
-      inventory_loss: Math.round(inventoryLoss.get(e.id) ?? 0),
-      other_expenses: Math.round(otherExpenses.get(e.id) ?? 0),
-    };
-  });
   return new Map(
-    rows.map((r) => {
-      const actualCost = r.vendor_cost + r.staff_cost + r.inventory_loss + r.other_expenses;
-      const grossProfit = r.revenue - actualCost;
+    events.map((e) => {
+      const m = e.bookingId ? byBooking.get(e.bookingId) : undefined;
+      const live = m && m.status !== "CANCELLED" ? m : null;
+      const revenue = live?.totalAmount ?? 0;
+      const vc = Math.round(vendorCost.get(e.id) ?? 0);
+      const sc = Math.round(staffCost.get(e.id) ?? 0);
+      const il = Math.round(inventoryLoss.get(e.id) ?? 0);
+      const oe = Math.round(otherExpenses.get(e.id) ?? 0);
+      const actualCost = vc + sc + il + oe;
+      const grossProfit = revenue - actualCost;
       return [
-        r.id,
+        e.id,
         {
-          eventId: r.id,
-          revenue: r.revenue,
-          collected: r.collected,
-          outstanding: Math.max(0, r.revenue - r.collected),
-          estimatedCost: r.estimated_cost,
-          vendorCost: r.vendor_cost,
-          staffCost: r.staff_cost,
-          inventoryLoss: r.inventory_loss,
-          otherExpenses: r.other_expenses,
+          eventId: e.id,
+          revenue,
+          invoiced: live?.invoiced ?? 0,
+          collected: m?.received ?? 0,
+          refunded: m?.refunded ?? 0,
+          outstanding: live?.outstanding ?? 0,
+          estimatedCost: Math.round(Number(e.estimatedCost)),
+          vendorCost: vc,
+          staffCost: sc,
+          inventoryLoss: il,
+          otherExpenses: oe,
           actualCost,
           grossProfit,
-          margin: r.revenue ? (grossProfit / r.revenue) * 100 : null,
+          margin: revenue ? (grossProfit / revenue) * 100 : null,
+          provisional: e.status !== "COMPLETED",
         },
       ];
     }),

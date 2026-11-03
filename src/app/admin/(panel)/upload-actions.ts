@@ -64,6 +64,24 @@ export async function uploadDocument(form: FormData) {
   });
 }
 
+/** Bill or receipt for an expense — private bucket; the expense keeps the path. Replacing one is logged. */
+export async function uploadExpenseReceipt(form: FormData) {
+  return upload("expenses.create", form, async (files, user) => {
+    const id = uuid(form.get("expenseId"));
+    if (!id) throw new UserError("Expense not found.");
+    const e = await maybe<{ receiptPath: string | null; description: string; voidedAt: string | null }>(
+      db.from(tbl(schema.expenses)).select("receiptPath:receipt_path,description,voidedAt:voided_at").eq("id", id),
+    );
+    if (!e) throw new UserError("Expense not found.");
+    if (e.voidedAt) throw new UserError("Restore this expense before attaching a receipt.");
+    const p = await processUpload(files[0]!);
+    const stored = await putFile("private-documents", makePath(`expenses/${id}`, p.filename), p.body, p.mime);
+    await exec(db.from(tbl(schema.expenses)).update({ receipt_path: stored.path, updated_at: new Date().toISOString(), updated_by: user.id }).eq("id", id));
+    await audit(user, "upload", "expense", id, `${e.receiptPath ? "Replaced" : "Attached"} the receipt for “${e.description}”`, e.receiptPath ? { previous: e.receiptPath } : undefined);
+    return { path: stored.path };
+  });
+}
+
 export async function deleteDocument(id: string) {
   const user = await getCurrentUser();
   if (!user?.permissions.has("documents.manage")) return { ok: false as const, error: "You don't have permission to do that." };
@@ -87,10 +105,18 @@ export async function uploadDesignFiles(form: FormData) {
     if (!designId) throw new UserError("Choose a design.");
     const design = await maybe<Row<typeof schema.designApprovals>>(db.from(tbl(schema.designApprovals)).select(cols(schema.designApprovals)).eq("id", designId));
     if (!design) throw new UserError("Design not found.");
+    // A proposed design is a record of what the client saw: changes go into a new revision
+    const reference = form.get("kind") === "reference";
+    if (design.status !== "DRAFT") throw new UserError("This design has already been proposed — create a revision to add files.");
     const ids: string[] = [];
     for (const file of files) ids.push((await storeUpload(file, { bucket: "event-media", folder: `events/${design.eventId}`, uploadedBy: user.id, imagesOnly: false })).id);
-    await exec(db.from(tbl(schema.designApprovals)).update({ media_ids: [...design.mediaIds, ...ids] }).eq("id", designId));
-    await audit(user, "upload", "event", design.eventId, `Added ${ids.length} file(s) to design “${design.title}”`);
+    await exec(
+      db
+        .from(tbl(schema.designApprovals))
+        .update(reference ? { reference_media_ids: [...design.referenceMediaIds, ...ids] } : { media_ids: [...design.mediaIds, ...ids] })
+        .eq("id", designId),
+    );
+    await audit(user, "upload", "event", design.eventId, `Added ${ids.length} ${reference ? "reference photo(s)" : "file(s)"} to design “${design.title}”`);
     return { count: ids.length };
   });
 }

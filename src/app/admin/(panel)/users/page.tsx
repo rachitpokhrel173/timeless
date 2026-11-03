@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { adminDb, all, cols, many, schema, tbl, type Row } from "@/db";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 import { requirePage } from "@/lib/auth/session";
 import { relativeTime } from "@/lib/format";
 import { listParams } from "@/lib/list";
 import { staffOptions } from "@/server/lookups";
+import { ACCOUNT_STATUS, accountStatus, authInfo, inviteIsOpen } from "@/server/staff-accounts";
+import { FilterSelect } from "@/components/admin/interactive";
 import { Avatar, Badge, Card, Notice, PageHeader, Table, Tabs, Td, Th } from "@/components/admin/ui";
-import { ActiveButton, DeleteRoleButton, InviteButton, LinkStaffButton, PermissionEditor, RoleButton, UserRolesButton } from "./UsersClient";
+import { ActiveButton, DeleteRoleButton, InviteButton, LinkStaffButton, PermissionEditor, ResendButton, RoleButton, UserRolesButton } from "./UsersClient";
 
 export const metadata: Metadata = { title: "Users & Roles" };
 
@@ -31,7 +34,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
           { key: "roles", label: "Roles & permissions", href: "/admin/users?tab=roles" },
         ]}
       />
-      {tab === "users" ? <Users roles={roles} links={links} roleOptions={roleOptions} staff={staff} meId={me.id} /> : <Roles roles={roles} links={links} />}
+      {tab === "users" ? <Users roles={roles} links={links} roleOptions={roleOptions} staff={staff} meId={me.id} filter={str("filter") ?? ""} /> : <Roles roles={roles} links={links} />}
     </>
   );
 }
@@ -42,31 +45,63 @@ async function Users({
   roleOptions,
   staff,
   meId,
+  filter,
 }: {
   roles: (Row<typeof schema.roles> & { perms: { key: string }[] })[];
   links: { userId: string; roleId: string }[];
   roleOptions: { value: string; label: string }[];
   staff: { value: string; label: string }[];
   meId: string;
+  filter: string;
 }) {
   const staffUserIds = [...new Set(links.map((l) => l.userId))];
   const users = staffUserIds.length
     ? await many<Row<typeof schema.profiles> & { s: { name: string } | null }>(adminDb.from(tbl(schema.profiles)).select(`${cols(schema.profiles)},s:staff(name)`).in("id", staffUserIds).order("full_name"))
     : [];
+  const auth = await authInfo(users.map((u) => u.id));
+  const rows = users.map((u) => {
+    const keys = links.filter((l) => l.userId === u.id).map((l) => roles.find((r) => r.id === l.roleId)?.key);
+    return { u, keys, status: accountStatus(u, auth.get(u.id)), info: auth.get(u.id) };
+  });
+  const FILTERS: Record<string, (r: (typeof rows)[number]) => boolean> = {
+    admins: (r) => r.keys.some((k) => k === "ADMIN" || k === "SUPER_ADMIN"),
+    managers: (r) => r.keys.includes("MANAGER"),
+    event_managers: (r) => r.keys.includes("EVENT_MANAGER"),
+    staff: (r) => r.keys.includes("STAFF"),
+    pending: (r) => inviteIsOpen(r.status),
+    suspended: (r) => r.status === "SUSPENDED",
+  };
+  const shown = FILTERS[filter] ? rows.filter(FILTERS[filter]) : rows;
   return (
     <Card bodyClassName="p-0">
+      <div className="border-b border-a-border px-4 py-3">
+        <FilterSelect
+          param="filter"
+          label="Show"
+          allLabel="All users"
+          options={[
+            { value: "admins", label: "Administrators" },
+            { value: "managers", label: "Managers" },
+            { value: "event_managers", label: "Event managers" },
+            { value: "staff", label: "Staff" },
+            { value: "pending", label: "Pending invitations" },
+            { value: "suspended", label: "Suspended accounts" },
+          ]}
+        />
+      </div>
       <Table>
         <thead>
           <tr>
             <Th>User</Th>
             <Th>Roles</Th>
             <Th>Team member</Th>
-            <Th>Last seen</Th>
+            <Th>Account</Th>
+            <Th>Last sign-in</Th>
             <Th />
           </tr>
         </thead>
         <tbody>
-          {users.map((u) => {
+          {shown.map(({ u, status, info }) => {
             const mine = links.filter((l) => l.userId === u.id).map((l) => roles.find((r) => r.id === l.roleId)!).filter(Boolean);
             return (
               <tr key={u.id} className={u.active ? undefined : "text-a-muted"}>
@@ -91,10 +126,15 @@ async function Users({
                     ))}
                   </div>
                 </Td>
-                <Td className="text-xs">{u.s?.name ?? "—"}</Td>
-                <Td className="text-xs">{u.lastSeenAt ? relativeTime(u.lastSeenAt) : "Never"}</Td>
+                <Td className="text-xs">{u.staffId && u.s ? <Link href={`/admin/staff/${u.staffId}`} className="hover:underline">{u.s.name}</Link> : "—"}</Td>
+                <Td>
+                  <Badge tone={ACCOUNT_STATUS[status].tone}>{ACCOUNT_STATUS[status].label}</Badge>
+                  {info?.invitedAt && inviteIsOpen(status) && <span className="mt-0.5 block text-xs text-a-muted">Invited {relativeTime(info.invitedAt)}</span>}
+                </Td>
+                <Td className="text-xs">{info?.lastSignInAt ? relativeTime(info.lastSignInAt) : u.lastSeenAt ? `Active ${relativeTime(u.lastSeenAt)}` : "Never"}</Td>
                 <Td className="text-right">
                   <span className="inline-flex">
+                    {inviteIsOpen(status) && <ResendButton userId={u.id} />}
                     <UserRolesButton userId={u.id} roles={roleOptions} current={mine.map((r) => r.id)} />
                     <LinkStaffButton userId={u.id} staff={staff} current={u.staffId} />
                     {u.id !== meId && <ActiveButton userId={u.id} active={u.active} />}

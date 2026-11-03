@@ -129,8 +129,9 @@ export const recordAdvance = adminAction(
     reference: zs.optional(120),
     notes: zs.optional(1000),
     confirm: z.boolean().default(true),
+    idempotencyKey: zs.uuid().optional(),
   }),
-  async ({ id, confirm, ...payment }, user) => {
+  async ({ id, confirm, idempotencyKey, ...payment }, user) => {
     if (payment.amount <= 0) throw new UserError("Enter the advance amount.", { amount: "Must be more than 0." });
     const existing = await maybe<{ id: string }>(db.from(tbl(schema.bookings)).select("id").eq("quotation_id", id).limit(1));
     if (!existing && !user.permissions.has("quotations.approve")) throw new UserError("You don't have permission to turn quotations into bookings.");
@@ -138,27 +139,33 @@ export const recordAdvance = adminAction(
 
     const booked = await bookingFromQuotation(db, id, user, "PENDING");
     if (!booked.existed) await audit(user, "convert", "quotation", id, `Booked ${q.number} on receiving the advance`, { bookingId: booked.booking.id });
-    const eventId = booked.event?.id;
+    const eventId = booked.existed ? undefined : booked.event?.id;
     if (eventId) afterCommit(() => onEventCreated(eventId, user.id));
-    const r = await recordPayment(db, { bookingId: booked.booking.id, ...payment, notes: payment.notes ?? `Advance for ${q.number}` }, user);
-    let confirmed = r.autoConfirmed || r.booking.status === "CONFIRMED";
-    if (confirm && !confirmed && r.booking.status === "PENDING") {
-      await setBookingStatus(db, r.booking.id, "CONFIRMED", user);
+    const r = await recordPayment(db, { bookingId: booked.booking.id, ...payment, paymentType: "ADVANCE", idempotencyKey, notes: payment.notes ?? `Advance for ${q.number}` });
+    const bookingId = r.bookingId ?? booked.booking.id;
+    const bookingNumber = r.bookingNumber ?? booked.booking.number;
+    const after = await one<{ status: string }>(db.from(tbl(schema.bookings)).select("status").eq("id", bookingId));
+    let confirmed = !!r.autoConfirmed || after.status === "CONFIRMED";
+    if (confirm && !confirmed && after.status === "PENDING") {
+      await setBookingStatus(db, bookingId, "CONFIRMED", user);
       confirmed = true;
     }
-    await audit(user, "create", "payment", r.payment.id, `Recorded advance ${npr(payment.amount)} (${r.payment.number}) on ${r.booking.number}`);
-    await notify({
-      type: "payment.received",
-      title: `Advance received: ${npr(payment.amount)}`,
-      body: `${r.booking.number} · ${q.number}${confirmed ? " · booking confirmed" : ""}`,
-      href: `/admin/bookings/${r.booking.id}?tab=payments`,
-      entityType: "payment",
-      entityId: r.payment.id,
-      permission: "payments.view",
-    });
+    if (!r.existed) {
+      await audit(user, "create", "payment", r.paymentId, `Recorded advance ${npr(payment.amount)} (${r.number}) on ${bookingNumber}`, { paymentType: "ADVANCE" });
+      await notify({
+        type: "payment.advance",
+        title: `Advance received: ${npr(payment.amount)}`,
+        body: `${bookingNumber} · ${q.number}${confirmed ? " · booking confirmed" : ""}`,
+        href: `/admin/finance/payments/${r.paymentId}`,
+        entityType: "payment",
+        entityId: r.paymentId,
+        permission: "payments.view",
+        dedupeKey: `payment.advance:${r.paymentId}`,
+      });
+    }
     if (booked.shortages)
-      await notify({ type: "inventory.shortage", title: `Inventory shortage for ${r.booking.number}`, body: booked.shortages, href: `/admin/bookings/${r.booking.id}`, priority: "URGENT", permission: "inventory.view" });
-    return { bookingId: r.booking.id, bookingNumber: r.booking.number, confirmed, shortages: booked.shortages };
+      await notify({ type: "inventory.shortage", title: `Inventory shortage for ${bookingNumber}`, body: booked.shortages, href: `/admin/bookings/${bookingId}`, priority: "URGENT", permission: "inventory.view" });
+    return { bookingId, bookingNumber, confirmed, shortages: booked.shortages, receipt: r.number };
   },
 );
 

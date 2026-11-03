@@ -17,6 +17,7 @@ const leadFields = z.object({
   location: zs.optional(200),
   guestCount: zs.optional(40),
   budget: zs.optional(60),
+  requirements: zs.optional(4000),
   sourceKey: z.string().min(1).max(40),
   priority: z.enum(schema.priority.enumValues),
   assignedTo: zs.optUuid(),

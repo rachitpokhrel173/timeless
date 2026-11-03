@@ -1,9 +1,7 @@
 import {
   BarChart3,
   Bell,
-  Boxes,
   CalendarCheck,
-  CalendarDays,
   ClipboardCheck,
   ClipboardList,
   Contact,
@@ -21,11 +19,9 @@ import {
   ScrollText,
   Settings,
   Sparkles,
-  Store,
   TrendingDown,
   UserPlus,
   UsersRound,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import type { Permission } from "@/lib/auth/permissions";
@@ -65,7 +61,6 @@ export const NAV: NavGroup[] = [
     items: [
       { href: "/admin/my-work", label: "My work", icon: ClipboardList, permission: ["events.view", "tasks.update"] },
       { href: "/admin/work", label: "Work Management", icon: ClipboardCheck, permission: "events.view" },
-      { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, permission: "events.view" },
       { href: "/admin/events", label: "Events", icon: PartyPopper, permission: "events.view" },
       { href: "/admin/tasks", label: "Tasks", icon: ListTodo, permission: "events.view" },
     ],
@@ -73,16 +68,19 @@ export const NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/admin/inventory", label: "Inventory", icon: Boxes, permission: "inventory.view" },
-      { href: "/admin/vendors", label: "Vendors", icon: Store, permission: "vendors.view" },
       { href: "/admin/staff", label: "Staff", icon: UsersRound, permission: "staff.view" },
     ],
   },
   {
     label: "Finance",
     items: [
-      { href: "/admin/invoices", label: "Invoices", icon: Receipt, permission: "invoices.view" },
-      { href: "/admin/payments", label: "Payments", icon: Wallet, permission: "payments.view" },
+      {
+        href: "/admin/finance",
+        label: "Invoices & Payments",
+        icon: Receipt,
+        permission: ["invoices.view", "payments.view"],
+        match: ["/admin/invoices", "/admin/payments"],
+      },
       { href: "/admin/expenses", label: "Expenses", icon: TrendingDown, permission: "expenses.view" },
     ],
   },

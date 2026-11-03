@@ -33,6 +33,7 @@ export const PERMISSIONS = {
   "events.create": { group: "Events", label: "Create events" },
   "events.update": { group: "Events", label: "Plan events: team, vendors, timeline, designs" },
   "events.delete": { group: "Events", label: "Delete events" },
+  "events.complete": { group: "Events", label: "Complete & close events" },
   "tasks.update": { group: "Events", label: "Update tasks assigned to the team" },
 
   "inventory.view": { group: "Inventory", label: "View inventory" },
@@ -45,12 +46,15 @@ export const PERMISSIONS = {
 
   "staff.view": { group: "Staff", label: "View staff & availability" },
   "staff.manage": { group: "Staff", label: "Manage staff & availability" },
+  /** Phase 3: invite, link, unlink and suspend team logins. Alone it can only hand out the STAFF role. */
+  "staff.invite": { group: "Staff", label: "Invite, link & suspend team logins" },
 
   "invoices.view": { group: "Finance", label: "View invoices" },
   "invoices.create": { group: "Finance", label: "Create invoices" },
   "invoices.update": { group: "Finance", label: "Edit, send & cancel invoices" },
   "payments.view": { group: "Finance", label: "View payments" },
-  "payments.create": { group: "Finance", label: "Record & void payments" },
+  "payments.create": { group: "Finance", label: "Record & allocate payments" },
+  "payments.adjust": { group: "Finance", label: "Reverse & refund payments, accept overpayments" },
   "expenses.view": { group: "Finance", label: "View expenses & profitability" },
   "expenses.create": { group: "Finance", label: "Record expenses & vendor payments" },
 
@@ -86,7 +90,7 @@ export const DEFAULT_ROLES: { key: string; name: string; description: string; pe
     key: "MANAGER",
     name: "Manager",
     description: "Sales, events, inventory and finance — no users, roles or system settings.",
-    permissions: ALL_PERMISSIONS.filter((p) => !["users.manage", "settings.manage", "audit.view"].includes(p)),
+    permissions: ALL_PERMISSIONS.filter((p) => !["users.manage", "settings.manage", "audit.view", "staff.invite"].includes(p)),
   },
   {
     key: "SALES",
@@ -123,7 +127,7 @@ export const DEFAULT_ROLES: { key: string; name: string; description: string; pe
       "tasks.update",
       ...all("inventory."),
       ...all("vendors."),
-      ...all("staff."),
+      ...all("staff.").filter((p) => p !== "staff.invite"),
       "documents.view",
       "documents.manage",
     ],

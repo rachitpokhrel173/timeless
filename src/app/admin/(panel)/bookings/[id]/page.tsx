@@ -7,13 +7,19 @@ import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
 import { first, isUuid, listParams } from "@/lib/list";
-import { balanceOf, PAYMENT_METHODS } from "@/server/finance";
+import { BOOKING_PAY_STATUS, methodLabel, PAYMENT_TYPE_LABEL } from "@/lib/finance";
+import { bookingFinance, ledger } from "@/server/finance";
+import { payableCustomer } from "@/server/payables";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
-import { BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, label, StatusBadge } from "@/components/admin/status";
-import { Badge, Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
+import { BOOKING_STATUS, EVENT_STATUS, INVOICE_STATUS, StatusBadge } from "@/components/admin/status";
+import { CreateInvoiceButton, ReceiptLink } from "@/components/admin/finance/FinanceActions";
+import { RecordPaymentButton } from "@/components/admin/finance/RecordPayment";
+import { LedgerStatus } from "../../finance/tabs";
+import { Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
 import { amountDue } from "@/server/payment-reminders";
 import { workEligibility } from "@/server/assignments";
-import { BookingStatusButtons, EditMoneyButton, InvoiceButton, PaymentButton, PaymentReminderButton, VoidPaymentButton } from "../BookingClient";
+import { BookingStatusButtons, EditMoneyButton, PaymentReminderButton } from "../BookingClient";
+import { isHeld } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -40,26 +46,24 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
   const event = first(booking.event);
   const tab = ["overview", "payments", "invoices"].includes(str("tab") ?? "") ? str("tab")! : "overview";
 
-  const [items, payments, invoices, types, work] = await Promise.all([
+  const [items, payments, invoices, types, work, fin, payable] = await Promise.all([
     many<Row<typeof schema.bookingItems>>(adminDb.from(tbl(schema.bookingItems)).select(cols(schema.bookingItems)).eq("booking_id", id).order("position")),
-    can("payments.view")
-      ? many<Row<typeof schema.payments> & { inv: { number: string } | null }>(
-          adminDb.from(tbl(schema.payments)).select(`${cols(schema.payments)},inv:invoices(number)`).eq("booking_id", id).order("paid_at", { ascending: false }),
-        )
-      : [],
+    can("payments.view") ? ledger({ bookingId: id }) : [],
     can("invoices.view") ? many<Row<typeof schema.invoices>>(adminDb.from(tbl(schema.invoices)).select(cols(schema.invoices)).eq("booking_id", id).order("created_at", { ascending: false })) : [],
     eventTypeOptions(),
     event && can("events.view")
       ? many<{ id: string; status: string; dueAt: Date | null }>(adminDb.from(tbl(schema.eventTasks)).select("id,status,dueAt:due_at").eq("event_id", event.id))
       : null,
+    bookingFinance(id),
+    can("payments.create") ? payableCustomer(booking.customerId) : null,
   ]);
   const workOk = workEligibility({ status: booking.status, quoteStatus: booking.quote?.status ?? null, hasEvent: !!event });
-  const balance = balanceOf(booking);
+  const balance = fin?.outstanding ?? Math.max(0, booking.totalAmount - booking.amountPaid);
   const depositOutstanding = booking.depositAmount > booking.amountPaid;
   const today = todayISO();
   const overdue = balance > 0 && booking.balanceDueDate && booking.balanceDueDate < today && booking.status !== "CANCELLED";
-  const openInvoices = invoices.filter((i) => !["CANCELLED", "PAID", "DRAFT"].includes(i.status)).map((i) => ({ value: i.id, label: `${i.number} · ${npr(i.total - i.amountPaid)} due` }));
-  const methods = PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }));
+  const canPay = can("payments.create") && !!payable;
+  const payProps = { customer: payable ?? undefined, bookingId: id, canAdjust: can("payments.adjust"), canAttach: can("documents.manage") };
   const active = booking.status !== "CANCELLED";
   const due = active && booking.status !== "COMPLETED" ? amountDue(booking) : null;
   const base = `/admin/bookings/${id}`;
@@ -90,7 +94,8 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                 Event workspace
               </LinkButton>
             )}
-            {active && can("payments.create") && balance > 0 && <PaymentButton bookingId={id} balance={balance} invoices={openInvoices} hasEmail={!!booking.customer.email} methods={methods} />}
+            {active && canPay && depositOutstanding && <RecordPaymentButton {...payProps} type="ADVANCE" variant="secondary" />}
+            {active && canPay && <RecordPaymentButton {...payProps} />}
             <BookingStatusButtons id={id} status={booking.status} canUpdate={can("bookings.update")} canCancel={can("bookings.cancel")} hasEmail={!!booking.customer.email} />
           </>
         }
@@ -114,21 +119,41 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
         )}
       </div>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
-        <Stat label="Contract value" value={npr(booking.totalAmount)} action={can("bookings.update") && active ? <EditMoneyButton id={id} values={booking} /> : undefined} />
-        <Stat label="Paid" value={npr(booking.amountPaid)} />
-        <Stat label="Balance" value={npr(balance)} tone={balance > 0 ? "warning" : "success"} />
-        <Stat label="Advance" value={npr(booking.depositAmount)} hint={depositOutstanding ? `due ${fmtDate(booking.depositDueDate)}` : "covered"} />
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Stat
+          label="Booking amount"
+          value={npr(booking.totalAmount)}
+          hint={booking.quote ? `Quotation ${booking.quote.number}${fin?.quotationTotal != null && fin.quotationTotal !== booking.totalAmount ? `: ${npr(fin.quotationTotal)}` : ""}` : "Created directly"}
+          action={can("bookings.update") && active ? <EditMoneyButton id={id} values={booking} /> : undefined}
+        />
+        <Stat label="Invoiced" value={npr(fin?.invoiced ?? 0)} hint={fin?.invoiceCount ? `${fin.invoiceCount} invoice${fin.invoiceCount === 1 ? "" : "s"}` : "No invoice yet"} />
+        <Stat
+          label="Received"
+          value={npr(fin?.received ?? booking.amountPaid)}
+          tone="success"
+          hint={fin?.refunded ? `after ${npr(fin.refunded)} refunded` : `${fin?.paymentCount ?? 0} payment${fin?.paymentCount === 1 ? "" : "s"}`}
+        />
+        <Stat
+          label="Outstanding"
+          value={npr(balance)}
+          tone={balance > 0 ? "warning" : "success"}
+          hint={fin?.credit ? `${npr(fin.credit)} overpaid — customer credit` : fin ? BOOKING_PAY_STATUS[fin.paymentStatus]?.label : undefined}
+        />
+        <Stat
+          label="Advance received"
+          value={npr(fin?.advanceReceived ?? 0)}
+          hint={depositOutstanding ? `${npr(booking.depositAmount)} asked, due ${fmtDate(booking.depositDueDate)}` : `${npr(booking.depositAmount)} asked — covered`}
+        />
       </div>
       <div className="mb-5">
-        <ProgressBar value={booking.amountPaid} max={booking.totalAmount} label="Amount paid" tone={balance === 0 ? "success" : "accent"} />
+        <ProgressBar value={Math.min(fin?.received ?? booking.amountPaid, booking.totalAmount)} max={booking.totalAmount} label="Amount received" tone={balance === 0 ? "success" : "accent"} />
       </div>
 
       <Tabs
         active={tab}
         items={[
           { key: "overview", label: "Overview", href: base },
-          ...(can("payments.view") ? [{ key: "payments", label: "Payments", href: `${base}?tab=payments`, count: payments.filter((p) => !p.voidedAt).length }] : []),
+          ...(can("payments.view") ? [{ key: "payments", label: "Payments", href: `${base}?tab=payments`, count: payments.filter((p) => p.status !== "REVERSED").length }] : []),
           ...(can("invoices.view") ? [{ key: "invoices", label: "Invoices", href: `${base}?tab=invoices`, count: invoices.length }] : []),
         ]}
       />
@@ -189,7 +214,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                       <span className="text-a-muted tabular-nums">{Math.round((work.filter((t) => t.status === "COMPLETED").length / work.length) * 100)}%</span>
                     </div>
                     <ProgressBar value={work.filter((t) => t.status === "COMPLETED").length} max={work.length} label="Work progress" tone="accent" />
-                    {work.some((t) => t.status === "BLOCKED") && <p className="mt-2 text-xs font-medium text-a-danger">{work.filter((t) => t.status === "BLOCKED").length} on hold</p>}
+                    {work.some((t) => isHeld(t.status)) && <p className="mt-2 text-xs font-medium text-a-danger">{work.filter((t) => isHeld(t.status)).length} on hold or waiting</p>}
                   </>
                 ) : (
                   <p className="text-[13px] text-a-muted">{workOk.ok ? "No tasks yet — break the approved décor into tasks for the team." : "Tasks open once the booking is confirmed."}</p>
@@ -231,21 +256,23 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
 
       {tab === "payments" && (
         <Card
-          title="Payments"
+          title="Payment history"
+          description="Every payment for this booking, with or without an invoice. Refunds and reversals are made from the payment itself."
           bodyClassName="p-0"
           actions={
             active &&
-            can("payments.create") &&
-            balance > 0 && (
+            canPay && (
               <div className="flex flex-wrap gap-2">
-                {due && <PaymentReminderButton id={id} email={booking.customer.email} due={due} />}
-                <PaymentButton bookingId={id} balance={balance} invoices={openInvoices} hasEmail={!!booking.customer.email} methods={methods} variant="secondary" />
+                {due && balance > 0 && <PaymentReminderButton id={id} email={booking.customer.email} due={due} />}
+                <RecordPaymentButton {...payProps} variant="secondary" size="sm" />
               </div>
             )
           }
         >
           {payments.length === 0 ? (
-            <EmptyState compact icon={Wallet} title="No payments yet" />
+            <EmptyState compact icon={Wallet} title="No payments yet">
+              Record the advance as soon as it arrives — no invoice is needed.
+            </EmptyState>
           ) : (
             <Table>
               <thead>
@@ -256,20 +283,32 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                   <Th>Reference</Th>
                   <Th>Invoice</Th>
                   <Th className="text-right">Amount</Th>
+                  <Th>Status</Th>
                   <Th />
                 </tr>
               </thead>
               <tbody>
                 {payments.map((p) => (
-                  <tr key={p.id} className={p.voidedAt ? "text-a-muted line-through" : undefined}>
-                    <Td className="font-medium">{p.number}</Td>
-                    <Td>{fmtDate(p.paidAt)}</Td>
-                    <Td>{label(p.method)}</Td>
-                    <Td>{p.reference ?? "—"}</Td>
-                    <Td>{p.inv?.number ?? "—"}</Td>
-                    <Td className="text-right tabular-nums">{npr(p.amount)}</Td>
-                    <Td className="text-right no-underline">
-                      {p.voidedAt ? <Badge tone="danger">Void</Badge> : can("payments.create") && <VoidPaymentButton id={p.id} number={p.number} />}
+                  <tr key={p.id} className="hover:bg-a-subtle/60">
+                    <Td>
+                      <Link href={`/admin/finance/payments/${p.id}`} className="font-medium hover:underline">
+                        {p.number}
+                      </Link>
+                      <span className="block text-xs text-a-muted">{PAYMENT_TYPE_LABEL[p.paymentType]}</span>
+                    </Td>
+                    <Td className="whitespace-nowrap">{fmtDate(p.paidAt)}</Td>
+                    <Td>{methodLabel(p.method)}</Td>
+                    <Td className="text-xs">{p.reference ?? "—"}</Td>
+                    <Td className="text-xs">{p.invoiceNumbers ?? "—"}</Td>
+                    <Td className={`text-right tabular-nums ${p.status === "REVERSED" ? "text-a-muted line-through" : ""}`}>
+                      {npr(p.amount)}
+                      {p.refunded > 0 && <span className="block text-xs text-a-muted">−{npr(p.refunded)} refunded</span>}
+                    </Td>
+                    <Td>
+                      <LedgerStatus p={p} />
+                    </Td>
+                    <Td className="text-right">
+                      <ReceiptLink id={p.id} disabled={p.status === "REVERSED" || p.netAmount <= 0} />
                     </Td>
                   </tr>
                 ))}
@@ -280,10 +319,18 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       )}
 
       {tab === "invoices" && (
-        <Card title="Invoices" bodyClassName="p-0" actions={active && can("invoices.create") && !invoices.some((i) => i.status !== "CANCELLED") && <InvoiceButton bookingId={id} dueDate={booking.balanceDueDate} />}>
+        <Card
+          title="Invoices"
+          bodyClassName="p-0"
+          actions={
+            active &&
+            can("invoices.create") &&
+            !invoices.some((i) => i.status !== "CANCELLED") && <CreateInvoiceButton bookingId={id} dueDate={booking.balanceDueDate} received={fin?.received ?? 0} total={booking.totalAmount} />
+          }
+        >
           {invoices.length === 0 ? (
             <EmptyState compact icon={FileText} title="No invoice yet">
-              Create one when you&rsquo;re ready to bill the client.
+              Create one when you&rsquo;re ready to bill the client — payments already received are applied to it automatically.
             </EmptyState>
           ) : (
             <Table>
@@ -294,6 +341,7 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                   <Th>Due</Th>
                   <Th>Status</Th>
                   <Th className="text-right">Total</Th>
+                  <Th className="text-right">Paid</Th>
                   <Th className="text-right">Balance</Th>
                 </tr>
               </thead>
@@ -311,7 +359,8 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                       <StatusBadge map={INVOICE_STATUS} value={i.status} />
                     </Td>
                     <Td className="text-right tabular-nums">{npr(i.total)}</Td>
-                    <Td className="text-right tabular-nums">{npr(Math.max(0, i.total - i.amountPaid))}</Td>
+                    <Td className="text-right tabular-nums">{i.status === "CANCELLED" ? "—" : npr(i.amountPaid)}</Td>
+                    <Td className="text-right tabular-nums">{i.status === "CANCELLED" ? "—" : npr(Math.max(0, i.total - i.amountPaid))}</Td>
                   </tr>
                 ))}
               </tbody>
@@ -330,7 +379,7 @@ function Stat({ label, value, hint, tone, action }: { label: string; value: stri
         {label}
         {action}
       </div>
-      <div className={`mt-1 font-serif text-2xl font-medium tabular-nums ${tone === "warning" ? "text-a-warning" : tone === "success" ? "text-a-success" : ""}`}>{value}</div>
+      <div className={`mt-1 font-serif text-xl font-medium sm:text-2xl tabular-nums ${tone === "warning" ? "text-a-warning" : tone === "success" ? "text-a-success" : ""}`}>{value}</div>
       {hint && <p className="mt-1 text-xs text-a-muted">{hint}</p>}
     </div>
   );

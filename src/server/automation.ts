@@ -100,7 +100,7 @@ export async function onQuoteAccepted(quotationId: string) {
   if (r && r.config.createBooking !== false) {
     try {
       const result = await bookingFromQuotation(adminDb, quotationId, null, "PENDING");
-      if (result.event) {
+      if (result.event && !result.existed) {
         await exec(
           adminDb.from(tbl(schema.eventTasks)).insert(
             vals(schema.eventTasks, {
@@ -228,17 +228,44 @@ export async function onTaskProgress(taskId: string, status: string, actor: { id
   );
   if (!task) return;
   const event = task.eventId
-    ? await maybe<{ id: string; title: string; status: string; b: { id: string; number: string; status: string } | null }>(
-        adminDb.from(tbl(schema.events)).select("id,title,status,b:bookings(id,number,status)").eq("id", task.eventId),
+    ? await maybe<{ id: string; title: string; status: string; managerId: string | null; b: { id: string; number: string; status: string } | null }>(
+        adminDb.from(tbl(schema.events)).select("id,title,status,managerId:manager_id,b:bookings(id,number,status)").eq("id", task.eventId),
       )
     : null;
   const href = event ? `/admin/events/${event.id}?tab=tasks` : "/admin/tasks";
   const notes: string[] = [];
 
-  if (status === "BLOCKED")
+  // Phase 2: the team's progress reaches the office. Everyone has submitted → planners review it;
+  // accepted / started → the event's manager (or planners when the event has none) sees it move.
+  if (status === "REVIEW" && !actor.planner)
+    await notify({
+      type: "task.review",
+      title: `Review required: “${task.title}”`,
+      body: [event?.title, `submitted by ${actor.name}`].filter(Boolean).join(" · "),
+      href: "/admin/tasks?view=review",
+      priority: "HIGH",
+      permission: "events.update",
+      entityType: "task",
+      entityId: taskId,
+      dedupeKey: `task-review:${taskId}:${new Date().toISOString().slice(0, 13)}`,
+    });
+  else if ((status === "ACCEPTED" || status === "IN_PROGRESS") && !actor.planner && event?.managerId !== actor.id)
+    await notify({
+      type: "task.progress",
+      title: `${actor.name} ${status === "ACCEPTED" ? "accepted" : "started"} “${task.title}”`,
+      body: event?.title,
+      href,
+      priority: "LOW",
+      ...(event?.managerId ? { userId: event.managerId } : { permission: "events.update" as const }),
+      entityType: "task",
+      entityId: taskId,
+      dedupeKey: `task-${status.toLowerCase()}:${taskId}`,
+    });
+
+  if (status === "BLOCKED" || status === "WAITING_MATERIALS")
     await notify({
       type: "task.blocked",
-      title: `${actor.name} is stuck on “${task.title}”`,
+      title: status === "BLOCKED" ? `${actor.name} is stuck on “${task.title}”` : `${actor.name} is waiting for materials on “${task.title}”`,
       body: [event?.title, task.blockedReason].filter(Boolean).join(" — "),
       href,
       priority: "URGENT",
@@ -268,34 +295,27 @@ export async function onTaskProgress(taskId: string, status: string, actor: { id
     notes.push(`${event.title} started`);
   }
 
+  // When the last task is done the event is ready to close. Closing itself goes through the
+  // completion checklist on the event workspace (complete_event): it also checks work orders and
+  // inventory, so it is never done automatically here.
   if (event && r.config.autoComplete !== false && status === "COMPLETED" && !["COMPLETED", "CANCELLED"].includes(event.status)) {
-    const left = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).neq("status", "COMPLETED").limit(1));
+    const left = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).not("status", "in", "(COMPLETED,CANCELLED)").limit(1));
     const planned = await many<{ id: string }>(adminDb.from(tbl(schema.eventTasks)).select("id").eq("event_id", event.id).not("work_day", "is", null).limit(1));
     if (!left.length && planned.length) {
-      let done = true;
-      if (!event.b) await exec(adminDb.from(tbl(schema.events)).update({ status: "COMPLETED" }).eq("id", event.id));
-      else if (["CONFIRMED", "IN_PROGRESS"].includes(event.b.status)) {
-        try {
-          await setBookingStatus(adminDb, event.b.id, "COMPLETED", actor);
-        } catch (error) {
-          done = false;
-          notes.push(`couldn't complete ${event.b.number} (${error instanceof Error ? error.message : "error"})`);
-        }
-      } else done = false;
       await notify({
         type: "work.done",
         title: `All work done for ${event.title}`,
-        body: done ? "Marked completed. Record returned items and collect any balance." : "Every task is done, but the booking isn't confirmed — review it.",
-        href: event.b ? `/admin/bookings/${event.b.id}` : `/admin/events/${event.id}`,
+        body: "Every task is finished. Record returned items, then complete the event from its workspace.",
+        href: `/admin/events/${event.id}?tab=overview`,
         priority: "HIGH",
         permission: "events.update",
         dedupeKey: `work-done:${event.id}`,
       });
-      notes.push(`${event.title} ${done ? "completed" : "all tasks done"}`);
+      notes.push(`${event.title}: all tasks done`);
     }
   }
-  if (notes.length || ["BLOCKED", "COMPLETED"].includes(status))
-    await logRun("task.progress", `${actor.name}: “${task.title}” → ${status.toLowerCase().replace("_", " ")}${notes.length ? ` — ${notes.join(", ")}` : ""}`, !notes.some((n) => n.startsWith("couldn't")));
+  if (notes.length || ["BLOCKED", "WAITING_MATERIALS", "COMPLETED"].includes(status))
+    await logRun("task.progress", `${actor.name}: “${task.title}” → ${status.toLowerCase().replaceAll("_", " ")}${notes.length ? ` — ${notes.join(", ")}` : ""}`, !notes.some((n) => n.startsWith("couldn't")));
 }
 
 /* ───────── Daily sweep ───────── */
@@ -461,7 +481,7 @@ export async function runScheduledAutomations() {
       adminDb
         .from(tbl(schema.eventTasks))
         .select("id,title,eventId:event_id,userId:assignee_user_id,staffId:assignee_staff_id")
-        .neq("status", "COMPLETED")
+        .not("status", "in", "(COMPLETED,CANCELLED,REVIEW)")
         .lt("due_at", new Date().toISOString())
         .order("id"),
     );
@@ -490,7 +510,40 @@ export async function runScheduledAutomations() {
         dedupeKey: `task-overdue:${t.id}`,
       });
     }
-    await logRun("task.overdue", `${tasks.length} overdue task(s)`);
+    // Phase 2: everyone on a shared task (event_task_assignees) hears it too, and work due in the
+    // next 24 hours gets one heads-up per person. Cancelled work and work in review are skipped.
+    const soonEnd = new Date(Date.now() + 24 * 3600_000).toISOString();
+    const parts = await all<{ id: string; staffId: string; t: { id: string; title: string; dueAt: string; status: string } }>(() =>
+      adminDb
+        .from(tbl(schema.eventTaskAssignees))
+        .select("id,staffId:staff_id,t:event_tasks!inner(id,title,dueAt:due_at,status)")
+        .is("removed_at", null)
+        .not("status", "in", "(COMPLETED,CANCELLED,REVIEW)")
+        .not("t.status", "in", "(COMPLETED,CANCELLED,REVIEW)")
+        .lt("t.due_at", soonEnd)
+        .order("id"),
+    );
+    const partUsers = await usersForStaff(parts.map((p) => p.staffId));
+    const nowMs = Date.now();
+    let soonCount = 0;
+    for (const p of parts) {
+      const userId = partUsers.get(p.staffId);
+      if (!userId) continue;
+      const late = new Date(p.t.dueAt).getTime() < nowMs;
+      if (!late) soonCount++;
+      await notify({
+        type: late ? "task.overdue" : "task.due_soon",
+        title: late ? `Task overdue: ${p.t.title}` : `Due soon: ${p.t.title}`,
+        body: late ? undefined : `Deadline ${fmtDate(p.t.dueAt)}`,
+        href: `/admin/my-work/${p.t.id}`,
+        priority: late ? "HIGH" : "MEDIUM",
+        userId,
+        entityType: "task",
+        entityId: p.t.id,
+        dedupeKey: late ? `task-overdue:${p.t.id}:${p.staffId}` : `task-due-soon:${p.t.id}:${p.staffId}:${p.t.dueAt}`,
+      });
+    }
+    await logRun("task.overdue", `${tasks.length} overdue task(s), ${soonCount} assignment(s) due within 24 hours`);
     results.push("task.overdue");
   }
 

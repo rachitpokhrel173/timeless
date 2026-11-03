@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
-import { Camera, CheckCircle2, PauseCircle, Play, RotateCcw, ThumbsUp } from "lucide-react";
+import { Camera, CheckCircle2, Eye, PackageSearch, PauseCircle, Play, RotateCcw, ThumbsUp } from "lucide-react";
 import { Button, Dialog, inputClass, useRun, useToast } from "@/components/admin/interactive";
 import UploadButton, { shrink } from "@/components/admin/Upload";
 import { setTaskStatus } from "../tasks/actions";
@@ -12,12 +12,15 @@ import { uploadTaskProof } from "../upload-actions";
  * The buttons on each piece of work: accept it, start it, put it on hold (with a reason), finish
  * it (note + photos) or reopen it. Big, thumb-friendly targets — the team uses this on site.
  */
-export function WorkTaskActions({ id, title, status, large }: { id: string; title: string; status: string; large?: boolean }) {
+/** `review`: the task needs a manager's approval, so "Done" submits it for review instead (Phase 3). */
+export function WorkTaskActions({ id, title, status, large, review = false }: { id: string; title: string; status: string; large?: boolean; review?: boolean }) {
   const { run, pending } = useRun();
-  const [dialog, setDialog] = useState<"done" | "blocked" | null>(null);
+  const [dialog, setDialog] = useState<"done" | "blocked" | "materials" | null>(null);
   const close = () => setDialog(null);
   const size = large ? "lg" : "md";
   const wide = large ? "flex-1 justify-center sm:flex-none" : undefined;
+
+  if (status === "CANCELLED") return <p className="text-[13px] text-a-muted">Cancelled — nothing to do.</p>;
 
   if (status === "COMPLETED")
     return (
@@ -37,13 +40,30 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
         </Button>
       )}
       {status !== "IN_PROGRESS" && (
-        <Button size={size} variant={status === "ACCEPTED" || status === "BLOCKED" ? "primary" : "secondary"} icon={Play} pending={pending} className={wide} onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Started — good luck!" })}>
-          {status === "BLOCKED" ? "Resume" : "Start"}
+        <Button
+          size={size}
+          variant={["ACCEPTED", "BLOCKED", "WAITING_MATERIALS"].includes(status) ? "primary" : "secondary"}
+          icon={Play}
+          pending={pending}
+          className={wide}
+          onClick={() => run(() => setTaskStatus({ id, status: "IN_PROGRESS" }), { success: "Started — good luck!" })}
+        >
+          {["BLOCKED", "WAITING_MATERIALS", "REVIEW"].includes(status) ? "Resume" : "Start"}
         </Button>
       )}
-      {status !== "TODO" && (
-        <Button size={size} variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={CheckCircle2} className={wide} onClick={() => setDialog("done")}>
-          Done
+      {status !== "TODO" && !(review && status === "REVIEW") && (
+        <Button size={size} variant={status === "IN_PROGRESS" ? "primary" : "secondary"} icon={review ? Eye : CheckCircle2} className={wide} onClick={() => setDialog("done")}>
+          {review ? "Submit for review" : "Done"}
+        </Button>
+      )}
+      {!review && ["IN_PROGRESS", "WAITING_MATERIALS"].includes(status) && (
+        <Button size={size} variant="secondary" icon={Eye} pending={pending} onClick={() => run(() => setTaskStatus({ id, status: "REVIEW" }), { success: "Sent for review — a planner will check it" })}>
+          Ready for review
+        </Button>
+      )}
+      {status !== "WAITING_MATERIALS" && status !== "TODO" && (
+        <Button size={size} variant="ghost" icon={PackageSearch} onClick={() => setDialog("materials")}>
+          Waiting for materials
         </Button>
       )}
       {status !== "BLOCKED" && (
@@ -51,8 +71,11 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
           On hold
         </Button>
       )}
-      <Dialog open={dialog === "done"} onClose={close} title="Mark as completed" description={title}>
-        {dialog === "done" && <DoneForm id={id} onDone={close} />}
+      <Dialog open={dialog === "materials"} onClose={close} title="Waiting for materials" description={title}>
+        {dialog === "materials" && <MaterialsForm id={id} onDone={close} />}
+      </Dialog>
+      <Dialog open={dialog === "done"} onClose={close} title={review ? "Submit for review" : "Mark as completed"} description={review ? `${title} — a manager approves it or asks for changes.` : title}>
+        {dialog === "done" && <DoneForm id={id} onDone={close} review={review} />}
       </Dialog>
       <Dialog open={dialog === "blocked"} onClose={close} title="Put on hold" description={title}>
         {dialog === "blocked" && <BlockedForm id={id} onDone={close} />}
@@ -61,7 +84,7 @@ export function WorkTaskActions({ id, title, status, large }: { id: string; titl
   );
 }
 
-function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
+function DoneForm({ id, onDone, review }: { id: string; onDone: () => void; review: boolean }) {
   const [pending, start] = useTransition();
   const [count, setCount] = useState(0);
   const toast = useToast();
@@ -82,9 +105,9 @@ function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
           const up = await uploadTaskProof(form);
           if (!up.ok) return toast("error", up.error);
         }
-        const r = await setTaskStatus({ id, status: "COMPLETED", note });
+        const r = await setTaskStatus({ id, status: review ? "REVIEW" : "COMPLETED", note });
         if (!r.ok) return toast("error", r.error);
-        toast("success", "Done — nice work!");
+        toast("success", review ? "Sent for review — a manager will check it" : "Done — nice work!");
         onDone();
         router.refresh();
       } catch {
@@ -111,8 +134,8 @@ function DoneForm({ id, onDone }: { id: string; onDone: () => void }) {
       </label>
       <div className="flex justify-end gap-2">
         <Button onClick={onDone}>Cancel</Button>
-        <Button type="submit" variant="primary" icon={CheckCircle2} pending={pending}>
-          Mark done
+        <Button type="submit" variant="primary" icon={review ? Eye : CheckCircle2} pending={pending}>
+          {review ? "Submit for review" : "Mark done"}
         </Button>
       </div>
     </form>
@@ -136,6 +159,29 @@ function BlockedForm({ id, onDone }: { id: string; onDone: () => void }) {
         <Button onClick={onDone}>Cancel</Button>
         <Button type="submit" variant="danger" icon={PauseCircle} pending={pending}>
           Put on hold
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function MaterialsForm({ id, onDone }: { id: string; onDone: () => void }) {
+  const { run, pending } = useRun();
+  function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const reason = String(new FormData(e.currentTarget).get("reason") ?? "").trim();
+    run(() => setTaskStatus({ id, status: "WAITING_MATERIALS", reason }), { success: "Marked as waiting — the planners have been told", onSuccess: onDone });
+  }
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <label className="block text-[13px] font-medium">
+        What&rsquo;s missing? <span className="font-normal text-a-muted">(optional)</span>
+        <textarea name="reason" rows={3} maxLength={500} placeholder="Flowers not delivered, fabric short by 10 m…" className={`${inputClass} mt-1 h-auto py-2`} />
+      </label>
+      <div className="flex justify-end gap-2">
+        <Button onClick={onDone}>Cancel</Button>
+        <Button type="submit" variant="primary" icon={PackageSearch} pending={pending}>
+          Save
         </Button>
       </div>
     </form>

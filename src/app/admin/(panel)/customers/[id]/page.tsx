@@ -7,6 +7,10 @@ import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr } from "@/lib/format";
 import { getCatalogueMeta, getInquiryOptions } from "@/lib/content";
 import { quoteImages } from "@/server/documents";
+import { customerFinance, ledger } from "@/server/finance";
+import { payableCustomer } from "@/server/payables";
+import { methodLabel, PAYMENT_STATE, PAYMENT_TYPE_LABEL } from "@/lib/finance";
+import { RecordPaymentButton } from "@/components/admin/finance/RecordPayment";
 import { sourceOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
 import ActivityTimeline, { type TimelineEntry } from "@/components/admin/ActivityTimeline";
@@ -51,7 +55,7 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
     can("invoices.view")
       ? many<Row<typeof schema.invoices>>(adminDb.from(tbl(schema.invoices)).select(cols(schema.invoices)).eq("customer_id", id).order("issue_date", { ascending: false }))
       : [],
-    can("payments.view") ? many<Row<typeof schema.payments>>(adminDb.from(tbl(schema.payments)).select(cols(schema.payments)).eq("customer_id", id).order("paid_at", { ascending: false })) : [],
+    can("payments.view") ? ledger({ customerId: id }) : [],
     can("documents.view")
       ? many<Row<typeof schema.documents>>(adminDb.from(tbl(schema.documents)).select(cols(schema.documents)).eq("customer_id", id).is("deleted_at", null).order("created_at", { ascending: false }))
       : [],
@@ -83,13 +87,19 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
     ...activities.map(({ a, actor, number }) => ({ id: a.id, type: a.type, body: a.body, at: a.createdAt, actor, context: number })),
     ...quotes.filter((q) => q.sentAt).map((q) => ({ id: `q-${q.id}`, type: "QUOTATION", body: `Quotation ${q.number} sent — ${npr(q.total)}`, at: q.sentAt! })),
     ...quotes.filter((q) => q.acceptedAt).map((q) => ({ id: `qa-${q.id}`, type: "QUOTATION", body: `Accepted ${q.number}${q.acceptedName ? ` (${q.acceptedName})` : ""}`, at: q.acceptedAt! })),
-    ...payments.filter((p) => !p.voidedAt).map((p) => ({ id: `p-${p.id}`, type: "BOOKING", body: `Payment ${p.number}: ${npr(p.amount)} (${p.method.toLowerCase().replace("_", " ")})`, at: new Date(`${p.paidAt}T12:00:00+05:45`) })),
+    ...payments
+      .filter((p) => p.status !== "REVERSED")
+      .map((p) => ({ id: `p-${p.id}`, type: "BOOKING", body: `${PAYMENT_TYPE_LABEL[p.paymentType]} ${p.number}: ${npr(p.amount)} (${methodLabel(p.method)})`, at: new Date(`${p.paidAt}T12:00:00+05:45`) })),
     ...logs.map((l) => ({ id: `l-${l.id}`, type: "SYSTEM", body: l.summary, at: l.createdAt, actor: l.userName })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
 
   const active = bookings.filter(({ b }) => b.status !== "CANCELLED");
-  const lifetime = payments.filter((p) => !p.voidedAt).reduce((s, p) => s + p.amount, 0);
-  const outstanding = active.reduce((s, { b }) => s + Math.max(0, b.totalAmount - b.amountPaid), 0);
+  const [fin, payable] = await Promise.all([
+    can("payments.view") ? customerFinance(id) : null,
+    can("payments.create") && !customer.archivedAt ? payableCustomer(id) : null,
+  ]);
+  const outstanding = fin?.outstanding ?? active.reduce((s, { b }) => s + Math.max(0, b.totalAmount - b.amountPaid), 0);
+  const payProps = { customer: payable, canAdjust: can("payments.adjust"), canAttach: can("documents.manage") };
   const firstName = customer.name.split(" ")[0];
 
   return (
@@ -109,6 +119,8 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
           <>
             <ContactButtons phone={customer.phone} email={customer.email} whatsappMessage={`Namaste ${firstName}! This is Timeless Ties Events & Decor.`} />
             {can("customers.update") && <EditCustomerButton values={customer} sources={sources} />}
+            {payable && <RecordPaymentButton {...payProps} type="ADVANCE" variant="secondary" />}
+            {payable && <RecordPaymentButton {...payProps} variant="secondary" />}
             {can("quotations.create") && (
               <LinkButton href={`/admin/quotations/new?customer=${customer.id}`} variant="primary" icon={FilePlus2}>
                 New quotation
@@ -121,9 +133,32 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
       <section aria-label="Summary" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Events" value={active.length} hint={`${active.filter(({ e }) => e && e.eventDate >= new Date().toISOString().slice(0, 10)).length} upcoming`} />
         <Kpi label="Quotations" value={quotes.length} hint={`${quotes.filter((q) => q.status === "ACCEPTED").length} accepted`} />
-        {can("payments.view") && <Kpi label="Paid to date" value={npr(lifetime)} />}
+        {can("payments.view") && <Kpi label="Received to date" value={npr(fin?.received ?? 0)} hint={fin?.refunded ? `after ${npr(fin.refunded)} refunded` : undefined} />}
         {can("payments.view") && <Kpi label="Outstanding" value={npr(outstanding)} invert />}
       </section>
+      {fin && (fin.invoiced > 0 || fin.received > 0 || fin.bookingValue > 0) && (
+        <Card title="Financial summary" className="mb-5">
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
+            {(
+              [
+                ["Bookings", `${fin.bookings} · ${npr(fin.bookingValue)}`],
+                ["Invoiced", npr(fin.invoiced)],
+                ["Received", npr(fin.received)],
+                ["Outstanding", npr(fin.outstanding)],
+                ["Advances received", npr(fin.advanceReceived)],
+                ["Not on an invoice", npr(fin.unallocated)],
+                ["Refunded", npr(fin.refunded)],
+                ["Customer credit", npr(fin.credit)],
+              ] as const
+            ).map(([k, v]) => (
+              <div key={k}>
+                <dt className="text-a-muted">{k}</dt>
+                <dd className="font-medium tabular-nums">{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
@@ -226,11 +261,20 @@ export default async function CustomerPage({ params }: PageProps<"/admin/custome
                     </li>
                   ))}
                   {payments.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
-                      <span className={p.voidedAt ? "text-a-muted line-through" : undefined}>
-                        {p.number} · {fmtDate(p.paidAt)} · {p.method.toLowerCase().replace("_", " ")}
-                      </span>
-                      <span className="tabular-nums">{npr(p.amount)}</span>
+                    <li key={p.id}>
+                      <Link href={`/admin/finance/payments/${p.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px] hover:bg-a-subtle/50">
+                        <span className={p.status === "REVERSED" ? "text-a-muted line-through" : undefined}>
+                          <span className="font-medium">{p.number}</span> · {PAYMENT_TYPE_LABEL[p.paymentType]} · {fmtDate(p.paidAt)} · {methodLabel(p.method)}
+                          <span className="block text-xs text-a-muted no-underline">
+                            {p.bookingNumber ?? "Not assigned to a booking"}
+                            {p.invoiceNumbers ? ` · ${p.invoiceNumbers}` : ""}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          {p.status !== "VALID" && <Badge tone={PAYMENT_STATE[p.status]?.tone}>{PAYMENT_STATE[p.status]?.label}</Badge>}
+                          <span className="tabular-nums">{npr(p.amount)}</span>
+                        </span>
+                      </Link>
                     </li>
                   ))}
                 </ul>

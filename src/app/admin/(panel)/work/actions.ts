@@ -6,6 +6,9 @@ import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import type { SessionUser } from "@/lib/auth/session";
 import { notifyAssigned, syncAssignees, workEligibility } from "@/server/assignments";
+import { notify } from "@/server/notifications";
+import { usersForStaff } from "@/server/work";
+import { fmtDateTime } from "@/lib/format";
 
 /*
  * Work management on an approved booking: the planner breaks the decoration work into tasks and
@@ -66,6 +69,25 @@ async function saveInternal(taskId: string, notes: string | null, user: SessionU
   await exec(db.from(tbl(schema.eventTaskInternal)).upsert({ task_id: taskId, notes: notes ?? "", updated_by: user.id }, { onConflict: "task_id" }));
 }
 
+/** Tell the people already on a task that its deadline moved (new assignees hear via notifyAssigned). */
+async function deadlineMoved(taskId: string, title: string, dueAt: Date | null) {
+  const people = await many<{ staffId: string }>(db.from(tbl(schema.eventTaskAssignees)).select("staffId:staff_id").eq("task_id", taskId).is("removed_at", null).not("status", "in", "(COMPLETED,CANCELLED)"));
+  const users = await usersForStaff(people.map((p) => p.staffId));
+  const stamp = dueAt ? dueAt.toISOString() : "none";
+  for (const userId of users.values())
+    await notify({
+      type: "task.deadline",
+      title: `Deadline changed: ${title}`,
+      body: dueAt ? `Now due ${fmtDateTime(dueAt)}` : "The deadline was removed",
+      priority: "HIGH",
+      userId,
+      href: `/admin/my-work/${taskId}`,
+      entityType: "task",
+      entityId: taskId,
+      dedupeKey: `task-deadline:${taskId}:${stamp}:${userId}`,
+    });
+}
+
 export const saveWorkTask = adminAction(
   "events.update",
   z
@@ -79,6 +101,7 @@ export const saveWorkTask = adminAction(
       startDate: zs.date(),
       dueAt: dueAt(),
       priority: PRIORITY.default("MEDIUM"),
+      reviewRequired: z.boolean().default(false),
       staffIds: staffIds(),
     })
     .refine((v) => !v.startDate || !v.dueAt || new Date(`${v.startDate}T00:00:00+05:45`) <= v.dueAt, { message: "The deadline is before the start date.", path: ["dueAt"] }),
@@ -87,7 +110,9 @@ export const saveWorkTask = adminAction(
     if (id) {
       const t = await taskBooking(id);
       if (t.e?.bookingId) await workBooking(t.e.bookingId);
+      const before = await maybe<{ dueAt: string | null }>(tasks().select("dueAt:due_at").eq("id", id));
       await exec(tasks().update(vals(schema.eventTasks, input)).eq("id", id));
+      if (before && (before.dueAt ? new Date(before.dueAt).getTime() : null) !== (input.dueAt?.getTime() ?? null)) await deadlineMoved(id, input.title, input.dueAt);
     } else {
       if (!bookingId) throw new UserError("Choose a booking.");
       const b = await workBooking(bookingId);

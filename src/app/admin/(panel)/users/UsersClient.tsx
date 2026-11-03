@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Pencil, Plus, Trash2, UserCheck, UserX } from "lucide-react";
+import { KeyRound, MailPlus, Pencil, Plus, Trash2, UserCheck, UserX } from "lucide-react";
 import { ActionButton, ActionForm, Button, CheckboxGroup, ConfirmButton, DialogButton, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
-import { deleteRole, inviteUser, linkStaff, saveRole, setRolePermissions, setUserActive, setUserRoles } from "./actions";
+import { deleteRole, inviteUser, linkStaff, resendUserInvitation, saveRole, setRolePermissions, setUserActive, setUserRoles } from "./actions";
 
 export function InviteButton({ roles, staff }: { roles: Option[]; staff: Option[] }) {
   return (
@@ -120,4 +120,8 @@ export function PermissionEditor({ roleId, groups, current, locked }: { roleId: 
       )}
     </div>
   );
+}
+
+export function ResendButton({ userId }: { userId: string }) {
+  return <ActionButton size="icon-sm" variant="ghost" icon={MailPlus} aria-label="Resend invitation" title="Resend invitation" action={() => resendUserInvitation({ userId })} success="Invitation sent again" />;
 }

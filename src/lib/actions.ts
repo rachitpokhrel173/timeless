@@ -73,6 +73,9 @@ export function adminAction<S extends z.ZodType, R>(
       const code = (error as { code?: string; cause?: { code?: string } })?.code ?? (error as { cause?: { code?: string } })?.cause?.code;
       // 42501 = blocked by Row Level Security / missing privilege
       if (code === "42501") return { ok: false, error: "You don't have permission to do that." };
+      // P0001 = a business rule raised by a database trigger/function (`raise exception '…'`).
+      // Those messages are written for staff, so show them as-is.
+      if (code === "P0001" && error instanceof Error && error.message) return { ok: false, error: error.message };
       if (code === "23505") return { ok: false, error: "That already exists — it must be unique." };
       if (code === "23503") return { ok: false, error: "This record is linked to others and can't be changed that way." };
       if (code === "23514") return { ok: false, error: "That value isn't allowed (for example a negative amount or quantity)." };

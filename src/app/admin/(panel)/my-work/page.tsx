@@ -10,6 +10,7 @@ import { FilterSelect } from "@/components/admin/interactive";
 import { EVENT_STATUS, PRIORITY, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Badge, Card, EmptyState, Kpi, LinkButton, Notice, PageHeader, Tabs } from "@/components/admin/ui";
 import { WorkTaskActions } from "./WorkClient";
+import { isHeld, taskLabel } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "My work" };
 
@@ -167,7 +168,7 @@ async function Schedule({ viewing, user, staffNames }: { viewing: string | null;
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi label="Assigned" value={totals.length + tasks.filter((t) => !t.mine).length} icon={ClipboardList} />
         <Kpi label="Pending" value={count("TODO", "ACCEPTED")} icon={ListChecks} hint={count("TODO") ? `${count("TODO")} to accept` : undefined} />
-        <Kpi label="In progress" value={count("IN_PROGRESS")} icon={Hourglass} hint={count("BLOCKED") ? `${count("BLOCKED")} on hold` : undefined} />
+        <Kpi label="In progress" value={count("IN_PROGRESS")} icon={Hourglass} hint={count("BLOCKED") + count("WAITING_MATERIALS") ? `${count("BLOCKED") + count("WAITING_MATERIALS")} on hold or waiting` : undefined} />
         <Kpi label="Completed" value={count("COMPLETED")} icon={CheckCircle2} />
         <Kpi label="Upcoming events" value={upcomingEvents} icon={CalendarDays} />
         <Kpi label="Overdue" value={overdue.length} icon={AlertTriangle} hint={overdue.length ? "Finish these first" : "All caught up"} />
@@ -399,7 +400,7 @@ function TaskList({ tasks, photos, showDate }: { tasks: TaskRow[]; photos: Map<s
               </ul>
             </Link>
             <div className="space-y-2 px-4 pb-4">
-              {status === "BLOCKED" && hold && <p className="rounded-md bg-a-danger-soft px-3 py-2 text-[13px] text-a-danger">On hold: {hold}</p>}
+              {isHeld(status) && hold && <p className="rounded-md bg-a-danger-soft px-3 py-2 text-[13px] text-a-danger">{taskLabel(status)}: {hold}</p>}
               {done && note && <p className="text-[13px] text-a-muted">“{note}”</p>}
               {pics.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -411,7 +412,7 @@ function TaskList({ tasks, photos, showDate }: { tasks: TaskRow[]; photos: Map<s
                   ))}
                 </div>
               )}
-              <WorkTaskActions id={t.id} title={t.title} status={status} />
+              <WorkTaskActions id={t.id} title={t.title} status={status} review={t.reviewRequired} />
             </div>
           </article>
         );

@@ -29,6 +29,44 @@ export async function findCustomer(conn: Conn, phone?: string | null, email?: st
   return candidates.find((c) => (key.length >= 7 && phoneKey(c.phone) === key) || (!!email && c.email?.toLowerCase() === email.toLowerCase())) ?? null;
 }
 
+/** Lower-case name words of 2+ letters ("Mr. Ram  B. Thapa" → ["mr", "ram", "thapa"]). */
+const nameWords = (name?: string | null) => (name ?? "").toLowerCase().replace(/[^\p{L}\p{M}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2);
+const TITLES = new Set(["mr", "mrs", "ms", "miss", "dr", "sri", "shree", "shri"]);
+
+/** Two names plausibly belong to the same person: they share a (non-title) word of 3+ letters. */
+export function similarNames(a?: string | null, b?: string | null) {
+  const x = new Set(nameWords(a).filter((w) => !TITLES.has(w)));
+  return nameWords(b).some((w) => !TITLES.has(w) && w.length >= 3 && x.has(w));
+}
+
+export type CustomerMatch = { kind: "MATCHED"; customer: Customer } | { kind: "REVIEW"; candidate: Customer } | { kind: "NONE" };
+
+/**
+ * Website intake: link an existing customer only when we're sure it's the same person
+ * (phone + similar name, email + similar name, or phone and email both match). A phone or
+ * email that matches someone with a different name is flagged for staff to review instead of
+ * being merged into the wrong customer's history.
+ */
+export async function matchCustomer(conn: Conn, name: string, phone?: string | null, email?: string | null): Promise<CustomerMatch> {
+  const key = phoneKey(phone);
+  if (key.length < 7 && !email) return { kind: "NONE" };
+  const filters: string[] = [];
+  if (key.length >= 7) filters.push(`phone.ilike.${pgrstValue(`%${key.split("").join("%")}`)}`);
+  if (email) filters.push(`email.ilike.${pgrstValue(likeEscape(email))}`);
+  const candidates = await many<Customer>(conn.from(tbl(schema.customers)).select(cols(schema.customers)).is("deleted_at", null).or(filters.join(",")).order("created_at").limit(200));
+  const scored = candidates
+    .map((c) => {
+      const phoneHit = key.length >= 7 && phoneKey(c.phone) === key;
+      const emailHit = !!email && c.email?.toLowerCase() === email.toLowerCase();
+      return { c, phoneHit, emailHit, sure: (phoneHit && emailHit) || ((phoneHit || emailHit) && similarNames(name, c.name)) };
+    })
+    .filter((x) => x.phoneHit || x.emailHit);
+  const sure = scored.find((x) => x.sure);
+  if (sure) return { kind: "MATCHED", customer: sure.c };
+  if (scored[0]) return { kind: "REVIEW", candidate: scored[0].c };
+  return { kind: "NONE" };
+}
+
 export function sourceFromUtm(utm?: Record<string, string> | null, referrer?: string | null) {
   const s = `${utm?.utm_source ?? ""} ${referrer ?? ""}`.toLowerCase();
   if (s.includes("facebook") || s.includes("fb.")) return "FACEBOOK";
@@ -94,8 +132,10 @@ export async function createInquiry(input: InquiryIntake) {
   const conn = adminDb;
   const sourceKey = sourceFromUtm(input.utm, input.referrer);
   const campaign = input.utm?.utm_campaign ? await maybe<{ id: string }>(conn.from(tbl(schema.campaigns)).select("id").eq("utm_campaign", input.utm.utm_campaign).limit(1)) : null;
-  let customer = await findCustomer(conn, input.phone, input.email);
-  if (!customer) {
+  const match = await matchCustomer(conn, input.name, input.phone, input.email);
+  let customer: Customer | null = match.kind === "MATCHED" ? match.customer : null;
+  const review = match.kind === "REVIEW" ? match.candidate : null;
+  if (!customer && !review) {
     customer = await one<Customer>(
       conn
         .from(tbl(schema.customers))
@@ -109,7 +149,7 @@ export async function createInquiry(input: InquiryIntake) {
         )
         .select(cols(schema.customers)),
     );
-  } else if (!customer.email && input.email) {
+  } else if (customer && !customer.email && input.email) {
     await exec(conn.from(tbl(schema.customers)).update({ email: input.email }).eq("id", customer.id));
   }
   const lead = await one<Lead>(
@@ -118,7 +158,7 @@ export async function createInquiry(input: InquiryIntake) {
       .insert(
         vals(schema.leads, {
           number: await nextNumber("LD", conn),
-          customerId: customer.id,
+          customerId: customer?.id ?? null,
           name: input.name,
           email: input.email,
           phone: input.phone,
@@ -146,13 +186,20 @@ export async function createInquiry(input: InquiryIntake) {
           kind,
           number: await nextNumber("IQ", conn),
           leadId: lead.id,
-          customerId: customer.id,
+          customerId: customer?.id ?? null,
           sourceKey,
+          customerMatch: match.kind === "MATCHED" ? "MATCHED" : review ? "REVIEW" : "CREATED",
+          possibleCustomerId: review?.id ?? null,
         }),
       )
       .select(cols(schema.inquiries)),
   );
-  await logLeadActivity(conn, lead.id, "SYSTEM", `${kind === "BOOKING_REQUEST" ? "Booking request" : "Inquiry"} ${inquiry.number} received from the website`);
+  await logLeadActivity(
+    conn,
+    lead.id,
+    "SYSTEM",
+    `${kind === "BOOKING_REQUEST" ? "Booking request" : "Inquiry"} ${inquiry.number} received from the website${review ? ` — possible existing customer ${review.name}, needs review` : match.kind === "MATCHED" ? " (returning customer)" : ""}`,
+  );
   return { inquiry, lead, customer };
 }
 
@@ -168,6 +215,7 @@ export async function createLead(
     location?: string | null;
     guestCount?: string | null;
     budget?: string | null;
+    requirements?: string | null;
     sourceKey: string;
     priority: (typeof schema.priority.enumValues)[number];
     assignedTo?: string | null;
@@ -176,7 +224,9 @@ export async function createLead(
   },
   actor: Actor,
 ) {
-  const customerId = data.customerId ?? (await findCustomer(conn, data.phone, data.email))?.id ?? null;
+  // Only a sure match is linked automatically; a doubtful one is left for staff to confirm
+  const match = data.customerId ? null : await matchCustomer(conn, data.name, data.phone, data.email);
+  const customerId = data.customerId ?? (match?.kind === "MATCHED" ? match.customer.id : null);
   const lead = await one<Lead>(
     conn
       .from(tbl(schema.leads))
@@ -201,7 +251,12 @@ export async function ensureCustomerForLead(conn: Conn, leadId: string, actor: A
   const lead = await getLead(conn, leadId);
   if (!lead) throw new UserError("Lead not found.");
   if (lead.customerId) return lead.customerId;
-  const existing = await findCustomer(conn, lead.phone, lead.email);
+  const pending = await maybe<{ number: string }>(conn.from(tbl(schema.inquiries)).select("number").eq("lead_id", leadId).eq("customer_match", "REVIEW").is("customer_id", null).limit(1));
+  if (pending) throw new UserError(`Inquiry ${pending.number} may belong to an existing customer — confirm or create the customer on the inquiry first.`);
+  const match = await matchCustomer(conn, lead.name, lead.phone, lead.email);
+  if (match.kind === "REVIEW")
+    throw new UserError(`${match.candidate.name} has the same phone or email but a different name. Link the right customer on the lead first.`);
+  const existing = match.kind === "MATCHED" ? match.customer : null;
   const customerId =
     existing?.id ??
     (

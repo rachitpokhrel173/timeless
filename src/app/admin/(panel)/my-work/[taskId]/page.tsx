@@ -12,6 +12,9 @@ import { proofPhotos } from "@/server/work";
 import { PRIORITY, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Avatar, Card, DetailList, LinkButton, Notice, PageHeader } from "@/components/admin/ui";
 import { WorkTaskActions } from "../WorkClient";
+import { ReviewButtons } from "../../staff/StaffClient";
+import { TaskChecklist, TaskComments } from "../../events/WorkspaceClient";
+import { isClosedTask, isHeld, taskLabel } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Task" };
 
@@ -74,13 +77,28 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
     planner ? maybe<{ notes: string }>(adminDb.from(tbl(schema.eventTaskInternal)).select("notes").eq("task_id", taskId)) : null,
     eventTypeOptions(),
   ]);
+  const [checklist, comments, workOrder] = await Promise.all([
+    many<{ id: string; label: string; doneAt: Date | null; doneBy: string | null }>(
+      adminDb.from(tbl(schema.eventTaskChecklistItems)).select("id,label,doneAt:done_at,doneBy:done_by").eq("task_id", taskId).order("position"),
+    ),
+    many<{ id: string; body: string; authorId: string | null; createdAt: Date; p: { fullName: string } | null }>(
+      adminDb.from(tbl(schema.eventTaskComments)).select("id,body,authorId:author_id,createdAt:created_at,p:profiles(fullName:full_name)").eq("task_id", taskId).is("deleted_at", null).order("created_at"),
+    ),
+    task.workOrderId
+      ? maybe<{ title: string; instructions: string | null; requiredMaterials: string | null; status: string }>(
+          adminDb.from(tbl(schema.workOrders)).select("title,instructions,requiredMaterials:required_materials,status").eq("id", task.workOrderId),
+        )
+      : null,
+  ]);
   const myProof = mine?.proofMediaIds ?? (mine ? [] : task.proofMediaIds);
   const photos = await proofPhotos([...task.referenceMediaIds, ...myProof, ...(planner ? team.flatMap((a) => a.proofMediaIds) : [])]);
   const refs = task.referenceMediaIds.map((id) => photos.get(id)).filter((p): p is { src: string; alt: string } => !!p);
   const proof = [...myProof, ...(planner && !mine ? team.flatMap((a) => a.proofMediaIds) : [])].map((id) => photos.get(id)).filter((p): p is { src: string; alt: string } => !!p);
 
   const status = mine?.status ?? task.status;
-  const late = status !== "COMPLETED" && task.dueAt && task.dueAt.getTime() < serverNow();
+  const late = !isClosedTask(status) && task.dueAt && task.dueAt.getTime() < serverNow();
+  const canApprove = user.permissions.has("events.update");
+  const waiting = team.filter((a) => a.status === "REVIEW");
   const canAct = !!mine || task.assigneeUserId === user.id || user.permissions.has("events.update");
   const e = task.e;
   const place = e ? [e.venue, e.venueAddress].filter(Boolean).join(", ") : "";
@@ -106,21 +124,69 @@ export default async function TaskDetailPage({ params }: PageProps<"/admin/my-wo
             This was due {fmtDateTime(task.dueAt)}.
           </Notice>
         )}
-        {status === "BLOCKED" && (mine?.holdReason ?? task.blockedReason) && (
-          <Notice tone="warning" title="On hold">
+        {isHeld(status) && (mine?.holdReason ?? task.blockedReason) && (
+          <Notice tone="warning" title={taskLabel(status)}>
             {mine?.holdReason ?? task.blockedReason}
           </Notice>
         )}
+        {task.reviewRequired && canApprove && (task.status === "REVIEW" || waiting.length > 0) && (
+          <Notice tone="warning" title="Waiting for your review">
+            <span className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                {waiting.length ? `Submitted by ${waiting.map((a) => a.s.name).join(", ")}.` : "Submitted for review."} Check the photos and notes below, then approve it or ask for changes.
+              </span>
+              <ReviewButtons taskId={task.id} title={task.title} />
+            </span>
+          </Notice>
+        )}
+        {task.reviewRequired && !canApprove && status !== "COMPLETED" && status !== "CANCELLED" && status !== "REVIEW" && (
+          <Notice title="Needs a manager's approval">When you&apos;re finished, submit it for review with photos of the work — a manager approves it or asks for changes.</Notice>
+        )}
+        {task.reviewedAt && task.status === "COMPLETED" && <Notice tone="success" title="Approved">Approved by a manager on {fmtDateTime(task.reviewedAt)}.</Notice>}
         {mine === null && planner && !task.assigneeUserId && team.length > 0 && <Notice title="You're viewing as a planner">Status changes here apply to everyone on the task.</Notice>}
 
         {canAct && (
           <div className="rounded-xl border border-a-border bg-a-surface p-4">
             <p className="mb-3 text-[13px] text-a-muted">
-              {status === "TODO" ? "Accept the task so the planner knows it's in hand." : status === "COMPLETED" ? "Finished — you can still add photos." : "Update your progress as you go."}
+              {status === "TODO"
+                ? "Accept the task so the planner knows it's in hand."
+                : status === "COMPLETED"
+                  ? "Finished — you can still add photos."
+                  : status === "CANCELLED"
+                    ? "This task was cancelled by a planner."
+                    : status === "REVIEW"
+                      ? "Waiting for a planner to review your work."
+                      : "Update your progress as you go."}
             </p>
-            <WorkTaskActions id={task.id} title={task.title} status={status} large />
+            <WorkTaskActions id={task.id} title={task.title} status={status} large review={task.reviewRequired && !canApprove} />
           </div>
         )}
+
+        {workOrder && (
+          <Card title={`Work order: ${workOrder.title}`}>
+            <DetailList
+              columns={1}
+              items={[
+                ["Instructions", workOrder.instructions ? <span key="i" className="whitespace-pre-line">{workOrder.instructions}</span> : null],
+                ["Materials", workOrder.requiredMaterials ? <span key="m" className="whitespace-pre-line">{workOrder.requiredMaterials}</span> : null],
+              ]}
+            />
+          </Card>
+        )}
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(checklist.length > 0 || user.permissions.has("events.update")) && (
+            <Card title="Checklist">
+              <TaskChecklist taskId={task.id} items={checklist} canEdit={user.permissions.has("events.update")} canTick={canAct && status !== "CANCELLED"} />
+            </Card>
+          )}
+          <Card title="Comments" description="Questions and updates for the team and planners.">
+            <TaskComments
+              taskId={task.id}
+              canComment={canAct}
+              comments={comments.map((c) => ({ id: c.id, body: c.body, author: c.p?.fullName ?? "Team", mine: c.authorId === user.id, createdAt: fmtDateTime(c.createdAt) }))}
+            />
+          </Card>
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="space-y-4">

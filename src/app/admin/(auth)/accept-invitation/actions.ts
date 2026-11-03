@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { clientIp, hashIp } from "@/lib/request";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { supabaseServer } from "@/lib/supabase/server";
+import { notify } from "@/server/notifications";
 
 export type InvitationState = {
   /** "expired" / "invalid": the link can't be used any more — ask for a new invitation. */
@@ -88,5 +89,15 @@ async function accept(prev: InvitationState, formData: FormData): Promise<Invita
   await supabase.auth.signOut({ scope: "others" });
 
   await audit(user, "password_change", "user", user.id, "Accepted the invitation and set a password");
+  // Tell the people who manage team logins; once per account (dedupe key)
+  if (user.staffId) await audit(user, "invite_accepted", "staff", user.staffId, `${user.name} accepted the invitation and activated their login`);
+  await notify({
+    type: "staff.invite_accepted",
+    title: `${user.name} activated their account`,
+    body: user.email,
+    permission: user.staffId ? "staff.invite" : "users.manage",
+    href: user.staffId ? `/admin/staff/${user.staffId}?tab=login` : "/admin/users",
+    dedupeKey: `invite-accepted:${user.id}`,
+  }).catch((e) => console.error("[accept-invitation] notify failed:", e));
   return { ...state, status: "done", redirectTo: user.isStaff ? "/admin" : "/client" };
 }

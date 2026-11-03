@@ -7,14 +7,14 @@ import { adminDb, cols, exec, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { getCatalogue } from "@/lib/content";
 import { fmtDate, fmtDateTime, npr } from "@/lib/format";
-import { eventTypeName, eventTypeOptions, sourceOptions, userOptions } from "@/server/lookups";
+import { customerOptions, eventTypeName, eventTypeOptions, sourceOptions, userOptions } from "@/server/lookups";
 import { signedUrl } from "@/server/storage";
 import ActivityTimeline from "@/components/admin/ActivityTimeline";
 import { ContactButtons } from "@/components/admin/contact-links";
 import FollowUps from "@/components/admin/FollowUps";
 import { BOOKING_STATUS, INQUIRY_STATUS, LEAD_STAGE, QUOTE_STATUS, StatusBadge, label } from "@/components/admin/status";
 import { Badge, Card, DetailList, EmptyState, LinkButton, PageHeader } from "@/components/admin/ui";
-import { InquiryStatusForm } from "../InquiryClient";
+import { InquiryCustomerActions, InquiryStatusForm } from "../InquiryClient";
 
 export const metadata: Metadata = { title: "Inquiry" };
 
@@ -70,6 +70,14 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
   });
   const designsTotal = designs.reduce((sum, d) => sum + (d.amount ?? 0), 0);
   const eventName = eventTypeName(types, inquiry.eventType);
+  const linkable = !inquiry.customerId && can("leads.update");
+  const [candidate, customers, convertedBy] = await Promise.all([
+    inquiry.possibleCustomerId
+      ? maybe<{ id: string; name: string; phone: string | null; email: string | null }>(adminDb.from(tbl(schema.customers)).select("id,name,phone,email").eq("id", inquiry.possibleCustomerId))
+      : null,
+    linkable ? customerOptions() : [],
+    inquiry.convertedBy ? maybe<{ fullName: string }>(adminDb.from(tbl(schema.profiles)).select("fullName:full_name").eq("id", inquiry.convertedBy)) : null,
+  ]);
   const firstName = inquiry.name.split(" ")[0];
 
   return (
@@ -193,6 +201,9 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
             <InquiryStatusForm id={inquiry.id} status={inquiry.status} assignedTo={inquiry.assignedTo} users={users} disabled={!can("leads.update")} />
           </Card>
           <Card title="Customer">
+            {inquiry.customerMatch === "REVIEW" && !inquiry.customerId && (
+              <p className="mb-3 rounded-md bg-a-warning-soft px-3 py-2 text-[13px] font-medium">Needs review — confirm who this customer is before quoting.</p>
+            )}
             <DetailList
               columns={1}
               items={[
@@ -201,8 +212,24 @@ export default async function InquiryPage({ params }: PageProps<"/admin/inquirie
                 ["Email", inquiry.email],
                 ["Preferred contact", label(inquiry.preferredContact)],
                 ["Lead", lead ? <Link key="l" href={`/admin/leads/${lead.id}`} className="inline-flex items-center gap-2 text-a-info underline">{lead.number} <StatusBadge map={LEAD_STAGE} value={lead.stage} /></Link> : "—"],
+                [
+                  "Customer record",
+                  inquiry.customerId
+                    ? `${inquiry.customerMatch === "MATCHED" ? "Returning customer (matched automatically)" : inquiry.customerMatch === "CREATED" ? "New customer" : inquiry.customerMatch === "LINKED" ? "Linked by staff" : "Linked"}${inquiry.convertedAt ? ` · ${fmtDateTime(inquiry.convertedAt)}` : ""}${convertedBy ? ` by ${convertedBy.fullName}` : ""}`
+                    : "Not linked yet",
+                ],
               ]}
             />
+            {linkable && (
+              <div className="mt-4 border-t border-a-border pt-4">
+                <InquiryCustomerActions
+                  id={inquiry.id}
+                  candidate={candidate}
+                  customers={customers.map((c) => ({ value: c.value, label: c.phone ? `${c.label} · ${c.phone}` : c.label }))}
+                  canCreate={can("customers.create")}
+                />
+              </div>
+            )}
           </Card>
           <Card title="Source">
             <DetailList

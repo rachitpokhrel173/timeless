@@ -119,26 +119,10 @@ export async function globalSearch(user: SessionUser, query: string): Promise<Se
         })),
       );
     }
-    if (has("inventory.view")) {
-      const rows = await many<{ id: string; name: string; sku: string }>(
-        db.from("inventory_items").select("id,name,sku").is("archived_at", null).or(like("name", "sku")).limit(LIMIT),
-      );
-      hits.push(...rows.map((r) => ({ type: "Inventory", id: r.id, title: r.name, subtitle: r.sku, href: `/admin/inventory/${r.id}` })));
-    }
-    if (has("vendors.view")) {
-      const rows = await many<{ id: string; name: string; category: string }>(
-        db
-          .from("vendors")
-          .select("id,name,category")
-          .is("archived_at", null)
-          .or(like("name", "contact_person", "phone"))
-          .limit(LIMIT),
-      );
-      hits.push(...rows.map((r) => ({ type: "Vendor", id: r.id, title: r.name, subtitle: r.category.toLowerCase(), href: `/admin/vendors/${r.id}` })));
-    }
+    // Phase 3: Inventory and Vendors are hidden from the interface, so they are not offered in search
     if (has("staff.view")) {
       const rows = await many<{ id: string; name: string; role: string | null }>(
-        db.from("staff").select("id,name,role").is("archived_at", null).or(like("name", "phone")).limit(LIMIT),
+        db.from("staff").select("id,name,role").is("archived_at", null).or(like("name", "phone", "email", "employee_code")).limit(LIMIT),
       );
       hits.push(...rows.map((r) => ({ type: "Staff", id: r.id, title: r.name, subtitle: r.role ?? undefined, href: `/admin/staff/${r.id}` })));
     }

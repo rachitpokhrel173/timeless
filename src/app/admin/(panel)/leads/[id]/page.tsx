@@ -14,6 +14,7 @@ import { ArchivedBadge, INQUIRY_STATUS, LEAD_STAGE, PRIORITY, QUOTE_STATUS, Stat
 import { Card, DetailList, EmptyState, LinkButton, PageHeader } from "@/components/admin/ui";
 import { convertLeadToCustomer, deleteLead, setLeadArchived } from "../actions";
 import { EditLeadButton, LogActivityButton, StageControl } from "../LeadClient";
+import { LeadInquiryButton } from "../../inquiries/InquiryClient";
 import { leadFormOptions } from "../options";
 
 export const metadata: Metadata = { title: "Lead" };
@@ -94,6 +95,7 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
                 ["Location", lead.location],
                 ["Guests", lead.guestCount],
                 ["Budget", lead.budget],
+                ["Requirements", lead.requirements ? <span key="r" className="whitespace-pre-line">{lead.requirements}</span> : null],
                 ["Source", (sources.find((s) => s.value === lead.sourceKey)?.label ?? lead.sourceKey) + (campaign[0] ? ` · ${campaign[0].name}` : "")],
                 ["Priority", <StatusBadge key="p" map={PRIORITY} value={lead.priority} />],
                 ["Assigned to", opts.users.find((u) => u.value === lead.assignedTo)?.label ?? "Unassigned"],
@@ -128,9 +130,17 @@ export default async function LeadPage({ params }: PageProps<"/admin/leads/[id]"
             )}
           </Card>
 
-          <Card title="Inquiries">
+          <Card
+            title="Inquiries"
+            actions={
+              can("leads.create") &&
+              !lead.archivedAt && (
+                <LeadInquiryButton leadId={lead.id} eventTypes={opts.eventTypes} defaults={{ eventType: lead.eventType, eventDate: lead.eventDate, venue: lead.location, guestCount: lead.guestCount, budget: lead.budget }} />
+              )
+            }
+          >
             {inquiries.length === 0 ? (
-              <p className="text-[13px] text-a-muted">Added manually — no website inquiry.</p>
+              <p className="text-[13px] text-a-muted">No inquiry yet — create one to record exactly what the client asked for.</p>
             ) : (
               <ul className="divide-y divide-a-border">
                 {inquiries.map((i) => (

@@ -7,13 +7,15 @@ import { adminDb, all, cols, many, schema, tbl, total, type Row } from "@/db";
 import { isFieldOnly, requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, fmtDay, fmtTime, isoDaysFromNow, npr, nprCompact, pctChange, relativeTime, todayISO } from "@/lib/format";
 import { maybeRunSweep } from "@/server/automation";
-import { inventoryWithStock } from "@/server/inventory";
 import { dashboardKpis, monthlyRevenue, outstandingTotal, pipelineSnapshot, resolveRange, salesFunnel } from "@/server/metrics";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import { BarList, ColumnChart, Funnel } from "@/components/admin/charts";
+import CalendarButton from "@/components/admin/CalendarModal";
 import RangeFilter from "@/components/admin/RangeFilter";
 import { INQUIRY_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, EmptyState, Kpi, LinkButton, PageHeader } from "@/components/admin/ui";
+import { RecordPaymentButton } from "@/components/admin/finance/RecordPayment";
+import { methodLabel } from "@/lib/finance";
 import DashboardCustomizer from "./DashboardCustomizer";
 import { DEFAULT_WIDGETS, WIDGETS, type WidgetKey } from "./widgets";
 
@@ -21,8 +23,8 @@ export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage({ searchParams }: PageProps<"/admin">) {
   const signedIn = await requirePage();
-  // Field-team logins work from My work only
-  if (isFieldOnly(signedIn) || (!signedIn.permissions.has("dashboard.view") && signedIn.permissions.has("tasks.update"))) redirect("/admin/my-work");
+  // Field-team logins work from the staff portal
+  if (isFieldOnly(signedIn) || (!signedIn.permissions.has("dashboard.view") && signedIn.permissions.has("tasks.update"))) redirect("/staff");
   const user = await requirePage("dashboard.view");
   // Field team (no planning or sales access) start on their own schedule
   if (user.staffId && user.permissions.has("tasks.update") && !(["events.update", "leads.view", "bookings.view", "invoices.view"] as const).some((p) => user.permissions.has(p))) redirect("/admin/my-work");
@@ -38,7 +40,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   after(() => maybeRunSweep().catch((e) => console.error("[automations]", e)));
 
   const today = todayISO();
-  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, lowStock, payments, outstanding, activity, types] = await Promise.all([
+  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, , payments, outstanding, activity, types] = await Promise.all([
     on("kpis") ? dashboardKpis(range) : null,
     on("revenue") ? monthlyRevenue(12) : null,
     on("conversion") ? salesFunnel(range) : null,
@@ -68,7 +70,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
     on("inquiries")
       ? many<Row<typeof schema.inquiries>>(adminDb.from(tbl(schema.inquiries)).select(cols(schema.inquiries)).eq("spam", false).is("archived_at", null).order("created_at", { ascending: false }).limit(6))
       : null,
-    (on("inventory") || on("kpis")) && has("inventory.view") ? inventoryWithStock().then((items) => items.filter((i) => i.low)) : null,
+    // Phase 3: Inventory is hidden from the interface (its data and pages are kept)
+    null,
     on("payments")
       ? many<Row<typeof schema.payments> & { c: { name: string } }>(
           adminDb
@@ -103,6 +106,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
         description="Here's how the business is doing."
         actions={
           <>
+            {has("events.view") && <CalendarButton />}
             <RangeFilter />
             <DashboardCustomizer current={chosen} available={visible.map(({ key, label }) => ({ key, label }))} />
           </>
@@ -122,9 +126,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
           </LinkButton>
         )}
         {has("payments.create") && (
-          <LinkButton href="/admin/payments/new" icon={Wallet} className="h-11">
-            Add payment
-          </LinkButton>
+          <RecordPaymentButton canAdjust={has("payments.adjust")} canAttach={has("documents.manage")} variant="secondary" />
         )}
         {has("cms.manage") && (
           <LinkButton href="/admin/website/gallery" icon={Boxes} className="h-11">
@@ -139,11 +141,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
             {has("leads.view") && <Kpi label="Total leads" value={totalLeads} hint={`${kpis.leadsNow} new · ${range.label.toLowerCase()}`} change={pctChange(kpis.leadsNow, kpis.leadsPrev)} icon={UserPlus} href="/admin/leads" />}
             {has("leads.view") && <Kpi label="New inquiries" value={kpis.inquiriesNow} change={pctChange(kpis.inquiriesNow, kpis.inquiriesPrev)} hint={<span className="sr-only">{range.label}</span>} icon={Inbox} href="/admin/inquiries" />}
             {has("bookings.view") && <Kpi label="Active bookings" value={kpis.active} hint={`${kpis.bookingsNow} new · ${range.label.toLowerCase()}`} icon={CalendarCheck} href="/admin/bookings" />}
-            {has("events.view") && <Kpi label="Upcoming events" value={kpis.upcoming} hint="Next 30 days" icon={CalendarDays} href="/admin/calendar" />}
-            {has("payments.view") && <Kpi label="Revenue" value={nprCompact(kpis.revenueRange)} change={pctChange(kpis.revenueRange, kpis.revenuePrev)} hint={`${nprCompact(kpis.monthRevenue)} this month`} icon={TrendingUp} href="/admin/payments" />}
-            {has("payments.view") && <Kpi label="Outstanding payments" value={nprCompact(kpis.outstanding.amount)} hint={`${kpis.outstanding.bookings} booking${kpis.outstanding.bookings === 1 ? "" : "s"}`} icon={AlertTriangle} href="/admin/invoices?status=open" />}
+            {has("events.view") && <Kpi label="Upcoming events" value={kpis.upcoming} hint="Next 30 days" icon={CalendarDays} href="/admin/events" />}
+            {has("payments.view") && <Kpi label="Revenue" value={nprCompact(kpis.revenueRange)} change={pctChange(kpis.revenueRange, kpis.revenuePrev)} hint={`${nprCompact(kpis.monthRevenue)} this month`} icon={TrendingUp} href="/admin/finance?tab=payments" />}
+            {has("payments.view") && <Kpi label="Outstanding payments" value={nprCompact(kpis.outstanding.amount)} hint={`${kpis.outstanding.bookings} booking${kpis.outstanding.bookings === 1 ? "" : "s"}`} icon={AlertTriangle} href="/admin/finance?tab=outstanding" />}
             {has("quotations.view") && <Kpi label="Pending quotations" value={kpis.pendingQuotes.c} hint={`${nprCompact(kpis.pendingQuotes.v)} awaiting reply`} icon={FileText} href="/admin/quotations?status=open" />}
-            {has("inventory.view") && <Kpi label="Low stock items" value={lowStock?.length ?? 0} hint="Below their threshold" icon={Boxes} href="/admin/inventory?stock=low" />}
           </section>
         )}
 
@@ -167,7 +168,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
           )}
 
           {upcoming && (
-            <Card title="Upcoming events" actions={<LinkButton href="/admin/calendar" size="sm" variant="ghost">Calendar</LinkButton>} order={pos("upcoming")}>
+            <Card title="Upcoming events" actions={<LinkButton href="/admin/events" size="sm" variant="ghost">All events</LinkButton>} order={pos("upcoming")}>
               {upcoming.length === 0 ? (
                 <EmptyState compact icon={CalendarDays} title="No upcoming events" action={has("bookings.create") ? <LinkButton href="/admin/bookings/new" size="sm">Create booking</LinkButton> : undefined} />
               ) : (
@@ -267,34 +268,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
             </Card>
           )}
 
-          {on("inventory") && lowStock && (
-            <Card title="Inventory alerts" actions={<LinkButton href="/admin/inventory?stock=low" size="sm" variant="ghost">All</LinkButton>} order={pos("inventory")}>
-              {lowStock.length === 0 ? (
-                <EmptyState compact icon={Boxes} title="Stock levels look healthy" />
-              ) : (
-                <ul className="divide-y divide-a-border">
-                  {lowStock.slice(0, 6).map((i) => (
-                    <li key={i.id}>
-                      <Link href={`/admin/inventory/${i.id}`} className="flex items-center justify-between gap-3 py-2 text-[13px] hover:bg-a-subtle/50">
-                        <span className="min-w-0 truncate font-medium">{i.name}</span>
-                        <span className="flex shrink-0 items-center gap-2">
-                          <span className="text-xs text-a-muted tabular-nums">
-                            {i.available} / {i.lowStockThreshold}
-                          </span>
-                          <Badge tone="warning" icon={AlertTriangle}>
-                            Low stock
-                          </Badge>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          )}
-
           {payments && (
-            <Card title="Recent payments" actions={<LinkButton href="/admin/payments" size="sm" variant="ghost">All</LinkButton>} order={pos("payments")}>
+            <Card title="Recent payments" actions={<LinkButton href="/admin/finance?tab=payments" size="sm" variant="ghost">All</LinkButton>} order={pos("payments")}>
               {payments.length === 0 ? (
                 <EmptyState compact icon={Wallet} title="No payments yet" />
               ) : (
@@ -302,9 +277,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
                   {payments.map(({ p, customer }) => (
                     <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
                       <span className="min-w-0">
-                        <span className="block truncate font-medium">{customer}</span>
+                        <Link href={`/admin/finance/payments/${p.id}`} className="block truncate font-medium hover:underline">
+                          {customer}
+                        </Link>
                         <span className="block text-xs text-a-muted">
-                          {p.number} · {fmtDate(p.paidAt)} · {p.method.toLowerCase().replace("_", " ")}
+                          {p.number} · {fmtDate(p.paidAt)} · {methodLabel(p.method)}
                         </span>
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums">{npr(p.amount)}</span>

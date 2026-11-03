@@ -45,9 +45,13 @@ const head = { count: "exact", head: true } as const;
 
 /* ───────── KPIs ───────── */
 
+/** Money received in the range, less refunds paid out in it (reversed payments never count). */
 export async function revenueBetween(from: string, to: string) {
-  const rows = await all<{ amount: number }>(() => db.from("payments").select("amount").is("voided_at", null).gte("paid_at", from).lte("paid_at", to).order("id"));
-  return sum(rows, (r) => r.amount);
+  const [rows, refunds] = await Promise.all([
+    all<{ amount: number }>(() => db.from("payments").select("amount").is("voided_at", null).gte("paid_at", from).lte("paid_at", to).order("id")),
+    all<{ amount: number }>(() => db.from("payment_adjustments").select("amount").eq("kind", "REFUND").gte("adjusted_on", from).lte("adjusted_on", to).order("id")),
+  ]);
+  return sum(rows, (r) => r.amount) - sum(refunds, (r) => r.amount);
 }
 
 export async function expensesBetween(from: string, to: string) {
@@ -160,17 +164,23 @@ export async function monthlyRevenue(months = 12) {
     keys.push(d.toISOString().slice(0, 7));
   }
   const from = `${keys[0]}-01`;
-  const [payments, expenses] = await Promise.all([
+  const [payments, refunds, expenses] = await Promise.all([
     all<{ amount: number; paidAt: string }>(() => db.from("payments").select("amount,paidAt:paid_at").is("voided_at", null).gte("paid_at", from).order("id")),
+    all<{ amount: number; adjustedOn: string }>(() => db.from("payment_adjustments").select("amount,adjustedOn:adjusted_on").eq("kind", "REFUND").gte("adjusted_on", from).order("id")),
     all<{ amount: number; date: string }>(() => db.from("expenses").select("amount,date").is("voided_at", null).gte("date", from).order("id")),
   ]);
   return keys.map((m) => ({
     key: m,
     label: new Intl.DateTimeFormat("en-GB", { month: "short", year: "2-digit" }).format(new Date(`${m}-01T00:00:00`)),
-    revenue: sum(
-      payments.filter((p) => String(p.paidAt).slice(0, 7) === m),
-      (p) => p.amount,
-    ),
+    revenue:
+      sum(
+        payments.filter((p) => String(p.paidAt).slice(0, 7) === m),
+        (p) => p.amount,
+      ) -
+      sum(
+        refunds.filter((r) => r.adjustedOn.slice(0, 7) === m),
+        (r) => r.amount,
+      ),
     expenses: sum(
       expenses.filter((x) => x.date.slice(0, 7) === m),
       (x) => x.amount,

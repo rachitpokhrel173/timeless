@@ -8,10 +8,10 @@ import { getSiteSettings } from "@/lib/content";
 import { fmtDate, fmtDateLong, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
 import { first, isUuid } from "@/lib/list";
 import { quoteImages } from "@/server/documents";
-import { PAYMENT_METHODS } from "@/server/finance";
+import { methodOptions } from "@/lib/finance";
 import { eventTypeName, eventTypeOptions } from "@/server/lookups";
 import ActivityTimeline from "@/components/admin/ActivityTimeline";
-import { ArchivedBadge, label, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
+import { ArchivedBadge, QUOTE_STATUS, StatusBadge } from "@/components/admin/status";
 import { Badge, Card, DetailList, Notice, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import QuoteActions from "../QuoteActions";
 import ReferenceImages from "../ReferenceImages";
@@ -113,7 +113,7 @@ export default async function QuotationPage({ params }: PageProps<"/admin/quotat
             emailReady={emailConfigured()}
             shareMessage={shareMessage}
             advance={{ required: quote.depositAmount, paid: advancePaid }}
-            methods={PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }))}
+            methods={methodOptions()}
             can={{ update: can("quotations.update"), create: can("quotations.create"), approve: can("quotations.approve"), remove: can("quotations.delete"), pay: can("payments.create") }}
           />
         }

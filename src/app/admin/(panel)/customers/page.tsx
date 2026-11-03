@@ -45,7 +45,7 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
         all<{ customerId: string; totalAmount: number; amountPaid: number }>(() =>
           adminDb.from(tbl(schema.bookings)).select("customerId:customer_id,totalAmount:total_amount,amountPaid:amount_paid").in("customer_id", ids).neq("status", "CANCELLED").order("id"),
         ),
-        all<{ customerId: string; amount: number }>(() => adminDb.from(tbl(schema.payments)).select("customerId:customer_id,amount").in("customer_id", ids).is("voided_at", null).order("id")),
+        all<{ customerId: string; amount: number }>(() => adminDb.from("payment_ledger").select("customerId:customer_id,amount:net_amount").in("customer_id", ids).neq("status", "REVERSED").order("id")),
         all<{ customerId: string; eventDate: string }>(() =>
           adminDb.from(tbl(schema.events)).select("customerId:customer_id,eventDate:event_date").in("customer_id", ids).neq("status", "CANCELLED").order("id"),
         ),

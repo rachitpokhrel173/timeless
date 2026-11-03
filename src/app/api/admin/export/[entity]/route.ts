@@ -5,6 +5,8 @@ import type { Permission } from "@/lib/auth/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { toCsv } from "@/lib/csv";
 import { inventoryWithStock } from "@/server/inventory";
+import { LEDGER_COLS, type LedgerRow } from "@/server/finance";
+import { methodLabel, PAYMENT_STATE, PAYMENT_TYPE_LABEL } from "@/lib/finance";
 
 type Export = { permission: Permission; run: (q: URLSearchParams) => Promise<{ headers: string[]; rows: unknown[][] }> };
 
@@ -18,7 +20,7 @@ const EXPORTS: Record<string, Export> = {
         ),
         all<{ key: string; name: string }>(() => adminDb.from(tbl(schema.campaignSources)).select("key,name").order("key")),
         all<{ customerId: string }>(() => adminDb.from(tbl(schema.bookings)).select("customerId:customer_id").neq("status", "CANCELLED").order("id")),
-        all<{ customerId: string; amount: number }>(() => adminDb.from(tbl(schema.payments)).select("customerId:customer_id,amount").is("voided_at", null).order("id")),
+        all<{ customerId: string; amount: number }>(() => adminDb.from("payment_ledger").select("customerId:customer_id,amount:net_amount").neq("status", "REVERSED").order("id")),
       ]);
       const booked = new Map<string, number>();
       for (const b of bookings) booked.set(b.customerId, (booked.get(b.customerId) ?? 0) + 1);
@@ -67,16 +69,28 @@ const EXPORTS: Record<string, Export> = {
   payments: {
     permission: "payments.view",
     run: async () => {
-      const rows = await all<Row<typeof schema.payments> & { c: { name: string }; b: { number: string }; inv: { number: string } | null }>(() =>
-        adminDb
-          .from(tbl(schema.payments))
-          .select(`${cols(schema.payments)},c:customers!inner(name),b:bookings!inner(number),inv:invoices(number)`)
-          .order("paid_at", { ascending: false })
-          .order("id"),
-      );
+      const rows = await all<LedgerRow>(() => adminDb.from("payment_ledger").select(LEDGER_COLS).order("paid_at", { ascending: false }).order("id"));
       return {
-        headers: ["Receipt", "Date", "Customer", "Booking", "Invoice", "Amount (NPR)", "Method", "Reference", "Void"],
-        rows: rows.map((p) => [p.number, p.paidAt, p.c.name, p.b.number, p.inv?.number ?? null, p.amount, p.method, p.reference, p.voidedAt ? `Void: ${p.voidReason ?? ""}` : ""]),
+        headers: ["Receipt", "Date", "Type", "Customer", "Booking", "Event", "Invoice(s)", "Amount (NPR)", "Refunded (NPR)", "Net (NPR)", "Not on invoice (NPR)", "Method", "Reference", "Received by", "Recorded by", "Status", "Reversal reason"],
+        rows: rows.map((p) => [
+          p.number,
+          p.paidAt,
+          PAYMENT_TYPE_LABEL[p.paymentType] ?? p.paymentType,
+          p.customerName,
+          p.bookingNumber,
+          p.eventTitle,
+          p.invoiceNumbers,
+          p.amount,
+          p.refunded,
+          p.netAmount,
+          p.unallocated,
+          methodLabel(p.method),
+          p.reference,
+          p.receivedBy,
+          p.recordedByName,
+          PAYMENT_STATE[p.status]?.label ?? p.status,
+          p.status === "REVERSED" ? p.voidReason : null,
+        ]),
       };
     },
   },
@@ -91,25 +105,25 @@ const EXPORTS: Record<string, Export> = {
           .order("id"),
       );
       return {
-        headers: ["Invoice", "Issued", "Due", "Customer", "Booking", "Total (NPR)", "Paid (NPR)", "Balance (NPR)", "Status"],
-        rows: rows.map((i) => [i.number, i.issueDate, i.dueDate, i.c.name, i.b.number, i.total, i.amountPaid, Math.max(0, i.total - i.amountPaid), i.status]),
+        headers: ["Invoice", "Issued", "Due", "Customer", "Booking", "Total (NPR)", "Previously received (NPR)", "Paid (NPR)", "Balance (NPR)", "Status", "Cancel reason"],
+        rows: rows.map((i) => [i.number, i.issueDate, i.dueDate, i.c.name, i.b.number, i.total, i.priorPayments, i.amountPaid, i.status === "CANCELLED" ? 0 : Math.max(0, i.total - i.amountPaid), i.status, i.cancelReason]),
       };
     },
   },
   expenses: {
     permission: "expenses.view",
     run: async () => {
-      const rows = await all<Row<typeof schema.expenses> & { cat: { name: string }; v: { name: string } | null; ev: { title: string } | null }>(() =>
+      const rows = await all<Row<typeof schema.expenses> & { cat: { name: string }; v: { name: string } | null; ev: { title: string } | null; bk: { number: string } | null }>(() =>
         adminDb
           .from(tbl(schema.expenses))
-          .select(`${cols(schema.expenses)},cat:expense_categories!inner(name),v:vendors(name),ev:events(title)`)
+          .select(`${cols(schema.expenses)},cat:expense_categories!inner(name),v:vendors(name),ev:events(title),bk:bookings(number)`)
           .is("voided_at", null)
           .order("date", { ascending: false })
           .order("id"),
       );
       return {
-        headers: ["Date", "Category", "Description", "Amount (NPR)", "Vendor", "Event", "Method", "Notes"],
-        rows: rows.map((x) => [x.date, x.cat.name, x.description, x.amount, x.v?.name ?? null, x.ev?.title ?? null, x.method, x.notes]),
+        headers: ["Date", "Category", "Description", "Amount (NPR)", "Paid to", "Vendor", "Booking", "Event", "Method", "Receipt attached", "Notes"],
+        rows: rows.map((x) => [x.date, x.cat.name, x.description, x.amount, x.payee, x.v?.name ?? null, x.bk?.number ?? null, x.ev?.title ?? null, methodLabel(x.method), x.receiptPath ? "Yes" : "No", x.notes]),
       };
     },
   },

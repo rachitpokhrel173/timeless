@@ -11,6 +11,7 @@ import { eventTypeName, eventTypeOptions, staffOptions } from "@/server/lookups"
 import { DateRangeFilter, FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { BOOKING_STATUS, options, PRIORITY, StatusBadge, TASK_STATUS } from "@/components/admin/status";
 import { Badge, Card, EmptyState, Kpi, LinkButton, PageHeader, ProgressBar, Tabs, Toolbar } from "@/components/admin/ui";
+import { isHeld, TASK_STATUSES } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Work management" };
 
@@ -18,7 +19,7 @@ type EventLite = { id: string; title: string; eventType: string | null; eventDat
 type BookingRow = { id: string; number: string; status: string; q: { status: string } | null; e: EventLite | EventLite[] | null };
 type TaskLite = { id: string; eventId: string; title: string; status: string; priority: string; dueAt: string | null; assigneeUserId: string | null };
 
-const STATUS_FILTER = ["PENDING", "TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED"] as const;
+const STATUS_FILTER = ["PENDING", ...TASK_STATUSES] as const;
 
 export default async function WorkManagementPage({ searchParams }: PageProps<"/admin/work">) {
   const user = await requirePage("events.view");
@@ -92,7 +93,7 @@ export default async function WorkManagementPage({ searchParams }: PageProps<"/a
     assigned: activeTasks.filter((t) => !unassigned(t)).length,
     pending: activeTasks.filter((t) => unassigned(t) || t.status === "TODO" || t.status === "ACCEPTED").length,
     progress: activeTasks.filter((t) => t.status === "IN_PROGRESS").length,
-    hold: activeTasks.filter((t) => t.status === "BLOCKED").length,
+    hold: activeTasks.filter((t) => isHeld(t.status)).length,
     done: activeTasks.filter((t) => t.status === "COMPLETED").length,
     overdue: activeTasks.filter(isLate).length,
     upcoming: activeJobs.filter((b) => b.event.eventDate <= todayISO(14)).length,
@@ -139,7 +140,7 @@ export default async function WorkManagementPage({ searchParams }: PageProps<"/a
         <DateRangeFilter />
         <FilterSelect param="type" label="Event" options={types} />
         <FilterSelect param="staff" label="Staff" options={staff} />
-        <FilterSelect param="status" label="Status" options={[{ value: "PENDING", label: "Unassigned" }, ...options(["TODO", "ACCEPTED", "IN_PROGRESS", "BLOCKED", "COMPLETED"], TASK_STATUS)]} />
+        <FilterSelect param="status" label="Status" options={[{ value: "PENDING", label: "Unassigned" }, ...options([...TASK_STATUSES], TASK_STATUS)]} />
         <FilterSelect param="priority" label="Priority" options={options(["LOW", "MEDIUM", "HIGH", "URGENT"], PRIORITY)} />
       </Toolbar>
       </Card>

@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { AlertTriangle, Copy, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
-import { ActionForm, Button, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
+import { ActionForm, Button, CheckboxField, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
 import UploadButton from "@/components/admin/Upload";
 import { Avatar } from "@/components/admin/ui";
 import { cn } from "@/lib/utils";
+import { taskOptions, type TaskStatus } from "@/lib/task-status";
 import type { PickerStaff } from "@/server/assignments";
 import { setTaskStatus } from "../tasks/actions";
 import { removeTaskReference, uploadTaskReference } from "../upload-actions";
@@ -17,13 +18,7 @@ const PRIORITIES: Option[] = [
   { value: "HIGH", label: "High" },
   { value: "URGENT", label: "Urgent" },
 ];
-const STATUSES: Option[] = [
-  { value: "TODO", label: "Assigned" },
-  { value: "ACCEPTED", label: "Accepted" },
-  { value: "IN_PROGRESS", label: "In progress" },
-  { value: "BLOCKED", label: "On hold" },
-  { value: "COMPLETED", label: "Completed" },
-];
+const STATUSES: Option[] = taskOptions();
 
 /** Date → value for <input type="datetime-local"> in Nepal time. */
 const localInput = (d: Date | string | null | undefined) => (d ? new Date(new Date(d).getTime() + 345 * 60_000).toISOString().slice(0, 16) : "");
@@ -80,11 +75,11 @@ export function StaffPicker({ staff, selected = [] }: { staff: PickerStaff[]; se
                     {[s.role, s.phone].filter(Boolean).join(" · ") || "Team"}
                     {!s.hasLogin && " · no login (won't see it)"}
                   </span>
-                  {s.away && (
-                    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-a-warning">
-                      <AlertTriangle className="size-3" aria-hidden /> {s.away}
+                  {[...(s.away ? [s.away] : []), ...s.conflicts].map((c) => (
+                    <span key={c} className="mt-0.5 flex items-center gap-1 text-xs font-medium text-a-warning">
+                      <AlertTriangle className="size-3 shrink-0" aria-hidden /> {c}
                     </span>
-                  )}
+                  ))}
                 </span>
                 <span className="shrink-0 text-right text-xs tabular-nums">
                   <span className="block font-medium">{s.open} open</span>
@@ -110,6 +105,7 @@ export type TaskValues = {
   startDate: string | null;
   dueAt: Date | string | null;
   priority: string;
+  reviewRequired?: boolean;
   staffIds: string[];
 };
 
@@ -135,6 +131,12 @@ export function TaskFormButton({ bookingId, staff, values, eventDate, label, var
           </div>
           <TextArea label="Instructions for the team" name="staffInstructions" rows={3} maxLength={2000} defaultValue={values?.staffInstructions ?? ""} hint="Shown to the people assigned." placeholder="Venue access from 6 am, handle the chandelier with care…" />
           <TextArea label="Internal notes" name="internalNotes" rows={2} maxLength={2000} defaultValue={values?.internalNotes ?? ""} hint="Planners only — never shown to the team." />
+          <CheckboxField
+            name="reviewRequired"
+            label="Needs a manager's approval"
+            defaultChecked={values?.reviewRequired ?? false}
+            hint="The team submits it for review with their photos instead of marking it done; a planner approves it or asks for changes."
+          />
           <StaffPicker staff={staff} selected={values?.staffIds} />
         </ActionForm>
       )}
@@ -184,7 +186,7 @@ export function DeleteWorkTaskButton({ id, title }: { id: string; title: string 
 /** A planner sets the whole task's status (applies to everyone on it). */
 export function PlannerStatusSelect({ id, status }: { id: string; status: string }) {
   const { run, pending } = useRun();
-  const [hold, setHold] = useState(false);
+  const [hold, setHold] = useState<"BLOCKED" | "WAITING_MATERIALS" | null>(null);
   return (
     <>
       <select
@@ -192,8 +194,9 @@ export function PlannerStatusSelect({ id, status }: { id: string; status: string
         value={status}
         disabled={pending}
         onChange={(e) => {
-          if (e.target.value === "BLOCKED") return setHold(true);
-          run(() => setTaskStatus({ id, status: e.target.value as "TODO", asPlanner: true }), { success: "Status updated for everyone on the task" });
+          const next = e.target.value as TaskStatus;
+          if (next === "BLOCKED" || next === "WAITING_MATERIALS") return setHold(next);
+          run(() => setTaskStatus({ id, status: next, asPlanner: true }), { success: next === "CANCELLED" ? "Task cancelled" : "Status updated for everyone on the task" });
         }}
         className={`${inputClass} h-8 w-auto text-[13px]`}
       >
@@ -204,9 +207,16 @@ export function PlannerStatusSelect({ id, status }: { id: string; status: string
         ))}
       </select>
       {hold && (
-        <DialogInline onClose={() => setHold(false)} title="Put the task on hold">
-          <ActionForm action={setTaskStatus} extra={{ id, status: "BLOCKED", asPlanner: true }} submitLabel="Put on hold" success="On hold" onSuccess={() => setHold(false)} onCancel={() => setHold(false)}>
-            <TextArea label="Why?" name="reason" required rows={2} maxLength={500} />
+        <DialogInline onClose={() => setHold(null)} title={hold === "BLOCKED" ? "Put the task on hold" : "Waiting for materials"}>
+          <ActionForm
+            action={setTaskStatus}
+            extra={{ id, status: hold, asPlanner: true }}
+            submitLabel={hold === "BLOCKED" ? "Put on hold" : "Save"}
+            success={hold === "BLOCKED" ? "On hold" : "Marked as waiting for materials"}
+            onSuccess={() => setHold(null)}
+            onCancel={() => setHold(null)}
+          >
+            {hold === "BLOCKED" ? <TextArea label="Why?" name="reason" required rows={2} maxLength={500} /> : <TextArea label="What's missing? (optional)" name="reason" rows={2} maxLength={500} />}
           </ActionForm>
         </DialogInline>
       )}

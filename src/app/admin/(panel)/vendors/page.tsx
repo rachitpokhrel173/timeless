@@ -5,7 +5,8 @@ import { adminDb, all, cols, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, npr, todayISO } from "@/lib/format";
 import { listParams } from "@/lib/list";
-import { PAYMENT_METHODS, vendorPaid, vendorPaymentStatus } from "@/server/finance";
+import { methodOptions } from "@/lib/finance";
+import { vendorPaid, vendorPaymentStatus } from "@/server/finance";
 import { expenseCategoryOptions } from "@/server/lookups";
 import { FilterSelect, SearchBox } from "@/components/admin/interactive";
 import { label, PAY_STATUS, StatusBadge, VENDOR_CATEGORIES } from "@/components/admin/status";
@@ -119,7 +120,7 @@ async function Payments({ canPay }: { canPay: boolean }) {
   const open = rows.filter((r) => (paid.get(r.id) ?? 0) < r.cost);
   const owed = open.reduce((s, r) => s + r.cost - (paid.get(r.id) ?? 0), 0);
   const overdue = open.filter((r) => r.dueDate && r.dueDate < today);
-  const methods = PAYMENT_METHODS.map((m) => ({ value: m, label: label(m) }));
+  const methods = methodOptions();
   const vendorCat = categories.find((c) => /vendor/i.test(c.label))?.value;
   return (
     <>
@@ -172,12 +173,15 @@ async function Payments({ canPay }: { canPay: boolean }) {
                       {canPay && p < r.cost && (
                         <ExpenseButton
                           label="Pay"
-                          categories={vendorCat ? categories.filter((c) => c.value === vendorCat) : categories}
-                          vendors={[{ value: r.v.id, label: r.v.name }]}
-                          events={[{ value: r.e.id, label: r.e.title }]}
-                          vendorBookings={[{ value: r.id, label: `${r.v.name} · ${r.service}` }]}
-                          methods={methods}
-                          defaults={{ vendorAssignmentId: r.id, amount: r.cost - p, description: `${r.v.name} — ${r.service}` }}
+                          opts={{
+                            categories: vendorCat ? categories.filter((c) => c.value === vendorCat) : categories,
+                            vendors: [{ value: r.v.id, label: r.v.name }],
+                            events: [{ value: r.e.id, label: r.e.title }],
+                            bookings: [],
+                            vendorBookings: [{ value: r.id, label: `${r.v.name} · ${r.service}` }],
+                            methods,
+                          }}
+                          defaults={{ vendorAssignmentId: r.id, amount: r.cost - p, description: `${r.v.name} — ${r.service}`, eventId: r.e.id }}
                         />
                       )}
                     </Td>
