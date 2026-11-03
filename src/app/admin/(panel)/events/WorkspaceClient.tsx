@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { CheckCircle2, ListPlus, MessageSquare, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import { Camera, CheckCircle2, ListPlus, MessageSquare, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import { ActionForm, Button, ConfirmButton, DialogButton, inputClass, SelectField, TextArea, TextField, useRun, type Option } from "@/components/admin/interactive";
 import { TEAM_ROLES } from "@/lib/defaults";
+import { shrink } from "@/components/admin/Upload";
+import { uploadTaskComment } from "../upload-actions";
 import {
   addChecklistItem,
   addTaskComment,
@@ -270,15 +272,32 @@ export function TaskChecklist({ taskId, items, canEdit, canTick }: { taskId: str
   );
 }
 
-export type TaskCommentView = { id: string; body: string; author: string; mine: boolean; createdAt: string };
+export type TaskCommentView = { id: string; body: string; author: string; mine: boolean; createdAt: string; photos?: { src: string; alt: string }[] };
 
 export function TaskComments({ taskId, comments, canComment }: { taskId: string; comments: TaskCommentView[]; canComment: boolean }) {
   const { run, pending } = useRun();
   const [body, setBody] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [inputKey, setInputKey] = useState(0);
+  const reset = () => {
+    setBody("");
+    setFiles([]);
+    setInputKey((k) => k + 1);
+  };
   function add(e: FormEvent) {
     e.preventDefault();
-    if (!body.trim()) return;
-    run(() => addTaskComment({ taskId, body }), { onSuccess: () => setBody("") });
+    if (!body.trim() && !files.length) return;
+    if (!files.length) return run(() => addTaskComment({ taskId, body }), { onSuccess: reset });
+    run(
+      async () => {
+        const form = new FormData();
+        form.set("taskId", taskId);
+        form.set("body", body);
+        for (const f of await Promise.all(files.map(shrink))) form.append("file", f);
+        return uploadTaskComment(form);
+      },
+      { success: "Comment added", onSuccess: reset },
+    );
   }
   return (
     <div className="space-y-3">
@@ -289,6 +308,16 @@ export function TaskComments({ taskId, comments, canComment }: { taskId: string;
           {comments.map((c) => (
             <li key={c.id} className="rounded-lg border border-a-border p-2.5">
               <p className="whitespace-pre-line text-[13px]">{c.body}</p>
+              {c.photos && c.photos.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {c.photos.map((x) => (
+                    <a key={x.src} href={x.src} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed links */}
+                      <img src={x.src} alt={x.alt} className="size-16 rounded border border-a-border object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
               <p className="mt-1 flex items-center gap-2 text-xs text-a-muted">
                 {c.author} · {c.createdAt}
                 {c.mine && (
@@ -304,7 +333,20 @@ export function TaskComments({ taskId, comments, canComment }: { taskId: string;
       {canComment && (
         <form onSubmit={add} className="space-y-2">
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={2000} placeholder="Write a comment for the team" aria-label="Comment" className={`${inputClass} h-auto py-2`} />
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-a-border px-2.5 text-[13px] hover:bg-a-hover">
+              <Camera className="size-4" aria-hidden />
+              {files.length ? `${files.length} photo${files.length === 1 ? "" : "s"}` : "Add photos"}
+              <input
+                key={inputKey}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                capture="environment"
+                multiple
+                className="sr-only"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, 10))}
+              />
+            </label>
             <Button size="sm" type="submit" icon={MessageSquare} pending={pending}>
               Comment
             </Button>
