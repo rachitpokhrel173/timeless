@@ -14,7 +14,8 @@
     "db:check": "tsx scripts/db-check.ts",
     "db:sql:reference": "tsx scripts/gen-reference-sql.ts",
     "admin:create": "tsx scripts/create-admin.ts",
-    "test:rls": "tsx scripts/test-rls.ts"
+    "test:rls": "tsx scripts/test-rls.ts",
+    "db:check-selects": "tsx scripts/check-selects.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -66,7 +66,7 @@ async function Users({
 }) {
   const staffUserIds = [...new Set(links.map((l) => l.userId))];
   const users = staffUserIds.length
-    ? await many<Row<typeof schema.profiles> & { s: { name: string } | null }>(adminDb.from(tbl(schema.profiles)).select(`${cols(schema.profiles)},s:staff(name)`).in("id", staffUserIds).order("full_name"))
+    ? await many<Row<typeof schema.profiles> & { s: { name: string } | null }>(adminDb.from(tbl(schema.profiles)).select(`${cols(schema.profiles)},s:staff!profiles_staff_id_staff_id_fk(name)`).in("id", staffUserIds).order("full_name"))
     : [];
   const auth = await authInfo(users.map((u) => u.id));
   const rows = users.map((u) => {
