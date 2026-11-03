@@ -46,12 +46,14 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
 /** Profile, roles and permissions for a Supabase user id; null when missing or deactivated. */
 export async function loadUser(userId: string, sessionId: string | null = null): Promise<SessionUser | null> {
-  const profile = await maybe<Row<typeof schema.profiles>>(adminDb.from(tbl(schema.profiles)).select(cols(schema.profiles)).eq("id", userId));
+  // Both reads at once: this runs on every admin request
+  const [profile, rows] = await Promise.all([
+    maybe<Row<typeof schema.profiles>>(adminDb.from(tbl(schema.profiles)).select(cols(schema.profiles)).eq("id", userId)),
+    many<{ role: { key: string; name: string; permissions: { key: string }[] } }>(
+      adminDb.from(tbl(schema.userRoles)).select("role:roles!inner(key,name,permissions:role_permissions(key:permission_key))").eq("user_id", userId),
+    ),
+  ]);
   if (!profile || !profile.active) return null;
-
-  const rows = await many<{ role: { key: string; name: string; permissions: { key: string }[] } }>(
-    adminDb.from(tbl(schema.userRoles)).select("role:roles!inner(key,name,permissions:role_permissions(key:permission_key))").eq("user_id", userId),
-  );
 
   const roleKeys = [...new Set(rows.map((r) => r.role.key))];
   const roleNames = [...new Set(rows.map((r) => r.role.name))];

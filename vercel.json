@@ -1,3 +1,4 @@
 {
+  "regions": ["bom1"],
   "crons": [{ "path": "/api/cron/automations", "schedule": "30 0 * * *" }]
 }
