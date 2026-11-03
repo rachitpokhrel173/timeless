@@ -130,10 +130,10 @@ export async function portalTaskDetail(taskId: string, user: SessionUser) {
     many<{ id: string; label: string; doneAt: string | null; doneBy: string | null }>(
       adminDb.from(tbl(schema.eventTaskChecklistItems)).select("id,label,doneAt:done_at,doneBy:done_by").eq("task_id", taskId).order("position").order("created_at"),
     ),
-    many<{ id: string; body: string; createdAt: string; authorId: string | null; a: { fullName: string } | null }>(
+    many<{ id: string; body: string; mediaIds: string[]; createdAt: string; authorId: string | null; a: { fullName: string } | null }>(
       adminDb
         .from(tbl(schema.eventTaskComments))
-        .select("id,body,createdAt:created_at,authorId:author_id,a:profiles(fullName:full_name)")
+        .select("id,body,mediaIds:media_ids,createdAt:created_at,authorId:author_id,a:profiles(fullName:full_name)")
         .eq("task_id", taskId)
         .is("deleted_at", null)
         .order("created_at"),
@@ -160,7 +160,7 @@ export async function portalTaskDetail(taskId: string, user: SessionUser) {
     : null;
 
   const myProof = mine ? mine.proofMediaIds : task.proofMediaIds;
-  const photos = await proofPhotos([...task.referenceMediaIds, ...(workOrder?.referenceMediaIds ?? []), ...(design ? [...design.mediaIds, ...design.referenceMediaIds] : []), ...myProof]);
+  const photos = await proofPhotos([...task.referenceMediaIds, ...(workOrder?.referenceMediaIds ?? []), ...(design ? [...design.mediaIds, ...design.referenceMediaIds] : []), ...myProof, ...comments.flatMap((c) => c.mediaIds)]);
   const pics = (ids: string[]) => ids.map((id) => photos.get(id)).filter((p): p is Photo => !!p);
 
   return {
@@ -178,7 +178,7 @@ export async function portalTaskDetail(taskId: string, user: SessionUser) {
     references: pics([...task.referenceMediaIds, ...(workOrder?.referenceMediaIds ?? [])]),
     proof: pics(myProof),
     checklist,
-    comments: comments.map((c) => ({ id: c.id, body: c.body, author: c.a?.fullName ?? "Team", mine: c.authorId === user.id, createdAt: c.createdAt })),
+    comments: comments.map((c) => ({ id: c.id, body: c.body, author: c.a?.fullName ?? "Team", mine: c.authorId === user.id, createdAt: c.createdAt, photos: pics(c.mediaIds) })),
     history,
   };
 }
