@@ -1,9 +1,10 @@
 "use client";
 
-import { Ban, BellRing, CheckCircle2, CirclePlay, Pencil, Trophy, Undo2 } from "lucide-react";
+import { useState } from "react";
+import { Ban, BellRing, CheckCircle2, CirclePlay, Pencil, Plus, Trash2, Trophy, Undo2 } from "lucide-react";
 import { fmtDate } from "@/lib/format";
-import { ActionForm, CheckboxField, ConfirmButton, DialogButton, TextArea, TextField } from "@/components/admin/interactive";
-import { sendPaymentReminderAction, setBookingStatusAction, updateBookingMoney } from "./actions";
+import { ActionForm, CheckboxField, ConfirmButton, DialogButton, SelectField, TextArea, TextField } from "@/components/admin/interactive";
+import { addBookingItem, removeBookingItem, sendPaymentReminderAction, setBookingStatusAction, updateBookingMoney } from "./actions";
 
 const FLOW: Record<string, { to: string; label: string; icon: typeof CheckCircle2; primary?: boolean }[]> = {
   PENDING: [{ to: "CONFIRMED", label: "Confirm booking", icon: CheckCircle2, primary: true }],
@@ -82,5 +83,65 @@ export function EditMoneyButton({ id, values }: { id: string; values: { totalAmo
         </ActionForm>
       )}
     </DialogButton>
+  );
+}
+
+type StockOption = { value: string; label: string; name: string; price: number; unit: string };
+
+/** Add an extra service (backdrop, stage, lights…) the client asked for after booking. */
+export function AddServiceButton({ id, stock }: { id: string; stock: StockOption[] }) {
+  return (
+    <DialogButton label="Add service" icon={Plus} size="sm" variant="secondary" title="Add a service">
+      {(close) => <AddServiceForm id={id} stock={stock} close={close} />}
+    </DialogButton>
+  );
+}
+
+function AddServiceForm({ id, stock, close }: { id: string; stock: StockOption[]; close: () => void }) {
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [unit, setUnit] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const amount = Math.round((Number(quantity) || 0) * (Number(unitPrice) || 0));
+  const pick = (value: string) => {
+    const s = stock.find((x) => x.value === value);
+    if (!s) return;
+    setDescription(s.name);
+    setUnit(s.unit);
+    setUnitPrice(String(s.price));
+  };
+  return (
+    <ActionForm action={addBookingItem} extra={{ id }} submitLabel="Add service" success="Service added — booking total updated" onSuccess={close} onCancel={close}>
+      {stock.length > 0 && (
+        <SelectField label="From catalog" name="_stock" options={stock} placeholder="Custom service" defaultValue="" onChange={(e) => pick(e.target.value)} hint="Optional — fills in the name and rate." />
+      )}
+      <TextField label="Service" name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. Backdrop stage" required />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <TextField label="Qty" name="quantity" type="number" min={0.01} step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+        <TextField label="Unit" name="unit" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="pcs" />
+        <TextField label="Rate (NPR)" name="unitPrice" type="number" min={0} value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} required />
+      </div>
+      <TextArea label="Notes" name="details" rows={2} placeholder="Size, colours, placement…" />
+      <p className="text-[13px] text-a-muted">
+        The booking total goes up by <span className="font-medium text-a-text tabular-nums">NPR {amount.toLocaleString("en-IN")}</span>.
+      </p>
+    </ActionForm>
+  );
+}
+
+export function RemoveServiceButton({ id, itemId, description, amount }: { id: string; itemId: string; description: string; amount: number }) {
+  return (
+    <ConfirmButton
+      icon={Trash2}
+      size="icon-sm"
+      variant="ghost"
+      title={`Remove ${description}?`}
+      body={`The booking total goes down by NPR ${amount.toLocaleString("en-IN")}.`}
+      confirmLabel="Remove"
+      success="Service removed"
+      action={() => removeBookingItem({ id, itemId })}
+    >
+      <span className="sr-only">Remove {description}</span>
+    </ConfirmButton>
   );
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { afterCommit, db, exec, maybe, one, schema, tbl, type Row } from "@/db";
+import { adminDb, afterCommit, db, exec, maybe, one, schema, tbl, vals, type Row } from "@/db";
 import { adminAction, UserError, zs } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { onEventCreated } from "@/server/automation";
@@ -110,3 +110,55 @@ export const setBookingStatusAction = adminAction(
       await notify({ type: "booking.cancelled", title: `${b.number} cancelled`, body: reason ?? undefined, href: `/admin/bookings/${id}`, priority: "HIGH", entityType: "booking", entityId: id, permission: "bookings.view" });
   },
 );
+
+/** Extra service added after booking (e.g. a backdrop the client asked for later). Raises the booking total by its amount. */
+export const addBookingItem = adminAction(
+  "bookings.update",
+  z.object({
+    id: zs.uuid(),
+    description: zs.required("Service", 200),
+    quantity: z.coerce.number().positive("Must be more than 0.").max(100000),
+    unit: zs.optional(30),
+    unitPrice: zs.money(),
+    details: zs.optional(1000),
+  }),
+  async ({ id, ...v }, user) => {
+    const b = await maybe<{ number: string; status: string; totalAmount: number }>(db.from(tbl(schema.bookings)).select("number,status,totalAmount:total_amount").eq("id", id));
+    if (!b) throw new UserError("Booking not found.");
+    if (b.status === "CANCELLED" || b.status === "COMPLETED") throw new UserError(`This booking is ${b.status.toLowerCase()}.`);
+    const amount = Math.round(v.quantity * v.unitPrice);
+    const last = await maybe<{ position: number }>(adminDb.from(tbl(schema.bookingItems)).select("position").eq("booking_id", id).order("position", { ascending: false }).limit(1));
+    // Only move the total if nobody changed it meanwhile.
+    const moved = await maybe<{ id: string }>(
+      db.from(tbl(schema.bookings)).update({ total_amount: b.totalAmount + amount }).eq("id", id).eq("total_amount", b.totalAmount).select("id"),
+    );
+    if (!moved) throw new UserError("The booking changed while you were editing. Refresh and try again.");
+    const ins = await adminDb
+      .from(tbl(schema.bookingItems))
+      .insert(vals(schema.bookingItems, { bookingId: id, position: (last?.position ?? -1) + 1, description: v.description, quantity: v.quantity, unit: v.unit, unitPrice: v.unitPrice, amount, details: v.details }));
+    if (ins.error) {
+      await exec(db.from(tbl(schema.bookings)).update({ total_amount: b.totalAmount }).eq("id", id));
+      throw new UserError("The service couldn't be added. Try again.");
+    }
+    await audit(user, "update", "booking", id, `Added ${v.description} (NPR ${amount.toLocaleString("en-IN")}) to ${b.number}`, { amount, totalAmount: b.totalAmount + amount });
+  },
+);
+
+/** Remove a service added after booking; the booking total drops by its amount. Quoted lines stay. */
+export const removeBookingItem = adminAction("bookings.update", z.object({ id: zs.uuid(), itemId: zs.uuid() }), async ({ id, itemId }, user) => {
+  const [b, item] = await Promise.all([
+    maybe<{ number: string; status: string; totalAmount: number; amountPaid: number }>(db.from(tbl(schema.bookings)).select("number,status,totalAmount:total_amount,amountPaid:amount_paid").eq("id", id)),
+    maybe<{ description: string; amount: number; quotationItemId: string | null }>(
+      adminDb.from(tbl(schema.bookingItems)).select("description,amount,quotationItemId:quotation_item_id").eq("id", itemId).eq("booking_id", id),
+    ),
+  ]);
+  if (!b || !item) throw new UserError("Service not found.");
+  if (b.status === "CANCELLED" || b.status === "COMPLETED") throw new UserError(`This booking is ${b.status.toLowerCase()}.`);
+  if (item.quotationItemId) throw new UserError("Services from the accepted quotation can't be removed here.");
+  const next = Math.max(0, b.totalAmount - item.amount);
+  if (next < b.amountPaid) throw new UserError(`The client has already paid NPR ${b.amountPaid.toLocaleString("en-IN")} — more than the total would be.`);
+  const moved = await maybe<{ id: string }>(db.from(tbl(schema.bookings)).update({ total_amount: next }).eq("id", id).eq("total_amount", b.totalAmount).select("id"));
+  if (!moved) throw new UserError("The booking changed while you were editing. Refresh and try again.");
+  await exec(adminDb.from(tbl(schema.bookingItems)).delete().eq("id", itemId));
+  await audit(user, "update", "booking", id, `Removed ${item.description} (NPR ${item.amount.toLocaleString("en-IN")}) from ${b.number}`, { amount: -item.amount, totalAmount: next });
+});

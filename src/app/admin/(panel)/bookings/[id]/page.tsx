@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { CalendarDays, ClipboardList, FileText, PartyPopper, Wallet } from "lucide-react";
-import { adminDb, cols, many, maybe, schema, tbl, type Row } from "@/db";
+import { adminDb, all, cols, many, maybe, schema, tbl, type Row } from "@/db";
 import { requirePage } from "@/lib/auth/session";
 import { fmtDate, fmtDateTime, npr, num, todayISO, qty } from "@/lib/format";
 import { first, isUuid, listParams } from "@/lib/list";
@@ -18,7 +18,7 @@ import { LedgerStatus } from "../../finance/tabs";
 import { Card, DetailList, EmptyState, LinkButton, Notice, PageHeader, ProgressBar, Table, Tabs, Td, Th } from "@/components/admin/ui";
 import { amountDue } from "@/server/payment-reminders";
 import { workEligibility } from "@/server/assignments";
-import { BookingStatusButtons, EditMoneyButton, PaymentReminderButton } from "../BookingClient";
+import { AddServiceButton, BookingStatusButtons, EditMoneyButton, PaymentReminderButton, RemoveServiceButton } from "../BookingClient";
 import { isHeld } from "@/lib/task-status";
 
 export const metadata: Metadata = { title: "Booking" };
@@ -57,6 +57,14 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
     bookingFinance(id),
     can("payments.create") ? payableCustomer(booking.customerId) : null,
   ]);
+  const editItems = can("bookings.update") && booking.status !== "CANCELLED" && booking.status !== "COMPLETED";
+  const stock = editItems
+    ? (await all<{ id: string; name: string; sku: string; rentalPrice: number; unit: string }>(() =>
+        adminDb.from(tbl(schema.inventoryItems)).select("id,name,sku,rentalPrice:rental_price,unit").is("archived_at", null).order("name").order("id"),
+      )).map((s) => ({ value: s.id, label: `${s.name} (${s.sku})`, name: s.name, price: s.rentalPrice, unit: s.unit }))
+    : [];
+  const openInvoice = invoices.find((i) => i.status !== "CANCELLED");
+  const itemsTotal = items.reduce((t, l) => t + l.amount, 0);
   const workOk = workEligibility({ status: booking.status, quoteStatus: booking.quote?.status ?? null, hasEvent: !!event });
   const balance = fin?.outstanding ?? Math.max(0, booking.totalAmount - booking.amountPaid);
   const depositOutstanding = booking.depositAmount > booking.amountPaid;
@@ -112,6 +120,11 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
             {npr(balance)} was due on {fmtDate(booking.balanceDueDate)}.
           </Notice>
         )}
+        {active && openInvoice && openInvoice.total !== booking.totalAmount && (
+          <Notice tone="warning" title="Invoice is out of date">
+            <Link href={`/admin/invoices/${openInvoice.id}`} className="font-medium hover:underline">{openInvoice.number}</Link> is for {npr(openInvoice.total)} but the booking is now {npr(booking.totalAmount)}. Revise the invoice to bill the change.
+          </Notice>
+        )}
         {booking.status === "CANCELLED" && (
           <Notice tone="danger" title={`Cancelled ${fmtDateTime(booking.cancelledAt)}`}>
             {booking.cancelReason ?? "No reason recorded."}
@@ -161,10 +174,15 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
       {tab === "overview" && (
         <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="space-y-4">
-            <Card title="Booked items" description={items.length ? "Copied from the accepted quotation — the basis for invoices." : undefined} bodyClassName="p-0">
+            <Card
+              title="Booked items"
+              description={items.length ? (booking.quote ? "From the accepted quotation, plus any services added since — the basis for invoices." : "The basis for invoices.") : undefined}
+              bodyClassName="p-0"
+              actions={editItems ? <AddServiceButton id={id} stock={stock} /> : undefined}
+            >
               {items.length === 0 ? (
                 <EmptyState compact title="No itemised lines">
-                  This booking is billed at its contract value.
+                  This booking is billed at its contract value.{editItems && " Add a service if the client asks for something extra."}
                 </EmptyState>
               ) : (
                 <Table>
@@ -174,20 +192,37 @@ export default async function BookingPage({ params, searchParams }: PageProps<"/
                       <Th className="text-right">Qty</Th>
                       <Th className="text-right">Rate</Th>
                       <Th className="text-right">Amount</Th>
+                      {editItems && <Th />}
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((l) => (
                       <tr key={l.id}>
-                        <Td>{l.description}</Td>
+                        <Td>
+                          {l.description}
+                          {booking.quote && !l.quotationItemId && <span className="ml-2 rounded-full bg-a-subtle px-2 py-0.5 text-[11px] font-medium text-a-muted">Added</span>}
+                          {l.details && <span className="block text-xs text-a-muted">{l.details}</span>}
+                        </Td>
                         <Td className="text-right tabular-nums">
                           {qty(l.quantity)} {l.unit}
                         </Td>
                         <Td className="text-right tabular-nums">{npr(l.unitPrice)}</Td>
                         <Td className="text-right tabular-nums">{npr(l.amount)}</Td>
+                        {editItems && (
+                          <Td className="w-10 text-right">
+                            {!l.quotationItemId && <RemoveServiceButton id={id} itemId={l.id} description={l.description} amount={l.amount} />}
+                          </Td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr>
+                      <Td colSpan={3} className="text-right font-medium">Items total</Td>
+                      <Td className="text-right font-medium tabular-nums">{npr(itemsTotal)}</Td>
+                      {editItems && <Td />}
+                    </tr>
+                  </tfoot>
                 </Table>
               )}
             </Card>
