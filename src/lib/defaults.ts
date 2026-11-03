@@ -170,11 +170,13 @@ export const DEFAULT_CHECKLISTS: { name: string; phase: "PRE" | "POST"; items: s
 ];
 
 /** Default quotation terms (editable in Settings → Quotations). */
-export const DEFAULT_QUOTE_TERMS = `1. An advance is required to confirm the booking; the date is held only once the advance is received.
+export const DEFAULT_QUOTE_TERMS = `1. The booking is confirmed only once the quotation is accepted and the advance is received; until then the date is not held.
 2. The remaining balance is due on or before the event date unless agreed otherwise in writing.
-3. Prices include setup and dismantling within Kathmandu Valley. Venues outside the valley may incur transport charges.
-4. Fresh flowers are seasonal; similar varieties may be substituted while keeping the agreed look and colours.
-5. Changes to the design after confirmation may change the price and will be quoted separately.
-6. Cancellations within 14 days of the event forfeit the advance.
-7. The client is responsible for damage to rented décor caused by guests or the venue.`;
+3. Cancellation after the booking is confirmed must be made in writing. 25% of the advance is deducted as a cancellation charge and the remaining 75% of the advance is refunded.
+4. Payments made beyond the advance are refunded less any costs already incurred for the event. Refunds are paid within 15 working days.
+5. If we cancel for a reason within our control, everything paid is refunded in full.
+6. Prices include setup and dismantling within Kathmandu Valley. Venues outside the valley may incur transport charges.
+7. Fresh flowers are seasonal; similar varieties may be substituted while keeping the agreed look and colours.
+8. Changes to the design after confirmation may change the price and will be quoted separately.
+9. The client is responsible for damage to rented décor caused by guests or the venue.`;
 

@@ -34,7 +34,7 @@ export const faqs = [
   },
   {
     q: "What if we need to change the date or cancel?",
-    a: "Let us know in writing as early as possible. If we're free on your new date, your advance carries over. Cancellations 14 days or more before the event are refunded less any costs already spent; within 14 days the advance is non-refundable. Full details are in our Terms & Conditions.",
+    a: "Let us know in writing as early as possible. If we're free on your new date, your advance carries over. If you cancel after your booking is confirmed, 25% of the advance is kept as a cancellation charge and the other 75% is refunded. Full details are in our Terms & Conditions.",
   },
   {
     q: "What happens if flowers we chose aren't available?",

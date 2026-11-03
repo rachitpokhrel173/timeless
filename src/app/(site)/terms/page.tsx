@@ -12,7 +12,7 @@ export const generateMetadata = (): Promise<Metadata> =>
     path: "/terms",
   });
 
-// Matches the quotation settings (50% advance, 14-day validity and cancellation window, setup within the valley).
+// Matches the quotation settings (50% advance, 14-day validity, 25% of the advance kept on cancellation, setup within the valley).
 // Keep the two in step when either changes; every quotation also carries its own terms.
 export default async function TermsPage() {
   const site = await getSiteSettings();
@@ -106,11 +106,8 @@ export default async function TermsPage() {
           <p>Cancellations must be made in writing (email, WhatsApp or letter). The date we receive it is the cancellation date.</p>
           <ul>
             <li>
-              <strong>14 days or more before the event:</strong> we refund the advance, less any costs already incurred for your event, such as custom-made items,
-              flowers or materials ordered, and vendor bookings made for you.
-            </li>
-            <li>
-              <strong>Less than 14 days before the event:</strong> the advance is non-refundable, as materials, staff and the date have been committed to your event.
+              <strong>After your booking is confirmed:</strong> if you cancel, <strong>25% of the advance</strong> is kept as a cancellation charge and the
+              remaining <strong>75% of the advance is refunded</strong>.
             </li>
             <li>Payments beyond the advance are refunded less costs already incurred.</li>
             <li>Approved refunds are paid within 15 working days, using the original payment method where possible.</li>
@@ -273,7 +270,7 @@ export default async function TermsPage() {
   return (
     <LegalPage
       title="Terms & Conditions"
-      updated="24 October 2026"
+      updated="4 November 2026"
       intro={
         <p>
           Thank you for choosing {site.name}. These terms explain how inquiries, bookings, payments and cancellations work, so you know exactly what to expect from
