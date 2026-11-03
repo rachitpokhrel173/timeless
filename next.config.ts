@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
     // Admin uploads (photos, documents) go through server actions. Large photos are downscaled in
     // the browser first, so real requests stay well under hosting limits (Vercel: 4.5 MB).
     serverActions: { bodySizeLimit: "16mb" },
+    // The admin is rendered in Mumbai; a round trip from far away costs ~0.3–0.5 s. Keep pages
+    // already visited (and pages preloaded on hover) for a short while so Back/Forward and
+    // revisits are instant. Saving anything calls router.refresh(), which drops this cache.
+    staleTimes: { dynamic: 30, static: 60 },
   },
   // Staff video manual (public/manual/index.html): reachable only by its direct link. It isn't in
   // the nav or the sitemap, and these headers keep search engines from indexing it.

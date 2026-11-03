@@ -89,6 +89,7 @@ function isActive(pathname: string, href: string, match: string[] = []) {
 
 function SidebarNav({ perms, counts, collapsed, onNavigate }: { perms: Set<string>; counts: Counts; collapsed: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const [hot, setHot] = useState<string | null>(null);
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => allowed(i, perms)) })).filter((g) => g.items.length);
   // The most specific match wins (e.g. /admin/website/gallery over /admin/website)
   const active = groups
@@ -113,6 +114,9 @@ function SidebarNav({ perms, counts, collapsed, onNavigate }: { perms: Set<strin
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    // Preload the whole page on hover, so it is usually ready by the click
+                    prefetch={hot === item.href ? true : null}
+                    onMouseEnter={() => setHot(item.href)}
                     onClick={onNavigate}
                     aria-current={isOn ? "page" : undefined}
                     className={cn(

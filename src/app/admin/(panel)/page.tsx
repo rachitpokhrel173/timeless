@@ -40,7 +40,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
   after(() => maybeRunSweep().catch((e) => console.error("[automations]", e)));
 
   const today = todayISO();
-  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, , payments, outstanding, activity, types] = await Promise.all([
+  const [kpis, months, funnel, pipeline, followups, upcoming, inquiries, totalLeads, payments, outstanding, activity, types] = await Promise.all([
     on("kpis") ? dashboardKpis(range) : null,
     on("revenue") ? monthlyRevenue(12) : null,
     on("conversion") ? salesFunnel(range) : null,
@@ -70,8 +70,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
     on("inquiries")
       ? many<Row<typeof schema.inquiries>>(adminDb.from(tbl(schema.inquiries)).select(cols(schema.inquiries)).eq("spam", false).is("archived_at", null).order("created_at", { ascending: false }).limit(6))
       : null,
-    // Phase 3: Inventory is hidden from the interface (its data and pages are kept)
-    null,
+    on("kpis") && has("leads.view") ? total(adminDb.from(tbl(schema.leads)).select("id", { count: "exact", head: true }).is("deleted_at", null).is("archived_at", null)) : 0,
     on("payments")
       ? many<Row<typeof schema.payments> & { c: { name: string } }>(
           adminDb
@@ -89,8 +88,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
       : null,
     eventTypeOptions(),
   ]);
-  const totalLeads =
-    on("kpis") && has("leads.view") ? await total(adminDb.from(tbl(schema.leads)).select("id", { count: "exact", head: true }).is("deleted_at", null).is("archived_at", null)) : 0;
 
   const startOfToday = new Date(`${today}T00:00:00+05:45`);
   const endOfToday = new Date(startOfToday.getTime() + 86_400_000);
@@ -349,7 +346,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/admin"
 
 async function outstandingList() {
   const today = todayISO();
-  const raw = await all<{
+  const [raw, totals] = await Promise.all([
+    all<{
     id: string;
     number: string;
     total: number;
@@ -367,7 +365,9 @@ async function outstandingList() {
       )
       .neq("status", "CANCELLED")
       .order("id"),
-  );
+    ),
+    outstandingTotal(),
+  ]);
   const rows = raw
     .filter((r) => r.total > r.paid)
     .map(({ c, events, ...r }) => ({ ...r, customer: c.name, eventDate: events[0]?.eventDate ?? null }));
@@ -378,6 +378,5 @@ async function outstandingList() {
       overdue: (!!r.depositDue && r.depositDue < today && r.paid < r.deposit) || (!!r.balanceDue && r.balanceDue < today),
     }))
     .sort((a, c) => Number(c.overdue) - Number(a.overdue) || (a.eventDate ?? "").localeCompare(c.eventDate ?? ""));
-  const totals = await outstandingTotal();
   return { rows: list.slice(0, 5), total: totals.amount, count: totals.bookings };
 }
