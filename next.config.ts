@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.*.*"],
   images: {
     formats: ["image/avif", "image/webp"],
+    // Photos uploaded in the admin live in Supabase Storage's public buckets (public-media, avatars).
+    remotePatterns: [{ protocol: "https", hostname: "*.supabase.co", pathname: "/storage/v1/object/public/**" }],
   },
   experimental: {
     // Admin uploads (photos, documents) go through server actions. Large photos are downscaled in
