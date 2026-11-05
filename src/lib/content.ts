@@ -389,7 +389,7 @@ export const getCatalogue = cached(
           .filter((i) => i.image),
       }));
     }),
-  "catalogue-v3", // bumped when catalogue rows are changed straight in the database, which skips refreshSite()
+  "catalogue-v4", // bumped when catalogue rows are changed straight in the database, which skips refreshSite()
 );
 
 export const getPriceLists = cached(
